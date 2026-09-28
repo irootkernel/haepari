@@ -1,0 +1,7 @@
+version: 2
+commands:
+  docs-validation:
+    command: ["python3", "docs/tools/validate_docs.py"]
+    tags: [docs, validation]
+    parser: generic
+    timeout_sec: 180

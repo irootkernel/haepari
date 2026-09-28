@@ -3,3 +3,14 @@
 .claude/
 .omc/
 
+/.sorage/
+/.mulgae/*
+!/.mulgae/config.yaml
+
+.gaori/*
+!.gaori/tester.yaml
+!.gaori/tester/
+.gaori/tester/*
+!.gaori/tester/rules/
+.gaori/tester/rules/*
+!.gaori/tester/rules/*.yaml
