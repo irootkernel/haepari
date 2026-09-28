@@ -13,12 +13,11 @@ This contract describes managed Jobs. External requests are a [deferred design](
 | `haepari doctor --json` | Read-only configuration/service/prerequisite inspection; never boot or repair a VM. |
 | `haepari daemon run` | Run the exclusive local controller in the foreground. |
 | `haepari service install`, `status`, `stop`, `uninstall` | Explicit per-user service lifecycle. No implicit installation during submit. |
-| `haepari resource register --file <json>` | Validate and register one operator-owned resource. Real reset qualification is a separate disclosed action. |
+| `haepari resource register --file <json>` | Validate and register one operator-owned resource. For a `utm-macos` resource this checks the VM UUID, MAC address and SSH host key pin; it never creates, clones or boots a VM. |
 | `haepari resources list --json` | List registered resources, availability, occupancy and configuration revisions. |
 | `haepari resource inspect <id> --json` | Return revision, identity, configuration digest, availability, and occupancy. |
 | `haepari resource update --file <json> --expected-revision <n>` | Validate a new revision; capacity/identity changes obey the configuration contract. |
 | `haepari resource remove <id> --expected-revision <n>` | Remove only an idle, unreferenced resource; no implicit VM-package deletion. |
-| `haepari baseline register --file <json>` | Bind a qualified powered-off baseline to one owned VM resource; registration alone does not qualify reset. |
 | `haepari resource pause <id> --expected-revision <n>` | Stop future dispatch without killing active work. |
 | `haepari resource resume <id> --expected-revision <n>` | Resume a paused resource after current readiness verification; cannot clear quarantine or recover unknown effects. |
 | `haepari resource recover <id> --plan` | Read-only exact resource/job/lease/run identity, observed evidence and proposed effects; return a fenced token. |
@@ -35,7 +34,7 @@ This contract describes managed Jobs. External requests are a [deferred design](
 | `haepari export <job-id> --to <directory>` | Export reviewed result files to an explicit destination, without overwriting unrelated files. |
 | `haepari job recover <job-id> --plan` | Read-only exact run, resource generation, receipts, unknowns and proposed reconciliation path. |
 | `haepari job recover <job-id> --plan-token <token> --evidence <json>` | Fenced recovery mutation; cannot mark unknown execution terminated without supported proof. |
-| `haepari purge <job-id> --expected-revision <n>` | Remove a finished job's retained bulk data; keep a request-key tombstone. |
+| `haepari purge <job-id> --expected-revision <n>` | Remove a finished job's unprotected bulk data; refuse deletion of evidence reachable from unresolved retention/recovery references and keep a request-key tombstone. |
 | `haepari lock acquire`, `wait`, `renew`, `keepalive`, `release`, `cancel`; `haepari locks list` | Advisory named locks for cooperating tools; see the [lock contract](locks.md). Lock commands use the lock contract's exit table. |
 
 A mutating command is an explicit user/agent action. The paired skill must carry the actual authorization context and scope. Merely having the CLI, an existing job, or an inbox item is not authorization to install, execute providers, reset foreign state, or publish a release.
@@ -61,11 +60,10 @@ Each machine error code maps to one CLI exit:
 | `INVALID_REQUEST` | Malformed, unsafe or placeholder input | 2 |
 | `CONFLICT` | Same request key with a different submitted digest, or a conflicting mutation replay | 2 |
 | `UNSUPPORTED` | Unsupported mode, schema version, platform or backend, including external execution | 2 |
-| `PROFILE_MISMATCH` | Job profile digest differs from the resource's baseline profile | 2 |
 | `PREREQUISITE_UNAVAILABLE` | An immutable prerequisite is unavailable at admission; no admission, key not consumed | 2 |
 | `NESTED_ACQUISITION_REJECTED` | Submission or advisory lock acquisition from a caller whose parent context occupies capacity | 2 |
 | `NESTED_WAIT_REJECTED` | Blocking observation (`wait`, `run`, `events --follow`, `logs --follow`) of a non-terminal job from such a caller | 2 |
-| `NOT_FOUND` | The job, resource, baseline or recovery plan does not exist | 2 |
+| `NOT_FOUND` | The job, resource or recovery plan does not exist | 2 |
 | `RESOURCE_BUSY` | The resource change requires an idle or unreferenced resource | 2 |
 | `LOCK_EXPIRED` | A lock grant expired or was released before this renewal | 2 |
 | `PROTOCOL_UNSUPPORTED` | CLI and controller share no protocol version; no mutation | 2 |
@@ -87,7 +85,7 @@ Each machine error code maps to one CLI exit:
 - `mode`: `auto` or `manual`.
 - `suite`: a consumer label such as `install`, `migration`, or `regression`.
 - `input`: a contained bundle root and an inventory digest. Admission copies and seals it.
-- `environment`: an immutable baseline/profile reference and its expected digest for VM jobs; an explicit local environment reference for local jobs.
+- `environment`: the consumer profile reference and its expected digest, recorded as evidence for VM jobs; an explicit local environment reference for local jobs.
 - `workload`: argv, bundle-relative working directory, non-secret environment, and required output declarations.
 - `setup`: optional bounded argv for manual-mode preparation; ordinary install recipes may be the workload for auto mode.
 - `manual`: required scenario document and completion schema only when mode is manual.
@@ -95,7 +93,7 @@ Each machine error code maps to one CLI exit:
 - `effects`: offline/live class and declared authorization/effect reference, containing no credential values.
 - `provenance`: candidate identity, test identity, requested compatibility/profile owner, and development/release evidence class.
 
-No field lets a project replace the host UTM control program, baseline package path, SSH identity, resource capacity, or cleanup policy. Those belong to operator-controlled resource configuration.
+No field lets a project replace the host UTM control program, VM identity, SSH identity, resource capacity, or cleanup policy. Those belong to operator-controlled resource configuration.
 
 The request key is required for mutating submission. A managed runner propagates a controller-verifiable parent execution context. A child holding capacity in the same installation cannot submit another Job or block on a non-terminal job's progress (`wait`, `run`, `events --follow`, `logs --follow`); non-blocking reads and observation of terminal jobs remain allowed. See [nested acquisition](managed-transitions.md#nested-acquisition). A project wrapper persists that key and the frozen input identity in ignored/private run metadata before its first submission, so an uncertain transport response can be reconciled without generating another key. Its scope is one Haepari installation, not the working directory; the R2 shared external namespace is deferred. The deduplication digest is the canonical digest of the submitted request: the validated typed structure, including alias names exactly as submitted, plus the sealed input digest. Resolved environment and resource-configuration identities are recorded with the admission but are not part of the deduplication digest, so an identical replay after a resource update or an alias move returns the original admission. No raw secret values participate. Same key/digest recovers an existing admission; a different digest conflicts. A rejection does not consume the key. A new run after a known terminal failure requires a new key and a new explicit submission linked to the prior job.
 
@@ -103,7 +101,7 @@ Admission tombstones survive ordinary purging. A tombstone returns the known adm
 
 ## Event and wait semantics
 
-Use HTTP over the private Unix socket for request/response operations and a documented streamed response for events. Every connection starts with a protocol handshake: the client sends its supported protocol version range, and the controller selects one and returns its capability set. If they share no version, the controller returns `PROTOCOL_UNSUPPORTED` before any mutation. There is no TCP listener by default or in the v0.1.0 public surface. An event cursor is monotonic and resumable. The server verifies cursor scope; if older events were explicitly purged, return a resynchronization response with the current snapshot, never a silent empty stream interpreted as success.
+Use HTTP over the private Unix socket for request/response operations and a documented streamed response for events. Every connection starts with a protocol handshake: the client sends its supported protocol version range, and the controller selects one and returns its capability set plus the stable installation ID used to check inherited advisory grants. If they share no version, the controller returns `PROTOCOL_UNSUPPORTED` before any mutation. There is no TCP listener by default or in the v0.1.0 public surface. An event cursor is monotonic and resumable. The server verifies cursor scope; if older events were explicitly purged, return a resynchronization response with the current snapshot, never a silent empty stream interpreted as success.
 
 The implementation may perform bounded internal liveness checks. User-facing skills and wrappers must use blocking wait/events rather than a status polling loop. The daemon remains the owner when a CLI process exits. A heartbeat indicates only connection liveness, not test progress or renewed execution authority.
 
@@ -117,7 +115,7 @@ An execution deadline can request cancellation/recovery of an abandoned manual s
 
 `make test-vm SUITE=install|migration|regression|all MODE=auto|manual` is the proposed convention. A project host wrapper assembles immutable inputs, checks the installed Haepari capability contract, submits, prints the job ID, waits, and returns the gate result. It does not run UTM commands itself.
 
-The VM executes a distinct entrypoint, conventionally `make test-vm-guest` or `tests/vm/run.sh`. It requires the job/lease context and a verified guest test-environment marker before installation. The host wrapper must not be copied into an execution path that recursively submits another job. Ordinary `make test` remains unchanged unless a separately adopted repository policy deliberately adds an external gate.
+The VM executes a distinct entrypoint, conventionally `make test-vm-guest` or `tests/vm/run.sh`. It requires the job/lease context that the guest runner provides before installation. The host wrapper must not be copied into an execution path that recursively submits another job. Ordinary `make test` remains unchanged unless a separately adopted repository policy deliberately adds an external gate.
 
 `SUITE=all` is a serial host wrapper over distinct suite jobs, all bound to the same candidate/test bundle. It retains every job ID and reports skipped suites after a failure. Do not claim aggregate PASS unless every required suite and manual check completed.
 
@@ -128,12 +126,12 @@ No `haepari lease` command, external mode, or lease purge appears in v0.1.0 help
 
 ## Machine outcomes and glossary
 
-The proposed `haepari.result/v1` fields are `job_id`, `resource_id`, `resource_revision`, `lease_generation`, `job_state`, `resource_availability`, `workload_outcome`, `evidence_completeness`, `cleanup_outcome`, `final_verdict`, `timings`, artifact inventory and observation provenance. `timings` holds UTC timestamps for admission, reservation and the start and end of each phase. It also holds adapter step durations reported by the adapter: for UTM these are restore, boot-to-SSH, collection and reset. Queue wait and VM cycle phases are derived from it. See the [local result example](../examples/result-local.template.json).
+The proposed `haepari.result/v1` fields are `job_id`, `resource_id`, `resource_revision`, `lease_generation`, `job_state`, `resource_availability`, `workload_outcome`, `evidence_completeness`, `cleanup_outcome`, `final_verdict`, `timings`, artifact inventory and observation provenance. `timings` holds UTC timestamps for admission, reservation and the start and end of each phase. It also holds adapter step durations reported by the adapter: for UTM these are VM start (when needed), SSH ready, transfer, collection and cleanup. Queue wait and VM cycle phases are derived from it. See the [local result example](../examples/result-local.template.json).
 
-A **request key** deduplicates admission; a **job ID** identifies the accepted managed Job; a **lease generation** fences one resource-slot ownership; a **run ID** binds the single supervised workload; a **resource revision** fences configuration/recovery; a **profile** is a consumer-owned frozen environment selection; a **baseline** is an operator-registered immutable VM source. A **wait timeout** ends only observation. **INCOMPLETE** is a known terminal verdict with missing proof, while **FAIL** is a known workload/assertion failure. A rejected input has no admission. A transport uncertainty requires inspection or resubmission with the same key, never a new speculative job.
+A **request key** deduplicates admission; a **job ID** identifies the accepted managed Job; a **lease generation** fences one resource-slot ownership; a **run ID** binds the single supervised workload; a **resource revision** fences configuration/recovery; a **profile** is a consumer-owned frozen environment selection that Haepari records but does not apply to the VM. A **wait timeout** ends only observation. **INCOMPLETE** is a known terminal verdict with missing proof, while **FAIL** is a known workload/assertion failure. A rejected input has no admission. A transport uncertainty requires inspection or resubmission with the same key, never a new speculative job.
 
-Machine error codes and their exits are listed under [JSON envelopes and exit codes](#json-envelopes-and-exit-codes). Terminal result envelopes carry `PASS`, `FAIL`, `CANCELLED` or `INCOMPLETE` separately from `ok` for the command. A known workload failure with clean evidence/cleanup is FAIL; a known workload failure plus missing evidence retains the failure fact but final verdict INCOMPLETE.
+Machine error codes and their exits are listed under [JSON envelopes and exit codes](#json-envelopes-and-exit-codes). Terminal result envelopes carry `PASS`, `FAIL`, `CANCELLED` or `INCOMPLETE` separately from `ok` for the command. The [authoritative decision table](managed-transitions.md#authoritative-final-verdict-decision-table) controls all combinations: a known workload failure with complete evidence and verified cleanup is FAIL; missing required evidence, unverified cleanup or required unobserved manual work makes the final verdict INCOMPLETE while preserving the failure fact. A reserved proven no-effect Job may finish with `cleanup_outcome=not_needed` and one capacity return; queued cancellation uses the same cleanup value without a reservation or capacity return. A VM-local `vm_unavailable` pause commits before its reserved Job settles and does not pause other resources. A queued Job blocked by host VM policy or capacity exposes its current actionable blocking reason through inspection and events without changing its queue deadline. Terminal results are immutable; later recovery evidence has separate receipts.
 
 ## Recovery mutation contract
 
-`job recover --plan` and `resource recover --plan` return exact installation, job, resource, config revision, slot/generation, run/boot/nonce, last durable intent and receipts, current observations, unknowns, proposed effects, evidence loss and a short-lived token bound to that snapshot. The operator has local control authority over the owned resource and explicitly invokes apply; the token alone is no substitute for authorization. Apply checks the entire tuple and expected revisions transactionally before effects and records mutation intent and receipt. Evidence has source, observer, observation time, mechanism and digest/reference. Machine-observed termination can permit normal collection and restoration. Operator-attested termination or non-execution is labeled attested, can only resolve the stated resource/job under the declared policy, never upgrades workload outcome to PASS, and remains visible in result provenance. An unverified timeout, lost CLI, stale PID, or controller restart is insufficient. Failed restoration quarantines; proven restoration returns readiness. Replayed apply returns the original receipt; stale or changed plans reject without effects.
+`job recover --plan` and `resource recover --plan` return exact installation, job, resource, config revision, slot/generation, run/boot/nonce, last durable intent and receipts, current observations, unknowns, proposed effects, evidence loss and a short-lived token bound to that snapshot. The operator has local control authority over the owned resource and explicitly invokes apply; the token alone is no substitute for authorization. Apply checks the entire tuple and expected revisions transactionally before effects and records mutation intent and receipt. Evidence has source, observer, observation time, mechanism and digest/reference. Machine-observed termination can permit normal collection and cleanup. Operator-attested termination or non-execution is labeled attested, can only resolve the stated resource/job under the declared policy, never upgrades workload outcome to PASS, and remains visible in result provenance. An unverified timeout, lost CLI, stale PID, or controller restart is insufficient. Failed cleanup quarantines; proven cleanup returns readiness. Replayed apply returns the original receipt; stale or changed plans reject without effects.

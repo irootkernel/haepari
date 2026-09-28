@@ -11,9 +11,9 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-054`, `HP-REQ-055`.
 
 #### Implement
-- [ ] Expose only qualified managed protocol, local/UTM, blocking wait, manual, cancellation, recovery and `advisory-lock/v1` capabilities. Teach use-haepari same-key observation, truthful results and the lock flow: acquire and wait, run, then release on every path.
+- [ ] Expose only qualified managed protocol, local/UTM, blocking wait, manual, cancellation, recovery and `advisory-lock/v1` capabilities. Teach use-haepari same-key observation, truthful results and the lock flow: the acquiring owner waits, renews while its work runs, and releases on every completion path; a nested borrower only validates and uses the grant.
 - [ ] Produce checksummed native artifacts, complete use-haepari skill, explicit user-service installers, and frozen capability output. Keep binaries independent of a source checkout or plugin cache.
-- [ ] Package the release LaunchAgent with the configuration decided in TASK-004 and verified under TASK-011's development service, and sign it with a stable identity so that Automation approval survives updates. TASK-027 re-verifies the packaged service with real UTM.
+- [ ] Package the release LaunchAgent with the configuration decided in TASK-004 and verified under TASK-011's development service. No signing identity is required ([TASK-034 probe record](../records/TASK-034-utm-probe.md)). TASK-027 re-verifies the packaged service with real UTM.
 
 #### Do not
 - [ ] Do not auto-install into production while packaging, auto-enroll UTM, or add a required MCP transport.
@@ -82,7 +82,7 @@ Requirement coverage: `HP-REQ-060`, `HP-REQ-061`.
 
 #### Implement
 - [ ] Deliver the managed schemas, real local/UTM evidence, the advisory lock contract that Mulgae's review queuing needs, and the managed-first Mulgae VM adoption packet. External lease schemas and evidence are deferred.
-- [ ] Complete the capability and artifact handoff with verified examples, baseline prerequisites, operator actions, known limits and the independent installation path. Supply the implementation-complete result without changing Aquarium.
+- [ ] Complete the capability and artifact handoff with verified examples, VM prerequisites, operator actions, known limits and the independent installation path. Supply the implementation-complete result without changing Aquarium.
 
 #### Do not
 - [ ] Do not require Aquarium adoption to complete Haepari, send Sorage messages without the current authorized delivery scope, or remove aquarium-dev state.

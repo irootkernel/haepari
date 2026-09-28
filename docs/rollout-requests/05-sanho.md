@@ -13,7 +13,8 @@ Own this implementation in the Sanho repository. Inspect current code, docs, ins
 - [ ] Add project-owned `make test-vm` with separate guest execution, explicit install/migration/regression/all suites and auto/manual mode. Use Haepari for VM ownership and waiting; do not embed UTM control or a second queue.
 - [ ] Package immutable candidate/test bytes and the complete declared installation unit. Respect exact binary, skill, configuration and client/runtime identities; support skill-only candidates where applicable.
 - [ ] Use the accepted stable profile by default and override only this product's candidate unit. Do not resolve latest at execution or upgrade unrelated products.
-- [ ] Verify clean installation, meaningful old-state migration, preserved existing behavior, fresh-session skill discovery, applicable hands-on behavior and full restoration.
+- [ ] Verify clean installation, meaningful old-state migration, preserved existing behavior, fresh-session skill discovery, applicable hands-on behavior and cleanup that returns this product to its stable-profile version.
+- [ ] Expect persistent VMs that every producer shares in queue order; Haepari does not reset them. Each suite first removes this product's earlier test state, including candidates left by earlier jobs.
 - [ ] Exercise an appropriate failure/recovery and busy-work update policy; incomplete evidence or failed cleanup cannot pass.
 - [ ] Inspect and remove obsolete aquarium-dev-specific source, producer targets and native hook/service bindings only after the new route passes and each actual host effect is authorized. Preserve stable host binaries, native use-* skills, generic dev capabilities, unrelated hooks and credentials.
 

@@ -12,7 +12,7 @@ Keep host adapter configuration trusted, disable broad sharing/agent forwarding,
 
 ## Alternatives considered
 
-A resource name or token is not an OS sandbox. Restoring a VM cannot undo remote writes or model charges. Automatic authentication copying conflicts with the isolation objective.
+A resource name or token is not an OS sandbox. No VM cleanup can undo remote writes or model charges. Automatic authentication copying conflicts with the isolation objective.
 
 ## Consequences and revisit condition
 

@@ -17,7 +17,7 @@ import sys
 
 DOCS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(DOCS)
-REVISION = "3.2"
+REVISION = "3.4"
 EXCLUDED_DIRS = {".omc"}
 MANIFEST = "MANIFEST.json"
 CHECKS = "checks.json"
@@ -184,10 +184,10 @@ def check_dag(tasks):
                     todo.append(c)
         return out
 
-    # The roadmap prose declares which tasks collect real-UTM evidence and which tasks a missing
-    # UTM environment blocks. Check that the declared blocked set equals the DAG closure.
+    # The roadmap prose declares which tasks require real-UTM qualification and which tasks a
+    # missing UTM environment blocks. Optional early observations are not qualification gates.
     prose = read("roadmap.md")
-    ev = re.search(r"Real UTM evidence is collected only in (.*?)\.", prose)
+    ev = re.search(r"Mandatory real UTM qualification is collected in (.*?)\.", prose)
     bl = re.search(r"A missing UTM environment therefore blocks (.*?) only\.", prose)
     evidence = set(re.findall(r"TASK-\d{3}", ev.group(1))) if ev else set()
     declared_blocked = set(re.findall(r"TASK-\d{3}", bl.group(1))) if bl else set()

@@ -1,6 +1,6 @@
 # EPIC-004: UTM macOS and SSH backend
 
-Qualify a real resettable macOS VM without duplicating host-control logic in projects. TASK-034 probes the host early; TASK-013 through TASK-015 implement and verify against the fake UTM/SSH backend; TASK-016 is the real backend qualification and freeze gate F2. The epic may be In progress with TASK-034 or TASK-016 Blocked on a missing UTM environment while TASK-013 through TASK-015 proceed.
+Qualify one persistent macOS VM per resource ([ADR-0018](../architecture-decision-records/0018-persistent-vm-no-reset.md)) without duplicating host-control logic in projects. TASK-034 probed the host before bootstrap ([probe record](../records/TASK-034-utm-probe.md)); its Accepted status does not start this epic's implementation. TASK-013 through TASK-015 implement and verify against the fake UTM/SSH backend; TASK-014 may also record an optional early real-guest smoke observation. TASK-016 is the mandatory real backend qualification and freeze gate F2. Once implementation begins, the epic may be In progress with TASK-016 Blocked on a missing UTM environment while TASK-013 through TASK-015 proceed.
 
 Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). These checklists define implementation acceptance only.
 
@@ -10,42 +10,44 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 
 Requirement coverage: `HP-REQ-006` (UTM probe), `HP-REQ-026`.
 
+Accepted on 2026-09-28 on the owner's host; the observations are in the [probe record](../records/TASK-034-utm-probe.md). The probe ran before TASK-001 with a scratch program and needs no product code.
+
 #### Implement
-- [ ] As soon as authorized UTM access exists, run a non-destructive probe. Its only prerequisite is TASK-001; the TASK-011 service may not exist yet.
-  - Run the probe from a minimal probe LaunchAgent (`gui/<uid>`, `LimitLoadToSessionType=Aqua`) whose executable has a stable signing identity.
-  - Use an operator-designated source VM, never a baseline. Clone it exactly once, and delete the clone at the end.
-- [ ] Record:
-  - `utmctl` version, `list` and `status`.
-  - UTM UUID, MAC address and machine/serial identity of the clone, compared with the source.
-  - Guest address discovery through the host DHCP lease table by MAC, compared with an explicit mapping.
+- [x] Run the probe from one-shot probe LaunchAgents (`gui/<uid>`, `LimitLoadToSessionType=Aqua`) on an operator-designated VM. No signing identity is required.
+- [x] Record:
+  - `utmctl` `version`, `list`, `status`, `start` and `stop`, with exit codes and stderr on failure.
+  - Guest address discovery through the host DHCP lease table by MAC, compared with the VM's configured MAC.
   - Automation/TCC prompts and the approving executable identity.
-  - Host guest limit: start the source and the clone together, then attempt a third start with one more operator-designated test VM if one exists. Record the error.
-- [ ] Publish the observations as a decision record for TASK-013 and TASK-014.
+- [x] Publish the observations as a decision record for TASK-013 and TASK-014.
 
 #### Do not
-- [ ] Do not touch a baseline, reuse a production VM, install software in a guest, upgrade UTM, or treat probe results as backend qualification.
+- [x] Do not upgrade UTM, install software in a guest, or treat probe results as backend qualification.
 
 #### Verify
-- [ ] Every recorded observation cites the exact host, UTM and macOS versions. If UTM or the permission is unavailable, the task stays Blocked with that gap; TASK-013 through TASK-015 continue against the fake backend with their assumptions listed as risks.
+- [x] Every recorded observation cites the exact host, UTM and macOS versions.
 
 #### Done when
-- [ ] The decision record is reviewed, and each unresolved observation is named as a TASK-016 prerequisite.
+- [x] The decision record is reviewed, and each unresolved observation is named as a TASK-016 prerequisite.
 
 ## TASK-013
 
-### Implement owned UTM baselines and registration
+### Implement persistent VM registration and UTM control
 
 Requirement coverage: `HP-REQ-024`, `HP-REQ-025`.
 
 #### Implement
-- [ ] Implement the whole-package baseline/working-copy lifecycle, exact UUID/path mapping, operation receipts and partial clone/registration recovery, using the TASK-034 decision record when available.
-- [ ] Bind each baseline to exactly one `utm-macos` resource. Reject a job whose profile digest differs from its resource's baseline profile (`PROFILE_MISMATCH`); install and migration starting profiles use different resources.
+- [ ] Register a `utm-macos` resource by VM UUID, MAC address and pinned SSH host key. Refuse an unknown UUID, and refuse a second resource with the same UUID or MAC address. Registration never creates, clones, boots or deletes a VM.
+- [ ] Implement the `utmctl` adapter (`status`, `start`, forced `stop`) with the rules in the [TASK-034 probe record](../records/TASK-034-utm-probe.md): a non-zero exit or `Error from event` on stderr is a failure, and `ip-address` is not used.
+- [ ] Apply operator-owned `vm.allow_automatic_stop` (default false) and the existing paused state as maintenance protection. Issue no automatic stop unless the durable victim/target power-transfer intent is current; reconcile ambiguous or stale responses before releasing protection.
+- [ ] Find the guest address in exactly one host DHCP lease entry for the registered MAC with a known, unexpired individual expiry. Permit a pre-start unexpired entry only after current VM, SSH host-key, guest MAC and boot/run identity checks; do not infer entry freshness from the lease file mtime.
+- [ ] Classify an exact registered VM's proven no-effect prerequisite failure as resource-local `vm_unavailable`. Fence the failure observation by current VM/resource identity and revision; never use this classification for an uncertain power operation, a stale registration or a failure after possible guest effects.
 
 #### Do not
-- [ ] Do not execute the template, mutate running packages, delete by display-name search, or assume snapshot support.
+- [ ] Do not clone, delete or edit a VM, use AppleScript, read UTM's data container, or select a VM by display name.
 
 #### Verify
-- [ ] Use fake interface tests to verify baseline integrity checks, metadata/disk completeness checks, duplicate baseline refusal, profile mismatch and partial-operation reconciliation. The actual authorized cold-copy trial belongs to TASK-016.
+- [ ] Use fake interface tests to verify registration refusals (unknown UUID, duplicate UUID or MAC), `utmctl` failure detection including exit 0 with `Error from event`, and expired, pre-start, renewed, missing or ambiguous leases. Test a paused victim, concurrent start, ineligible victims, stale response and unregistered VM exclusion. The real trial belongs to TASK-016.
+- [ ] Verify that a VM A lease or identity failure pauses only A, a stale observation cannot pause a newer A registration, an already quarantined A remains quarantined, and uncertain start/stop effects stay under power reconciliation. VM B and independent local resources remain eligible. The real trial belongs to TASK-016.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -61,14 +63,15 @@ Requirement coverage: `HP-REQ-024`, `HP-REQ-025`.
 Requirement coverage: `HP-REQ-026`, `HP-REQ-027`, `HP-REQ-028`.
 
 #### Implement
-- [ ] Transfer the digest-pinned guest runner with each job's sealed bundle rather than baking it into the baseline. Use a fixed structured remote protocol, enforce known-hosts and guest identity (including the working copy's MAC-to-address mapping), and start or reattach transient guest supervision.
+- [ ] Transfer the digest-pinned guest runner with each job's sealed bundle rather than preinstalling it in the guest. Use a fixed structured remote protocol, enforce known-hosts and guest identity (including the registered MAC-to-address lease), and start or reattach transient guest supervision.
 - [ ] Write guest run receipts (request, spawn intent, start, exit) by temporary file, file sync, rename and directory sync, as the [runner contract](../contracts/resource-and-runner.md#runner-receipts) specifies.
+- [ ] When an authorized real guest with Remote Login is available, perform a harmless early smoke observation: start once over SSH, disconnect, reconnect by the same run identity, read the original receipts/output without executing again, then request cancellation and verify termination. Record it as exploratory evidence only; absence of this setup does not block fake-backend or local development and does not complete TASK-016.
 
 #### Do not
 - [ ] Do not forward the host agent, copy host auth, require QEMU guest operations, or concatenate untrusted remote shell commands.
 
 #### Verify
-- [ ] Test wrong host/nonce/baseline, argument encoding, transport loss, same-run reconnect, guest reboot, and cancelled SSH with a surviving workload.
+- [ ] Test wrong host/nonce/VM, argument encoding, transport loss, same-run reconnect, guest reboot, and cancelled SSH with a surviving workload.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -79,19 +82,22 @@ Requirement coverage: `HP-REQ-026`, `HP-REQ-027`, `HP-REQ-028`.
 
 ## TASK-015
 
-### Integrate VM collection, reset and recovery
+### Integrate VM collection, job cleanup and recovery
 
 Requirement coverage: `HP-REQ-029`, `HP-REQ-030`.
 
 #### Implement
-- [ ] Join UTM and SSH phases with the resource lease, capture evidence before reset, verify full guest restoration and implement exact working-VM recovery.
-- [ ] Enforce the configured host macOS guest limit as a reservation guard. A framework VM-limit error without a guest start is a temporary prerequisite gap: clean up the working copy and finish INCOMPLETE without quarantine.
+- [ ] Join UTM and SSH phases with the resource lease. Capture evidence before deleting guest Job files; remove those files after complete collection, or retain required uncollected evidence and quarantine the VM. Quarantine also when owned process termination or cleanup cannot be confirmed, and implement exact VM recovery.
+- [ ] Separate owned process termination from deletion of guest Job files. On failed collection preserve required recoverable evidence with durable references, settle proven termination INCOMPLETE while quarantined, or retain occupancy when termination is unproven. Resource recovery re-collects or records explicitly authorized loss, then cleans and verifies health; later evidence never rewrites the original verdict.
+- [ ] Enforce the configured host macOS guest limit before starting a stopped VM: stop only an eligible, operator-authorized registered VM under the fenced transfer intent, or keep the Job queued with its original deadline and blocker. A framework VM-limit error without a guest start is a temporary prerequisite gap: finish INCOMPLETE without quarantine.
+- [ ] For VM-local proven no-effect preparation failure, commit `vm_unavailable` pause and the Job's failure classification/entry into `settling` in one transaction, before INCOMPLETE/`not_needed` settlement returns capacity. Link the pause receipt's successor revision to the original Job lease. Preserve an existing pause or quarantine and require explicit verified resume after remediation; host-wide failures keep their host-wide path.
 
 #### Do not
-- [ ] Do not make project recipes host reset hooks or free a resource with unverified service/skill/config state.
+- [ ] Do not make project recipes host hooks, reset or delete the VM, or free a resource while a Haepari runner may still be active.
 
 #### Verify
-- [ ] With the fake backend and scripted guest fixtures, seed modifications across files, skills, configuration and services; prove removal after restore and quarantine after every reset failure point. The real restoration proof belongs to TASK-016.
+- [ ] With the fake backend and scripted guest fixtures, prove that a next job runs only after verified cleanup, workload changes outside the job directory persist, and every cleanup or retained-evidence path quarantines the resource. Include disk-full collection, controller restart, bounded re-collection, explicit disposal and unknown workload/collector termination. The real proof belongs to TASK-016.
+- [ ] Verify A stays unavailable to later Jobs across pause, settlement replay and restart, while B/local resources can dispatch; confirm one capacity return, stale-response rejection, quarantine preservation, and dispatch only after explicit readiness-verified resume. The real proof belongs to TASK-016.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -107,14 +113,15 @@ Requirement coverage: `HP-REQ-029`, `HP-REQ-030`.
 Requirement coverage: `HP-REQ-031`, `HP-REQ-062` (freeze gate F2).
 
 #### Implement
-- [ ] Under the development LaunchAgent from TASK-011, run the exact install/execute/failure/disconnect/cancel/collection/reset campaign on the installed UTM combination, including a real cold-copy trial, then admit a second job from a clean baseline.
-- [ ] Freeze gate F2: freeze the `utm-macos` resource fields, baseline registration, reset strategy, guest runner protocol and host-session identity fields, recording each change since TASK-002 and its evidence.
+- [ ] Under the development LaunchAgent from TASK-011, run the exact install/execute/failure/disconnect/cancel/collection/cleanup campaign on the installed UTM combination and the persistent VM. Then run a second job after verified cleanup and show that the first job's Haepari files are gone; a retained-evidence path must instead block reuse until recovery. Observe the TASK-016 prerequisites named in the [TASK-034 probe record](../records/TASK-034-utm-probe.md); the host guest limit needs three macOS VMs, so record it as unobserved if they are not available. An optional TASK-014 smoke observation is not this mandatory qualification.
+- [ ] Qualify DHCP lease expiry/renewal and pinned guest identity on the real backend. If enough authorized VMs exist, observe the paused-victim and fenced stop/start capacity paths; otherwise record those host-limit observations as unobserved while retaining their fake-backend proofs.
+- [ ] Freeze gate F2: freeze the `utm-macos` resource fields, guest runner protocol and host-session identity fields, recording each change since TASK-002 and its evidence.
 
 #### Do not
 - [ ] Do not treat mocked UTM or an SSH-only smoke test as full backend acceptance.
 
 #### Verify
-- [ ] Retain actual platform, controller/runner, VM UUID/baseline and phase evidence. Require no host runtime changes outside declared owned resource state.
+- [ ] Retain actual platform, controller/runner, VM UUID and phase evidence. Require no host runtime changes outside declared owned resource state.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when

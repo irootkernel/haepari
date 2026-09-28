@@ -8,7 +8,7 @@ Binary-only tests miss paired skills, external global skills, rules, plugin payl
 
 ## Decision
 
-Consumers define immutable environment locks. Default development replaces one declared installation unit on an accepted baseline. Release integration applies the intended full combination. Binary and skill identities remain separate.
+Consumers define immutable environment locks. Default development replaces one declared installation unit of an accepted profile. Release integration applies the intended full combination. Binary and skill identities remain separate.
 
 ## Alternatives considered
 
@@ -16,6 +16,6 @@ Resolving latest at dispatch changes queued work. A central Haepari registry of 
 
 ## Consequences and revisit condition
 
-Profile selection and component verification are consumer responsibilities. Haepari freezes the input and transports evidence. Profile/baseline maintenance is explicit and cannot mutate accepted jobs.
+Profile selection and component verification are consumer responsibilities. Haepari freezes the input and transports evidence. Profile maintenance is explicit and cannot mutate accepted jobs.
 
 The [architecture](../architecture.md), [contracts](../contracts/cli-and-jobs.md), and [requirements](../requirements.md) define the executable acceptance boundary. External platform facts are listed in [sources](../sources.md).

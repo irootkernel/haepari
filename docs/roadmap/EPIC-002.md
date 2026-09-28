@@ -59,12 +59,13 @@ Requirement coverage: `HP-REQ-011`, `HP-REQ-012`, `HP-REQ-013`.
 - [ ] Reserve resource and global capacity for managed preparation, running, manual, cleanup and uncertain work; do not implement public external grants.
 - [ ] Implement FIFO per-resource heads, capacities, global active limit, revisions/generations, pause/resume and quarantine. Lease all effectful phases atomically before adapter execution.
 - [ ] Accept reservation guards supplied by adapters, such as the host macOS guest limit, without adding priorities. Reject nested acquisition before admission and reject a nested caller's blocking wait on a non-terminal job, as specified in [nested acquisition](../contracts/managed-transitions.md#nested-acquisition).
+- [ ] Reserve VM victim stop intent and target start claim with the Job/lease and exact resource revisions before effects. Serialize concurrent host starts in the existing ledger, block victim reservations/configuration/power conflicts until state reconciliation, and leave an unserviceable request queued with an actionable reason.
 
 #### Do not
 - [ ] Do not add DAGs, priorities, multi-resource deadlock logic or time-based automatic lease takeover.
 
 #### Verify
-- [ ] Prove exclusivity through cleanup/manual use, fairness under competing resources, no head-of-line blocking across unavailable resources, and stale token rejection.
+- [ ] Prove exclusivity through cleanup/manual use, fairness under competing resources, no head-of-line blocking across unavailable resources, stale token rejection, and no double spending of a VM host place across concurrent starts or crash/restart.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -112,12 +113,13 @@ Requirement coverage: `HP-REQ-080`, `HP-REQ-081`.
   - operator force actions and `locks list` with request and grant IDs
   - the effect of pause, resume, remove and update on lock resources
 - [ ] Keep locks out of managed and global capacity accounting, and reject acquisition from nested managed callers.
+- [ ] Expose the stable installation identity in handshake/lock inspection for read-only inherited-grant validation. Distinguish the acquiring owner's renew/release/cancel from a nested borrower's check-only use; reject wrong-installation, wrong-lock and stale grants without reacquisition.
 
 #### Do not
 - [ ] Do not add execution permits, continuation, provider routing or any observation of the holder's work, and do not let a stale grant release a later one.
 
 #### Verify
-- [ ] Run V59–V64: FIFO exclusivity and atomic hand-off; replay, key conflicts and ended requests; liveness expiry, unclaimed grants and force actions; independence from managed capacity, nested rejection and resource commands; restart and sleep/wake; stale IDs and every exit code.
+- [ ] Run V59–V64: FIFO exclusivity and atomic hand-off; replay, key conflicts and ended requests; liveness expiry, unclaimed grants and force actions; independence from managed capacity, nested rejection and resource commands; restart and sleep/wake; stale IDs and every exit code. Prove that child success, failure and cancellation never end the parent's grant, while the direct owner renews and releases it.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when

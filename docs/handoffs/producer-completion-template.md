@@ -8,11 +8,11 @@ Original logical request: [key and request digest]. Native request Handoff: [act
 
 ## Candidate and environment
 
-Source: [exact commit/snapshot and provenance class]. Haepari: [release, executable/runner/capability identities]. Input/test bundle: [digest]. Baseline and target profile: [IDs and digests]. Candidate installation unit: [binary/application/daemon/plugin/skills/rules/configuration identities]. Native skill location/pin decisions: [evidence or not_applicable].
+Source: [exact commit/snapshot and provenance class]. Haepari: [release, executable/runner/capability identities]. Input/test bundle: [digest]. Starting and target profile: [IDs and digests]. Candidate installation unit: [binary/application/daemon/plugin/skills/rules/configuration identities]. Native skill location/pin decisions: [evidence or not_applicable].
 
 ## Per-suite observations
 
-| Suite | Job reference | Work outcome | Evidence | Cleanup/restoration | Gaps |
+| Suite | Job reference | Work outcome | Evidence | Cleanup | Gaps |
 | --- | --- | --- | --- | --- | --- |
 | Clean install | [observed] | [observed] | [bounded reference] | [observed] | [explicit] |
 | Migration from prior accepted version | [observed or justified N/A] | [observed] | [old-state and post-upgrade invariants] | [observed] | [explicit] |
@@ -30,4 +30,4 @@ Changed paths, exact producer commits, tests performed, tests not performed, kno
 
 ## Mulgae native review evidence when applicable
 
-Report the installed `use-mulgae` tree, native review/recovery behavior, exact rerun lineage and composition according to Mulgae's own accepted scope. Ordinary-review Haepari lease identities are not required in v0.1.0. Review queuing on Haepari's advisory lock and any rate-limit safeguards are a separate Mulgae change (Haepari `docs/to-external.md` §2.1). They are not reported in this VM adoption packet. The managed VM installation, migration, regression, skill and restoration packet remains mandatory.
+Report the installed `use-mulgae` tree, native review/recovery behavior, exact rerun lineage and composition according to Mulgae's own accepted scope. Ordinary-review Haepari lease identities are not required in v0.1.0. Review queuing on Haepari's advisory lock and any rate-limit safeguards are a separate Mulgae change (Haepari `docs/to-external.md` §2.1). They are not reported in this VM adoption packet. The managed VM installation, migration, regression, skill and cleanup packet remains mandatory.

@@ -1,4 +1,8 @@
-# Design review disposition: Revision 3.2
+# Design review disposition: Revision 3.4
+
+## Pre-implementation correction (Revision 3.4)
+
+The staged Revision 3.3 package was re-read before correction. Five contract gaps were present: automatic VM stops could select a paused maintenance VM or race reservations; failed collection could delete required guest evidence; verdict rules disagreed; lease freshness used an unsafe OR; and borrowed advisory grants lacked ownership rules. Revision 3.4 resolves them in the [resource](contracts/resource-and-runner.md), [managed transition](contracts/managed-transitions.md), [artifact](contracts/artifact-and-profile.md) and [lock](contracts/locks.md) contracts, with Task and V-case ownership in [traceability](traceability.md). TASK-014 gains an optional early observation; TASK-016/F2 and the accepted TASK-034 record are unchanged. Older review dispositions below remain historical accounts of their own drafts, not current permission to stop an unprotected VM.
 
 This register records two external design reviews, both dated 2026-09-28:
 
@@ -31,9 +35,9 @@ Dispositions:
 
 | ID | Finding | Disposition | Evidence |
 | --- | --- | --- | --- |
-| A-P1 | `utmctl` needs a logged-in GUI session, Automation (TCC) approval and stable code signing | Resolved (3.1): Aqua LaunchAgent and stable signing identity; probed in TASK-034, qualified in TASK-016 | [Architecture](architecture.md#durability-and-service-supervision); [resource contract](contracts/resource-and-runner.md#host-session-and-vm-identity); V47 |
+| A-P1 | `utmctl` needs a logged-in GUI session, Automation (TCC) approval and stable code signing | Resolved (3.1): Aqua LaunchAgent. Revised (3.3): the TASK-034 probe needed no signing identity, and `utmctl` raised no Automation prompt, so the signing requirement was dropped; qualified in TASK-016 | [Architecture](architecture.md#durability-and-service-supervision); [resource contract](contracts/resource-and-runner.md#host-session-and-vm-identity); V47 |
 | A-P2 | At most two concurrent macOS guests per host | Resolved (3.1): `host_macos_guest_limit`; a framework limit error is a temporary gap | [Configuration](contracts/configuration.md); V49 |
-| A-P3 | Apple Virtualization has no guest agent; address discovery; clones keep MAC and serial | Resolved (3.1): DHCP lease by MAC as the default, explicit mapping, one baseline per resource, refusal of colliding baseline identities, boot nonce | [Resource contract](contracts/resource-and-runner.md); V50, V58 |
+| A-P3 | Apple Virtualization has no guest agent; address discovery; clones keep MAC and serial | Resolved (3.1); revised (3.3): DHCP lease by the registered MAC, boot nonce, and refusal of a duplicate UUID or MAC; the persistent-VM design ([ADR-0018](architecture-decision-records/0018-persistent-vm-no-reset.md)) no longer clones, so clone identities do not arise | [Resource contract](contracts/resource-and-runner.md); V50, V58 |
 | A-P4 | The service manager kills runners together with the controller | Resolved (3.1): `AbandonProcessGroup=true` and runners in their own session; verified in TASK-011 | [Architecture](architecture.md#durability-and-service-supervision); V46 |
 | A-P5 | Sleep/wake clock semantics undefined | Resolved (3) | [Deadlines](contracts/managed-transitions.md#deadlines-and-restart); V40 |
 | A-P6 | macOS fsync does not guarantee power-loss durability | Resolved (3.1): `fullfsync` and `checkpoint_fullfsync`; the claim is blocked if the driver ignores them | [Architecture](architecture.md#durability-and-service-supervision); V56 |
@@ -139,8 +143,8 @@ An independent read-only review of the draft returned REVISE. After the findings
 | C-M7 | This register overstated two resolutions | Resolved (3.1): the V04 link was removed and B-M6 was corrected | [Traceability](traceability.md) |
 | C-M8 | Requested Aquarium deletions were too broad, and Aquarium TODO `:233` was missing | Resolved (3.1): line-exact requests | [External requests](to-external.md) §1.2 |
 | C-M9 | The validation script did not cross-check counts, could pass on zero parsed items, used a hard-coded gate set, and ignored colliding IDs | Resolved (3.1): count cross-checks, minimum-count guards, and a check of the stated gate set against the DAG were added. Colliding IDs rely on the qualification convention and a printed review list | [Validation script](tools/validate_docs.py) |
-| C-M10 | Two derived baselines could share a MAC address | Resolved (3.1): registration refuses colliding MAC, machine and host-key identities | [Resource contract](contracts/resource-and-runner.md); V58 |
-| C-L | Probe context and VM count; development signing; templates; config maximum, defaults and key names; external request counts and quotes; cancel rows for late phases; missing error codes; inspector location; source conflict; ADR-0016 rationale; wording | Resolved (3.1) | See the linked files |
+| C-M10 | Two derived baselines could share a MAC address | Resolved (3.1); superseded (3.3): baselines are gone, and registration refuses a duplicate UUID or MAC | [Resource contract](contracts/resource-and-runner.md); V50 |
+| C-L | Probe context and VM count; development signing; templates; config maximum, defaults and key names; external request counts and quotes; cancel rows for late phases; missing error codes; inspector location; source conflict; ADR-0016 rationale; wording | Resolved (3.1); the signing part was superseded in 3.3 | See the linked files |
 
 **Answers to the review's open questions.**
 - Recovery verification boots count toward the host guest limit.
@@ -189,3 +193,50 @@ The open decisions left by Revision 3.1 were answered by the owner and applied i
 | Z.AI plan tier | Not stated. The owner reports that one review with six or seven roles works and two concurrent reviews sometimes fail | [External requests](to-external.md) §2.1 |
 
 **Still open, and owned by Mulgae:** the behavior when Haepari is unavailable, and whether to add account slots.
+
+## R-F: independent review of the Revision 3.3 draft
+
+One read-only reviewer returned REVISE. Most of the rewrite was consistent; the findings below were all applied.
+
+| ID | Finding | Disposition | Where |
+| --- | --- | --- | --- |
+| F-1 | V18 still tested a clone/registration failure, and HP-REQ-025 lost its only normal case | Resolved (3.3): V18 now runs a second job on the persistent VM | [Verification](verification.md) |
+| F-2 | Leftover reset wording: implementation prompt, "reusable images", "Baseline selection policy", "dirty resource", VM rollback, image and dictionary wording | Resolved (3.3) | [Handoffs](handoffs/implementation-prompt.md); [architecture](architecture.md); [artifact contract](contracts/artifact-and-profile.md); [requirements](requirements.md); [operations](operations.md) |
+| F-3 | ADR-0005 treated persisting guest changes as contamination; ADR-0006 and ADR-0007 said Haepari owns the VM | Resolved (3.3): ADR-0005 amended; the operator owns the VM | [ADR-0005](architecture-decision-records/0005-cleanup-before-release.md); [ADR-0006](architecture-decision-records/0006-utm-ssh.md); [ADR-0007](architecture-decision-records/0007-project-owned-tests.md) |
+| F-4 | `host_macos_guest_limit` had three meanings and no rule for a second resource | Resolved (3.3): at the limit, Haepari force-stops an idle registered VM (owner decision); a job waits only while every running registered VM holds a job | [Resource contract](contracts/resource-and-runner.md#host-session-and-vm-identity); [configuration](contracts/configuration.md); V49 |
+| F-5 | A persistent VM fault failed every queued job; statuses other than `stopped` were undefined | Resolved (3.3): `vm_unavailable` pause; any status other than `started` or `stopped` is unavailable | [Resource contract](contracts/resource-and-runner.md); V58; [operations](operations.md) |
+| F-6 | Probe overclaims: guest OS, session requirement, "every operation", Automation approval, `stop --request`, "exact versions", approving identity | Resolved (3.3): wording narrowed to what the record shows; the record now names the responsible executable | [Probe record](records/TASK-034-utm-probe.md) |
+| F-7 | Aliases resolved by Haepari at admission, with no profile registry left | Resolved (3.3): consumers resolve aliases before submitting; V54 reworded | [Architecture](architecture.md); [README](README.md#settled-decisions) |
+| F-8 | The UUID↔MAC binding was never verified | Resolved (3.3): the MAC is operator-asserted and confirmed at every Prepare through the lease and the pinned host key | [Resource contract](contracts/resource-and-runner.md) |
+| F-9 | Backups keep the MAC; product daemons in a persistent guest looked like escaped processes; SSH shutdown and the guest marker had no configuration | Resolved (3.3): backup warning; Haepari owns only the runner's session and process group; no shutdown in normal operation; the guest runner provides the job context | [Operations](operations.md); [architecture](architecture.md); [CLI contract](contracts/cli-and-jobs.md) |
+| F-10 | Aquarium-facing text: two VM resources in §1.4, missing TODO rows, stale revision label, shared-VM expectations for producers | Resolved (3.3); Aquarium's plan was also found committed (`910ef29`), and line numbers now refer to `0c5330b`. The owner then kept the two-VM development-loop profile, so §1.4 states two VMs again | [External requests](to-external.md); [rollout requests](rollout-requests/01-podway.md) |
+| F-11 | Roadmap and status statements still said TASK-034 was blocked by a missing UTM environment and that nothing was accepted | Resolved (3.3) | [Roadmap](roadmap.md); [README](README.md) |
+| F-12 | HP-REQ-035 traced to V50, which now tests registration | Resolved (3.3): V35 and V54 | [Traceability](traceability.md) |
+
+**Open question from the review.** Observing Apple's two-guest limit needs three macOS VMs. TASK-016 records the limit as unobserved if they are not available.
+
+## Owner decisions (2026-09-28, Revision 3.3)
+
+After the TASK-034 probe, the owner decided how VMs are used. Revision 3.3 applies these decisions.
+
+| Decision | Answer | Where recorded |
+| --- | --- | --- |
+| VM state between jobs | No reset. One persistent VM per resource is used continuously in queue order; consumer recipes set up and clean up their own state | [ADR-0018](architecture-decision-records/0018-persistent-vm-no-reset.md); [resource contract](contracts/resource-and-runner.md#utm-control); [EPIC-004](roadmap/EPIC-004.md) |
+| Code signing for local services | Not required; ad-hoc builds are enough, because `utmctl` raised no Automation prompt | [Architecture](architecture.md#durability-and-service-supervision); [probe record](records/TASK-034-utm-probe.md) |
+| TASK-034 | Accepted from the 2026-09-28 probe on the owner's VM; the clone step in the old task text is no longer needed | [Roadmap](roadmap.md); [probe record](records/TASK-034-utm-probe.md) |
+| Test state on a shared VM | Each job first removes its product's earlier test state and finishes by returning its product to the stable version | [Rollout requests](rollout-requests/01-podway.md); [external requests](to-external.md) §1.2 |
+| Development-loop profile | Keep Revision 3.2's two VM resources, host guest limit two and global limit three; each VM is persistent | [Development-loop profile](contracts/configuration.md#development-loop-profile) |
+| Profile aliases | The submitting project resolves them before submitting; Haepari keeps no alias table | [Architecture](architecture.md); [README](README.md#settled-decisions) |
+
+**Functional-change audit (2026-09-28).** Two read-only reviewers compared the owner's Revision 3 with the Revision 3.3 draft. They listed each functional change with its approval source: an explicit answer, an approved plan, a consequence of an approved decision, a deviation from a plan, or no approval. Twelve items needed the owner's decision. The answers are below.
+
+| Item | Before | Owner decision |
+| --- | --- | --- |
+| Lock expiry | The 3.2 plan: hold deadline 3,600 s default, 7,200 s maximum; the draft: 120 s liveness, 6 h maximum, 2 h default queue deadline | Keep liveness and the maximum hold; no default queue deadline |
+| Where Mulgae takes the lock | The 3.2 plan: `use-mulgae`; the draft: Mulgae's shared review start | Mulgae's shared review start |
+| Automatic pauses | The 3.1 plan: INCOMPLETE without automatic requeue; the draft: `host_vm_limit` and `vm_unavailable` pauses | Keep both pauses, with manual resume |
+| VM power at the host guest limit | The draft: never stop an idle VM | VMs stay on; at the limit Haepari force-stops an idle registered VM |
+| Freeze gates | The 3.1 plan: F1 and F2; the draft: F1, F2 and F3 | Keep three gates |
+| Host guest limit in TASK-016 | The draft: may be recorded as unobserved | Approved |
+| Release service signing | EPIC-007 still required it | Removed |
+| MAC rules, dropped Z.AI plan-tier check, TASK-001 bootstrap list, assistant-chosen values | Added or chosen by the assistant | Approved as written |

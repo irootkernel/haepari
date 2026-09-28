@@ -15,7 +15,7 @@ This table describes the sequence that Haepari's managed-first scope needs. It i
 | Aquarium task | Delivery |
 | --- | --- |
 | Aquarium:TASK-086 | Accept Haepari's exact managed local/UTM capabilities and evidence; external leases no longer block v0.1.0 acceptance. |
-| Aquarium:TASK-087 | Define profile, complete skill/configuration inventory, baseline and migration contracts. |
+| Aquarium:TASK-087 | Define profile, complete skill/configuration inventory, VM preparation and migration contracts. |
 | Aquarium:TASK-088 | Implement Aquarium-owned `make test-vm` and guest installation/migration/regression suites. |
 | Aquarium:TASK-089 | Implement manual/installed-skill evidence and a separate VM release gate. |
 | Aquarium:TASK-090 | Qualify Aquarium's pilot and freeze managed-first producer request/return packets. |
@@ -36,7 +36,7 @@ Each task depends on its preceding task; Aquarium:TASK-086 additionally requires
 
 ## Installation and evidence contract
 
-Every project owns its test recipes, host wrapper, guest entrypoint, installation-unit declaration, migration fixtures and manual checklists. The queue owns UTM/SSH and resource lifecycle. Normal development uses an accepted fixed baseline with the target component overridden. Aquarium's final release gate uses the complete intended fixed combination.
+Every project owns its test recipes, host wrapper, guest entrypoint, installation-unit declaration, migration fixtures and manual checklists. The queue owns UTM/SSH and resource lifecycle. Normal development uses an accepted fixed profile with the target component overridden, on persistent VMs that Haepari never resets. Each job returns its product to the stable version when it finishes. Aquarium's final release gate uses the complete intended fixed combination.
 
 Full skill trees, location/native pin rules, external global skills, rules, effective CLI/MCP/plugin configuration and fresh-session discovery are covered. Skill-only changes are valid candidates. Installation correctness and observed behavior are distinct checks. Actual source versions are resolved during execution; none are invented here.
 
@@ -64,7 +64,7 @@ Aquarium retains the minimal old manager/launcher until all producers are detach
 
 ## Completion receipt requirements
 
-The returned report identifies the producer repository and its own work IDs; source commit or exact development snapshot; candidate archives/executables and skill-tree identities; profile and test identities; Haepari release and Job references; install/migration/regression/manual outcomes; cleanup and restored inventory; legacy source changes; host detachment status; and outstanding gaps. An acknowledgement, commit list or producer prose saying done is insufficient without those observations.
+The returned report identifies the producer repository and its own work IDs; source commit or exact development snapshot; candidate archives/executables and skill-tree identities; profile and test identities; Haepari release and Job references; install/migration/regression/manual outcomes; cleanup results and inventories; legacy source changes; host detachment status; and outstanding gaps. An acknowledgement, commit list or producer prose saying done is insufficient without those observations.
 
 A producer with no previous release or no shipped skill uses an evidence-backed not_applicable declaration for that dimension. It cannot omit the overall install, state-persistence, guest ownership and cleanup contract.
 
@@ -76,7 +76,7 @@ The R2 planning record reported that the Aquarium documentation inspector recogn
 
 The required Aquarium changes and the advisory proposals are listed in [external requests](to-external.md) §1:
 
-- **Required:** a committed planning baseline, and alignment of Aquarium:EPIC-019 with the managed-first scope.
+- **Required:** alignment of Aquarium:EPIC-019 with the managed-first scope and the persistent-VM model. The planning baseline is already committed (Aquarium `910ef29`).
 - **Recommended:** fixing the inspector warning now.
 - **Advisory:** rollout scope, legacy-retirement timing and pilot value metrics.
 

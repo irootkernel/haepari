@@ -8,11 +8,11 @@ Clean installation cannot establish whether existing configuration, data, skills
 
 ## Decision
 
-Create meaningful synthetic state through a verified old release, record pre-upgrade invariants, upgrade in place, and verify preserved behavior, new writes, restart, and supported interruption recovery before VM reset.
+Create meaningful synthetic state through a verified old release, record pre-upgrade invariants, upgrade in place, and verify preserved behavior, new writes, restart, and supported interruption recovery before the recipe cleans up.
 
 ## Alternatives considered
 
-Recreating fixtures with the new version or wiping state before assertions tests installation only. VM rollback does not prove product downgrade.
+Recreating fixtures with the new version or wiping state before assertions tests installation only. Removing a test installation does not prove product downgrade.
 
 ## Consequences and revisit condition
 

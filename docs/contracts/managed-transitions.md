@@ -1,6 +1,6 @@
 # Managed execution transitions (v0.1.0 design)
 
-This is the normative managed transition and capacity ledger (Design Revision 3.2). A Job has lifecycle state, workload outcome, evidence completeness, cleanup outcome and final verdict as separate fields. Resource availability is a separate resource field.
+This is the normative managed transition and capacity ledger (Design Revision 3.4). A Job has lifecycle state, workload outcome, evidence completeness, cleanup outcome and final verdict as separate fields. Resource availability is a separate resource field.
 
 Every mutation is a single durable transaction with an event and a revision increment. Guards use these fences:
 
@@ -17,7 +17,7 @@ The capacity delta is `(resource occupancy, global occupancy)`.
 
 - **What counts as occupancy:** reservation, preparation, execution, manual hold, collection, cleanup and uncertain execution.
 - **Admission:** does not change limits or occupancy.
-- **When capacity returns:** a terminal settlement returns `(-1,-1)` only after termination is proven. A verified restoration leaves the resource's availability as it was; a failed restoration after proven termination quarantines the resource.
+- **When capacity returns:** a terminal settlement of a reserved Job returns `(-1,-1)` only after termination or no-start is proven. Verified or legitimately `not_needed` cleanup leaves the resource's availability as it was; failed cleanup after proven termination quarantines the resource. Queued cancellation before reservation remains `(0,0)`.
 - **Uncertain termination:** never returns capacity. The job stays `reconciling` and its resource stays `quarantined` with the occupancy retained.
 - **Availability is preserved:** a job's settlement never clears `paused` or `quarantined`. Only the resource transitions below change availability, so another job on a multi-slot resource cannot un-quarantine it.
 
@@ -25,14 +25,14 @@ The capacity delta is `(resource occupancy, global occupancy)`.
 
 | Previous state | Event | Guard and identity/revision | Next state | Delta | Durable record | Replay |
 | --- | --- | --- | --- | --- | --- | --- |
-| absent | submit | Valid schema, sealed input, unique request key and canonical submitted digest; profile matches the resource baseline; no occupying parent context | queued | (0,0) | Admission, input manifest, key/digest, resolved identities, deadline, event | Same key and submitted digest returns the original ID; a different digest conflicts |
-| absent | reject | Invalid input, unsupported mode, `PROFILE_MISMATCH`, nested parent context or an immutable prerequisite unavailable at admission | absent | (0,0) | Bounded diagnostic only; no admission; the request key is not consumed | A retry with the same key is validated again and can be admitted once the cause is gone |
+| absent | submit | Valid schema, sealed input, unique request key and canonical submitted digest; no occupying parent context | queued | (0,0) | Admission, input manifest, key/digest, resolved identities, deadline, event | Same key and submitted digest returns the original ID; a different digest conflicts |
+| absent | reject | Invalid input, unsupported mode, nested parent context or an immutable prerequisite unavailable at admission | absent | (0,0) | Bounded diagnostic only; no admission; the request key is not consumed | A retry with the same key is validated again and can be admitted once the cause is gone |
 | queued | cancel | J; cancellation wins before reservation | finished | (0,0) | CANCELLED result and event | Terminal receipt |
 | queued | queue deadline | J; persisted UTC deadline reached, no reservation | finished | (0,0) | INCOMPLETE result, reason `queue_expired` | Terminal receipt |
-| queued | input corruption or lost prerequisite | J; sealed input digest mismatch, or a pinned baseline/profile is no longer available, before reservation | finished | (0,0) | INCOMPLETE result with an integrity or prerequisite gap; no lease | Terminal receipt |
-| queued | reserve | J/R; resource `available`, queue head, free slot and global limit, adapter reservation guards (such as the host macOS guest limit) satisfied, input intact | preparing | (+1,+1) | Lease generation, slot, preparation intent, event | Same lease receipt; no second slot |
+| queued | input corruption or lost prerequisite | J; sealed input digest mismatch, or the pinned resource revision is no longer available, before reservation | finished | (0,0) | INCOMPLETE result with an integrity or prerequisite gap; no lease | Terminal receipt |
+| queued | reserve | J/R; resource `available`, queue head, free slot and global limit, adapter reservation guards (including a free host VM place or a fenced victim-to-target transfer claim) satisfied, input intact | preparing | (+1,+1) | Lease generation, slot, preparation intent, event | Same lease receipt; no second slot |
 | preparing | prepare succeeds | J/R; adapter nonce and identity match | ready | (0,0) | Prepared identity and phase receipt | Existing phase receipt |
-| preparing or ready | prepare fails, prepare deadline or host VM limit | J/R; effects classified | collecting if effects are possible; settling if no effect is proven | (0,0) | Failure, effects classification; a host VM limit without a guest start is a temporary prerequisite gap, not quarantine, and pauses VM dispatch (see resource availability) | Existing receipt; never repeat effects blindly |
+| preparing or ready | prepare fails, prepare deadline or host VM limit | J/R; effects classified | collecting if effects are possible; settling if no effect is proven | (0,0) | Failure, effects classification; for a VM-local proven no-effect prerequisite failure, the `vm_unavailable` availability row commits in this same transaction; a host VM limit without a guest start is a temporary prerequisite gap, not quarantine, and pauses VM dispatch (see resource availability) | Existing receipt; never repeat effects blindly |
 | preparing or ready | cancel | J/R; cancellation intent current | collecting if effects are possible; settling if no effect is proven | (0,0) | Cancel intent and effects classification | Same intent |
 | ready | start automatic run | J/R/run; durable spawn intent and single run claim | running | (0,0) | Spawn intent before the effect, then the start receipt when observed | Existing run, or reconcile an ambiguous spawn |
 | ready | manual setup complete | J/R; setup and environment identity observed | awaiting_manual | (0,0) | Ready receipt, observer requirements, manual deadline | Current session; never PASS |
@@ -47,28 +47,41 @@ The capacity delta is `(resource occupancy, global occupancy)`.
 | reconciling | resume cleanup or settlement | J/R; termination already proven; durable cleanup or settlement intent and exact resource identity proven | cleaning or settling | (0,0) | Resumed intent and observation | Existing intent; cleanup steps are idempotent or re-verified |
 | reconciling | prove stop/no-start | J/R/run; machine observation or scoped operator attestation with provenance | collecting | (0,0) | Recovery evidence and provenance; attestation alone never yields PASS | Existing recovery receipt |
 | reconciling | evidence insufficient | J/R; execution unknown | reconciling; resource quarantined | (0,0) | Updated observations, blocked reason and quarantine receipt retaining the lease | Current state; no takeover on TTL |
-| collecting | collection completes, fails or reaches its deadline | J/R; manifest and required-result checks attempted; collector stopped | cleaning | (0,0) | Artifact inventory, integrity, completeness and omissions; a deadline marks evidence partial | Existing manifest/receipt |
+| collecting | collection completes, fails or reaches its deadline | J/R; manifest and required-result checks attempted; collector stopped | cleaning | (0,0) | Artifact inventory, integrity, completeness and omissions; a deadline marks evidence partial; required recoverable uncollected paths are protected from deletion | Existing manifest/receipt |
 | collecting | collector cannot be proven stopped | J/R | reconciling | (0,0) | Unknown collector state | Current reconciliation state |
 | collecting, cleaning, settling or reconciling | cancel | J; cancellation intent current | unchanged | (0,0) | Sticky cancel intent. After the workload has ended (collecting, cleaning, settling) it is recorded without changing the workload outcome or verdict. During reconciling it applies only if reconciliation proves the workload still running, which is then terminated under this intent; otherwise the proven outcome stands | Same intent |
-| cleaning | cleanup/restoration succeeds | J/R; termination proven and declared reset/health checks pass | settling | (0,0) | Cleanup proof, baseline/health identity | Existing proof |
-| cleaning | cleanup/restoration fails or its deadline passes | J/R; termination proven; exact resource identity retained | settling | (0,0) | Failure and quarantine reason | Existing failure receipt |
-| settling | terminal commit, resource restored | J/R; final outcome fields and required evidence recorded | finished; resource availability unchanged (`available` stays `available`; `paused` and `quarantined` are not cleared) | (-1,-1) | Immutable result, verdict, lease return and capacity event atomically | Terminal receipt |
-| settling | terminal commit, restoration failed | J/R; termination proven, restoration failed | finished; resource `quarantined` | (-1,-1) | INCOMPLETE or FAIL result, quarantine and capacity event atomically | Terminal receipt |
+| cleaning | cleanup succeeds | J/R; termination proven, all required owned paths removed and declared cleanup/health checks pass | settling | (0,0) | Cleanup proof, VM/health identity | Existing proof |
+| cleaning | cleanup fails, required evidence is intentionally retained, or its deadline passes | J/R; termination proven; exact resource identity and retained evidence references recorded | settling | (0,0) | `cleanup_outcome=failed`, failure or `evidence_retained` reason, quarantine reference | Existing failure receipt |
+| settling | terminal commit, cleanup not needed | J/R; exact Job, pinned resource configuration, current resource revision, slot and lease generation; no owned Job effect requiring cleanup, unproven workload/collector/other owned process, protected owned path or unresolved evidence-retention obligation; any VM power operation fully reconciled | finished; resource availability unchanged, including `paused` or `quarantined` | (-1,-1) | Derive verdict through the authoritative table; atomically commit immutable result with `cleanup_outcome=not_needed`, lease return, capacity change and terminal event | Terminal receipt; exact replay never returns capacity twice |
+| settling | terminal commit, cleanup verified | J/R; final outcome fields and required evidence recorded | finished; resource availability unchanged (`available` stays `available`; `paused` and `quarantined` are not cleared) | (-1,-1) | Immutable result, verdict, lease return and capacity event atomically | Terminal receipt |
+| settling | terminal commit, cleanup failed or evidence retained | J/R; termination proven, cleanup not verified | finished; resource `quarantined` | (-1,-1) | INCOMPLETE result, quarantine and capacity event atomically; known workload failure remains in `workload_outcome` | Terminal receipt |
 
-**Verdict rules.**
+## Authoritative final-verdict decision table
 
-- **PASS** requires all of the following:
-  - a successful workload
-  - complete and intact required evidence
-  - successful cleanup and restoration
-  - an eligible manual observation, when one is requested
-- **FAIL:** a known workload failure.
-- **INCOMPLETE:**
-  - absent proof or missing required evidence
-  - a successful workload whose restoration failed; its resource is quarantined
-- **CANCELLED:** only after safe settlement.
-- **Unknown termination:** stays `reconciling`; it gets no verdict yet.
-- Resource availability never substitutes for a job verdict.
+TASK-010 derives every terminal verdict through one common path from the separate recorded fields. Apply the rows in order. Evidence requirements are evaluated for the path that actually ran: queued cancellation and proven no-start do not require outputs from an unstarted workload, while a cancelled active run requires termination and cleanup evidence. `verified` cleanup includes required health checks; `not_needed` is valid only when no owned Job effect requiring cleanup occurred, even if a resource slot and lease were reserved or a VM start was confirmed and reconciled before guest staging. Successful cleanup of an effectful path remains `verified`. An uncertain VM start or stop cannot be classified `not_needed` merely because no files were staged. An eligible manual observation is required only for a declared manual result. Resource availability never substitutes for a Job verdict.
+
+| Recorded condition | Final verdict and preserved facts |
+| --- | --- |
+| After possible effects, owned workload or collector termination is unproven | None: remain `reconciling`, retain occupancy and quarantine; a timeout or cancel acknowledgement is not proof. |
+| Queued cancellation before resource acquisition | CANCELLED with `cleanup_outcome=not_needed` and no occupancy delta. |
+| Rejection before admission | No Job or verdict; return the appropriate CLI error without consuming the request key. |
+| Applicable required evidence is missing, partial, corrupt or unobserved; required results for a completed manual path are absent; or cleanup is `failed`/`unknown` | INCOMPLETE, even if workload failed; retain the observed `workload_outcome` and quarantine when cleanup/reuse is unproven. |
+| Explicit cancellation wins before a known workload outcome, termination is proven, required cancellation evidence is complete and cleanup is `verified` or legitimately `not_needed` | CANCELLED with `workload_outcome=cancelled`. |
+| Workload passes, required evidence is complete/intact, applicable manual observations are eligible and cleanup is `verified` | PASS. |
+| Workload or a required manual assertion fails, required evidence is complete/intact and cleanup is `verified` | FAIL; keep the exact workload failure and native exit/signal. |
+| Execution or manual deadline, preparation failure, missing result, queue expiry or lost prerequisite without a verified workload conclusion | INCOMPLETE; use `workload_outcome=timed_out` for an execution deadline and `inconclusive` where execution did not establish an outcome. |
+
+A cancellation received after workload completion does not change a known workload failure or the verdict derived from it; a cancellation after terminal commit returns the existing terminal result. A timed-out or explicitly cancelled run with a prior proven failure retains that failure. Proven no-effect paths may settle INCOMPLETE with `cleanup_outcome=not_needed`. The CLI maps terminal PASS/FAIL/INCOMPLETE/CANCELLED to exits 0/1/3/4.
+
+## Evidence-preserving settlement
+
+Stopping an owned workload or collector and deleting its files are separate effects. If required evidence remains recoverable after collection fails or times out, record its guest-relative owned paths, Job/run and resource identities, collection gaps, retention reason and recovery reference durably before any cleanup can delete it. Stop owned processes as needed, but do not delete the referenced files. With proven termination, settle the Job INCOMPLETE, return its managed occupancy and leave the resource quarantined with `cleanup_outcome=failed` and reason `evidence_retained`; required owned paths prevent verified cleanup. If workload or collector termination is unproven, stay reconciling with occupancy retained.
+
+After a terminal settlement, `resource recover --plan` identifies protected evidence, exact resource revision and proposed bounded re-collection or explicit disposal. Applying a disposal plan requires authorization that names the evidence loss; record the authority, effects and outcome. Re-collection adds supplementary evidence receipts, never edits an immutable terminal result or upgrades it to PASS. Once evidence is recovered or explicitly disposed, remove remaining Haepari-owned Job files, verify process absence and VM health, then return the resource to `available`; failures leave it quarantined. If the Job still occupies capacity, `job recover` establishes termination and settles it before resource recovery. Ordinary retention expiry, purge and garbage collection must honor every unresolved evidence/recovery reference.
+
+## Internal VM power-transition ledger
+
+A victim-to-target transfer is part of the existing controller scheduler, not a second scheduler or a multi-resource Job. Before any `utmctl` effect, atomically record the victim stop intent and the target's future start claim with exact Job/lease, victim/target resource revisions, VM UUIDs and operation generation. Victim selection and operator pause/policy update are serialized by the same revisioned transaction: a pause committed first excludes the VM; a pause/update racing a committed transition conflicts until reconciliation. The victim remains protected from Job reservation, reconfiguration and another power operation until observed state reconciles the intent. It still counts as running until stop is confirmed; a pending/uncertain start counts toward the host limit. The target starts only after the victim stop is confirmed. Subprocesses run outside SQLite transactions. On restart or stale responses, inspect current state and match the recorded generation; never infer that a revision failure cancelled an issued command. If no eligible victim exists before reservation, retain the queued Job and its deadline with an actionable blocker. A proven no-start prerequisite failure follows the normal INCOMPLETE/no-effect path; uncertain power effects retain protection until reconciled.
 
 ## Resource availability
 
@@ -76,13 +89,16 @@ Resource availability is exactly `available`, `paused`, `recovering` or `quarant
 
 | Previous availability | Event | Guard | Next availability | Durable record |
 | --- | --- | --- | --- | --- |
-| available | pause | R; expected revision | paused | Pause receipt; current work continues under its policy |
+| available | pause | R; expected revision; no pending/uncertain VM power transition | paused | Pause receipt; current work continues under its policy; a committed pause excludes automatic stop selection |
+| available | VM-local prerequisite unavailable | Exact registered VM/resource and current configuration and availability revisions; the reserved Job's lease/slot and proven no-effect preparation failure identified; no guest staging, workload, collector or other owned Job effect requiring cleanup; any VM power operation has a known reconciled outcome | paused, reason `vm_unavailable` for this resource only | In the same transaction as that Job's `preparing or ready -> settling` failure classification, record scoped cause, observations, identities, predecessor/successor resource revisions and pause event; block dispatch before the affected Job's reservation is returned |
 | available | host capability lost | Adapter reports a framework VM-limit error without a guest start, or a missing session or Automation permission | paused, reason recorded; the cause is host-wide, so every `utm-macos` resource on this host is paused | Pause receipt with the reason; queued jobs stay queued under their own deadlines |
-| paused | resume | R; expected revision; readiness verified, including host guest capacity and session for `utm-macos` | available | Resume receipt |
+| paused | resume | R; expected revision; no pending/uncertain VM power transition; readiness verified, including host guest capacity and session for `utm-macos` | available | Resume receipt |
 | available or paused | quarantine | Job settlement or reconciliation row above | quarantined | Quarantine reason and job reference |
 | quarantined | apply recovery plan | R and exact plan token; no job occupies the resource | recovering | Recovery mutation receipt and evidence provenance |
-| recovering | restoration and health proven | R | available | New resource revision and observation provenance |
-| recovering | restoration fails or cannot be proven | R | quarantined | Failure receipt |
+| recovering | protected evidence re-collected or explicitly disposed, owned files removed, and cleanup and health proven | R | available | New resource revision, evidence recovery/disposal receipt and observation provenance |
+| recovering | cleanup fails or cannot be proven | R | quarantined | Failure receipt |
+
+For a VM-local prerequisite failure, classify the reserved Job's effects and move it to `settling` in the same durable transaction that pauses an available resource; then settle that Job through the `not_needed` INCOMPLETE row. The pause receipt links the reservation's pinned configuration revision and lease generation to the successor resource availability revision; the Job settlement checks that link and the current revision. A crash between pause and settlement leaves occupancy reserved for recovery. An exact replay returns the pause or terminal receipt without repeating either change. If the resource was already `paused` or `quarantined`, classify the failure and preserve that availability and its reason in the same transaction; its failure receipt binds the unchanged availability revision and original lease for settlement. Do not downgrade quarantine or overwrite an operator pause. A stale response for an older registration/revision cannot pause a newer one or change a terminal result. Host-wide session, permission and framework-limit failures keep the host-wide row; uncertain power effects remain protected for reconciliation, and failures after possible guest effects use the effectful cleanup path. Resume is the explicit revision-bound, readiness-verified row above.
 
 **Order of recovery.**
 

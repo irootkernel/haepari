@@ -30,7 +30,7 @@ An environment lock records:
 
 The full lock digest binds all fields. Artifact source locations may be informational, but actual job execution uses already verified bytes or exact content-addressed inputs. No mutable tag, branch, or latest alias remains unresolved at admission.
 
-The operator separately binds a profile to a qualified local baseline. Baseline registration names actual VM ownership and reset details. Those machine-local fields are not committed into a shared product profile. Credentials and absolute personal homes are excluded from shared profile files.
+Haepari does not bind a profile to a VM. The VM resource definition holds the machine-local fields (VM UUID, MAC address, SSH mapping), and they are not committed into a shared product profile. Credentials and absolute personal homes are excluded from shared profile files.
 
 ## Installation units and skills
 
@@ -42,9 +42,9 @@ Consumer installers stage and verify complete incoming trees before replacement,
 
 Locations follow the upstream/native contract. For Aquarium adoption this includes shared `~/.agents/skills`, the active `<CODEX_HOME>/skills` (commonly `~/.codex/skills`), plugin-owned assets, rules and MCP configuration, and project-local discovery roots. Verify duplicate and shadowing behavior in the selected home. Do not copy or reconfigure the host's actual homes to prepare the VM.
 
-Install identity, discovery in a fresh product process/session, observed skill behavior, and restoration are distinct assertions. A deterministic fixture or pasted skill prompt cannot stand in for actual installed discovery. Capture a bounded observation record with the native runtime/model settings; do not claim probabilistic model behavior is proven for every possible execution.
+Install identity, discovery in a fresh product process/session, observed skill behavior, and cleanup are distinct assertions. A deterministic fixture or pasted skill prompt cannot stand in for actual installed discovery. Capture a bounded observation record with the native runtime/model settings; do not claim probabilistic model behavior is proven for every possible execution.
 
-## Baseline selection policy
+## Profile selection policy
 
 Normal project development uses the most recent explicitly accepted stable profile and overrides only the target project's declared candidate unit. The profile is pinned at admission. A changed integration can select a named next-release profile; it must not silently rewrite the stable profile.
 
@@ -56,9 +56,9 @@ A latest-compatibility run is an explicit maintenance action: resolve supported 
 
 Each product owns its tests under a project path such as `tests/vm/`. The host-side Make target submits a bundle and waits; the guest entrypoint performs the actual product work. Common resource control stays in Haepari.
 
-A clean-install scenario starts from a declared profile without the target product and verifies no accidental existing CLI, service, skill, or registration satisfies the test. Other stable dependencies may remain installed.
+A clean-install scenario first removes any earlier installation of the target product, including a candidate left by an earlier job, then verifies that no existing CLI, service, skill, or registration satisfies the test. Other stable dependencies may remain installed. The VM is not reset between jobs ([ADR-0018](../architecture-decision-records/0018-persistent-vm-no-reset.md)).
 
-A migration scenario starts with the exact prior installation unit. It invokes prior-version public interfaces to create synthetic but meaningful settings and data, verifies the pre-upgrade behavior, preserves that state, installs the candidate through the intended upgrade path, and runs post-upgrade assertions. The starting and target identities are both retained. The candidate installer may not quietly erase the state that the scenario is meant to migrate.
+A migration scenario first establishes the exact prior installation unit, removing newer versions left by earlier jobs. It invokes prior-version public interfaces to create synthetic but meaningful settings and data, verifies the pre-upgrade behavior, preserves that state, installs the candidate through the intended upgrade path, and runs post-upgrade assertions. The starting and target identities are both retained. The candidate installer may not quietly erase the state that the scenario is meant to migrate.
 
 A regression scenario exercises supported behavior on an installed candidate. Expected results come from explicit product invariants and approved behavior changes, not from automatically accepting whatever the candidate emits.
 
@@ -72,12 +72,12 @@ A regression scenario exercises supported behavior on an installed candidate. Ex
 6. Apply the product's explicit busy-work policy: supported resume or safe refusal/drain before upgrade. Never infer a promise of uninterrupted migration.
 7. Inject at least one interruption in the actual persistent migration path and verify documented recovery or a safe stop without duplicate logical effects.
 8. Reject unsupported source versions before destructive change, or test every advertised supported direct/stepped path.
-9. Distinguish product downgrade/rollback from testbed restoration. Successful VM restore does not prove a product can downgrade its data.
+9. Distinguish product downgrade/rollback from test cleanup. Removing a test installation does not prove a product can downgrade its data.
 
 For v0.1.0 adoption, the immediately preceding accepted profile to candidate is mandatory. Wider upgrade paths are mandatory only when advertised by the product. A first-release product records that no predecessor exists; it must not fabricate a migration pass. Its installation and forward state-persistence tests still apply, and the first subsequent supported upgrade becomes a real migration case.
 
-## Result and restoration inventories
+## Result inventories
 
-Record before, candidate, and restored installation inventories when applicable. Each inventory references the profile and recipe digests and contains only non-sensitive identity fields. Preserve needed logs on the host before resetting the VM. If evidence cannot be exported, record the gap and retain/quarantine the VM under an explicit inspection policy; never reset it and assert that missing evidence passed.
+Record before and candidate installation inventories, and an after-cleanup inventory when the recipe cleans up. Each inventory references the profile and recipe digests and contains only non-sensitive identity fields. Collect needed logs to the host before deleting their guest paths. If required evidence remains recoverable but cannot be exported, stop owned processes as necessary, durably record the protected paths, owner, collection gaps and retention reason, and quarantine the VM; do not delete that evidence or assert it passed. A proven-terminated Job may settle INCOMPLETE with `cleanup_outcome=failed`/`evidence_retained` while the resource remains quarantined. Unproven workload or collector termination keeps occupancy in reconciliation. Recovery may re-collect or explicitly authorize disposal with the evidence loss identified in advance; purge and retention expiry cannot erase unresolved references. Supplementary recovery evidence never rewrites the immutable terminal verdict. See [evidence-preserving settlement](managed-transitions.md#evidence-preserving-settlement).
 
-The queue's stored result includes workload outcome and cleanup status independently. A product can fail with a successfully restored environment; a product can appear to pass while the resource remains unusable. Only the latter resource's verified recovery permits another job.
+The queue's stored result includes workload outcome and cleanup status independently. A product can fail with a successful job cleanup; a product can appear to pass while the resource remains unusable. Only the latter resource's verified recovery permits another job.

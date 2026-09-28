@@ -16,6 +16,6 @@ The [controller configuration](config.template.json) demonstrates every field of
 
 The [local result](result-local.template.json) shows distinct job, resource availability, workload, evidence, cleanup, verdict and `timings` fields. The [VM job](job-vm.template.json) uses a queue deadline that leaves room for one maximal job ahead on a capacity-one resource. It is illustrative; no result schema implementation exists yet.
 
-The [baseline registration](baseline-registration.template.json) binds an operator-owned powered-off package, observed VM UUID, SSH identity and real restore qualification receipt. It is not a command to clone or operate a VM.
+The [VM resource](resource-macos.template.json) names one persistent UTM VM by UUID, MAC address and pinned SSH host key, with automatic capacity-driven stop disabled unless the operator explicitly allows it. Haepari never clones, resets or deletes that VM (ADR-0018).
 
-The [lock resource](resource-lock.template.json) defines the advisory `mulgae-review` lock from the [lock contract](../contracts/locks.md): capacity one, default and maximum hold times, and a default queue deadline. It has no adapter or execution mode.
+The [lock resource](resource-lock.template.json) defines the advisory `mulgae-review` lock from the [lock contract](../contracts/locks.md): capacity one, a 120-second liveness window and a six-hour maximum hold. It has no default queue deadline, so a request waits until it is granted or cancelled. It has no adapter or execution mode.

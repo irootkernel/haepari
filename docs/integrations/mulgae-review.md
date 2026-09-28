@@ -1,10 +1,10 @@
 # Mulgae adoption and review capacity boundary
 
-Status: Design Revision 3.2 handoff. Ordinary Mulgae reviews queue on Haepari's advisory lock `mulgae-review` and run when granted ([ADR-0017](../architecture-decision-records/0017-advisory-named-locks.md)). Haepari is not a provider-call scheduler, and the R2 external lease stays deferred. The prior R2 external design remains in [ADR-0014](../architecture-decision-records/0014-external-execution-leases.md), [ADR-0015](../architecture-decision-records/0015-linked-recovery-segments.md) and the [deferred contract](../contracts/external-leases.md), subject to B1/B2 re-entry. Its six-role lease examples are not current consumer acceptance.
+Status: Design Revision 3.4 handoff. Ordinary Mulgae reviews queue on Haepari's advisory lock `mulgae-review` and run when granted ([ADR-0017](../architecture-decision-records/0017-advisory-named-locks.md)). Haepari is not a provider-call scheduler, and the R2 external lease stays deferred. The prior R2 external design remains in [ADR-0014](../architecture-decision-records/0014-external-execution-leases.md), [ADR-0015](../architecture-decision-records/0015-linked-recovery-segments.md) and the [deferred contract](../contracts/external-leases.md), subject to B1/B2 re-entry. Its six-role lease examples are not current consumer acceptance.
 
 ## Managed VM adoption
 
-Aquarium:TASK-092 later asks Mulgae to own `make test-vm` and a distinct guest entrypoint, sealed candidate/test bytes, fixed profile, installation unit, complete `use-mulgae` tree and effective shared/selected-CODEX_HOME locations. Mulgae verifies clean install, meaningful old-version state and migration, regression, fresh-session discovery and observed behavior, manual checks where applicable, full VM restoration and legacy-detachment evidence. Haepari collects integrity and declared required-result completeness; Mulgae supplies installers, fixtures, assertions, native service behavior and product-specific recovery promises. Haepari VM restoration is test cleanup, not proof of Mulgae downgrade support. Native partial-role recovery, exact rerun lineage and composition remain Mulgae responsibilities.
+Aquarium:TASK-092 later asks Mulgae to own `make test-vm` and a distinct guest entrypoint, sealed candidate/test bytes, fixed profile, installation unit, complete `use-mulgae` tree and effective shared/selected-CODEX_HOME locations. Mulgae verifies clean install, meaningful old-version state and migration, regression, fresh-session discovery and observed behavior, manual checks where applicable, cleanup of its test installation and legacy-detachment evidence. Haepari collects integrity and declared required-result completeness; Mulgae supplies installers, fixtures, assertions, native service behavior and product-specific recovery promises. Test cleanup in the VM is not proof of Mulgae downgrade support. Native partial-role recovery, exact rerun lineage and composition remain Mulgae responsibilities.
 
 ## Review queuing through the advisory lock
 
@@ -15,9 +15,9 @@ Aquarium:TASK-092 later asks Mulgae to own `make test-vm` and a distinct guest e
 1. Persist the key and payload.
 2. Acquire and wait. The wait happens inside the review run, so the agent's tool calls stay short.
 3. Renew the grant from the running review process.
-4. Release on every path.
+4. As the acquiring owner, release on every path after the protected work finishes.
 
-A tool that already holds a grant passes it through `HAEPARI_LOCK_GRANT`, so inner layers do not acquire again. `use-mulgae` does not acquire a separate lock.
+A caller that acquired a grant owns renewal and release through the end of its protected work. It may pass `HAEPARI_LOCK_GRANT` to a nested Mulgae invocation; the child first checks the selected Haepari installation, intended `mulgae-review` lock and current grant ID/generation/state. A valid child borrows the grant without acquisition, renewal, cancellation or release, including on failure. An invalid or stale reference is returned to the owner, never silently reacquired. `use-mulgae` does not acquire a separate lock.
 
 The [lock contract](../contracts/locks.md) defines the commands, expiry and exits.
 

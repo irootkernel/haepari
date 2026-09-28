@@ -1,10 +1,10 @@
 # Haepari v0.1.0 development package
 
-Status: implementation plan. No software, installed service, accepted test result, or published release is supplied by this package.
+Status: implementation plan. No software, installed service, accepted product test result, or published release is supplied by this package. The only recorded observation is the TASK-034 host probe ([record](records/TASK-034-utm-probe.md)).
 
 Haepari is an independent Go CLI and local daemon for durable resource scheduling. Managed execution covers local commands and UTM macOS VM tests through one durable controller, capacity ledger, and fenced safe-return path. Cooperating tools, such as Mulgae reviews, can queue on advisory named locks. Public external leases are deferred. Aquarium is the first planned consumer; Haepari has no runtime dependency on Aquarium or its tools.
 
-Design revision: 3.2, dated 2026-09-28. Revision 3 adopted a managed-first scope; external leases and linked segments remain preserved deferred designs. Revision 3.1 corrected roadmap prerequisites, completed the managed transition and configuration contracts, fixed the macOS service and durability decisions, and moved the changes needed from Aquarium and Mulgae into [external requests](to-external.md). Revision 3.2 records the owner's decisions: advisory named locks for Mulgae reviews, VM tests in the development loop, and the MIT license. [Revision notes](REVISION-NOTES.md) and [review disposition](review-disposition.md) describe the changes. The product target remains v0.1.0.
+Design revision: 3.4, dated 2026-09-28. Revision 3 adopted a managed-first scope; external leases and linked segments remain preserved deferred designs. Revision 3.1 corrected roadmap prerequisites, completed the managed transition and configuration contracts, fixed the macOS service and durability decisions, and moved the changes needed from Aquarium and Mulgae into [external requests](to-external.md). Revision 3.2 records the owner's decisions: advisory named locks for Mulgae reviews, VM tests in the development loop, and the MIT license. Revision 3.3 uses one persistent VM per resource without per-job reset ([ADR-0018](architecture-decision-records/0018-persistent-vm-no-reset.md)), drops the signing requirement and records the TASK-034 UTM probe. [Revision notes](REVISION-NOTES.md) and [review disposition](review-disposition.md) describe the changes. Revision 3.4 resolves pre-implementation VM power, evidence retention, verdict, DHCP lease and advisory-grant ownership contracts, and adds an optional early SSH smoke observation without changing F2. The product target remains v0.1.0.
 
 ## Read in this order
 
@@ -13,7 +13,7 @@ Design revision: 3.2, dated 2026-09-28. Revision 3 adopted a managed-first scope
 3. [Architecture decision records](architecture-decision-records/README.md) records the selected trade-offs.
 4. [Roadmap](roadmap.md) orders seven active epics and 31 active implementation tasks (35 in total); one epic and four tasks are deferred, with stable existing IDs.
 5. [CLI and job contract](contracts/cli-and-jobs.md), [resource and runner contract](contracts/resource-and-runner.md), [artifact and environment contract](contracts/artifact-and-profile.md), [configuration contract](contracts/configuration.md) and [lock contract](contracts/locks.md) define the supported boundary; the [external lease contract](contracts/external-leases.md) is deferred. The [managed transition table](contracts/managed-transitions.md) defines lifecycle and capacity changes.
-6. [Verification](verification.md), [traceability](traceability.md), and [operations](operations.md) define test evidence and operator procedures.
+6. [Verification](verification.md), [traceability](traceability.md), and [operations](operations.md) define test evidence and operator procedures. The [TASK-034 probe record](records/TASK-034-utm-probe.md) holds the observed UTM behaviour.
 7. [Aquarium adoption plan](aquarium-adoption.md) describes the separate consumer rollout. [External requests](to-external.md) lists the changes Haepari needs from Aquarium and Mulgae. [Handoffs](handoffs/README.md) provides development and producer request templates.
 
 ## Settled decisions
@@ -26,17 +26,17 @@ Design revision: 3.2, dated 2026-09-28. Revision 3 adopted a managed-first scope
 - Ordinary Mulgae reviews queue on the advisory lock `mulgae-review` and run when granted (ADR-0017). Locks grant no execution permit and count toward no managed capacity.
 - License: MIT. Go module path: `github.com/irootkernel/haepari`.
 - Linked external continuation is a deferred design with unresolved safety blockers.
-- Managed admission, reservation, execution, collection, restoration and return are distinct. Replay never launches a second uncertain workload.
+- Managed admission, reservation, execution, collection, cleanup and return are distinct. Replay never launches a second uncertain workload.
 - Project repositories own tests, installation recipes, migration fixtures, and hands-on checklists. There is no mandatory integration-test repository.
 - `make test-vm` submits and awaits a job; guest execution uses a different entrypoint. UTM control belongs to the common adapter.
-- A fixed, validated environment combination is the baseline. Admission resolves aliases to immutable identities. Jobs never resolve moving `latest` references.
+- A fixed, validated environment combination is a consumer profile. The consumer resolves aliases to immutable identities before submitting. Jobs never resolve moving `latest` references.
 - Candidate deployment covers the declared installation unit, including binaries, skills, plugin resources, and connection settings. Binary and skill identities may differ where their native contract requires it.
-- A migration scenario creates state with the old version and preserves it while applying the candidate. VM reset happens after the scenario, not between old-state creation and migration assertions.
+- A migration scenario creates state with the old version and preserves it while applying the candidate. Haepari never resets the VM; recipes set up and clean up their own state.
 - Haepari schedules and records manual verification but does not infer a human pass or act as an LLM evaluator.
 - Existing `aquarium-dev` state is retired through a staged consumer rollout, never by deleting its root before dependents are detached.
 - The consumer contract freezes at gate F1 (managed core, TASK-012), gate F2 (VM fields, TASK-016) and gate F3 (consumer integration, TASK-020); TASK-002 is provisional.
-- The macOS controller runs as a `gui/<uid>` LaunchAgent in the Aqua session with `AbandonProcessGroup=true`; runners use their own session; darwin SQLite uses `fullfsync` and `checkpoint_fullfsync`; service builds use a stable signing identity.
-- Each UTM baseline is bound to one resource, the guest runner travels with each job, and `host_macos_guest_limit` bounds Haepari-managed macOS guests.
+- The macOS controller runs as a `gui/<uid>` LaunchAgent in the Aqua session with `AbandonProcessGroup=true`; runners use their own session; darwin SQLite uses `fullfsync` and `checkpoint_fullfsync`. No signing identity is required: an ad-hoc-signed LaunchAgent controls UTM through `utmctl` without an Automation prompt (TASK-034).
+- Each `utm-macos` resource is one persistent VM that Haepari never clones or resets (ADR-0018); the guest runner travels with each job. `host_macos_guest_limit` bounds registered running and pending/uncertain starts. Automatic capacity-driven stop requires explicit operator permission on an eligible resource, and pause protects maintenance.
 
 ## Document authority
 

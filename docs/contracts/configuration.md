@@ -1,6 +1,6 @@
 # Controller configuration contract
 
-Design Revision 3.2. This contract owns the operator configuration schema `haepari.config/v1`. It does not own resource definitions or transitions:
+Design Revision 3.4. This contract owns the operator configuration schema `haepari.config/v1`. It does not own resource definitions or transitions:
 
 - Resource definitions (`haepari.resource/v1`) are in the [resource contract](resource-and-runner.md).
 - Lifecycle effects are in the [managed transition table](managed-transitions.md).
@@ -16,7 +16,6 @@ Default macOS paths live under the owning user's private Haepari root:
 | `state.sqlite` plus WAL files | State |
 | `objects/` | Sealed input |
 | `jobs/` | Evidence |
-| `baselines/` | Registration metadata |
 
 **Selecting the root and config file.**
 
@@ -37,7 +36,7 @@ Default macOS paths live under the owning user's private Haepari root:
 | `schema` | Exactly `haepari.config/v1` | — | Schema identity. |
 | `revision` | Positive integer | 1 | Each accepted change increments it. |
 | `global_limit` | Positive integer | 1 | Controller-wide limit on reserved, preparing, running, manual, collecting, cleaning and uncertain managed occupations. See the note below the table. |
-| `host_macos_guest_limit` | Integer 1–2 | 1 | Haepari-managed macOS guests that may run at once across `utm-macos` resources, including recovery verification boots. Raise it only to the bound observed in TASK-034 and TASK-016. Apple's license allows at most two additional macOS instances per Mac, and the operator's own VMs count too ([S11](../sources.md)). |
+| `host_macos_guest_limit` | Integer 1–2 | 1 | Registered running, pending-start and uncertain-power VMs counted conservatively. At the limit, Haepari may stop only an eligible registered VM whose operator-owned resource explicitly permits automatic stop; otherwise the requesting Job waits under its queue deadline. Raise the limit only to the bound observed in TASK-016. Apple's license allows at most two additional macOS instances per Mac, and the operator's own VMs count too ([S11](../sources.md)). |
 | `default_deadlines` | Object of positive integers: `queue_seconds`, `prepare_seconds`, `run_seconds`, `manual_seconds`, `collect_seconds`, `cleanup_seconds` | 14400, 900, 3600, 7200, 300, 900 | Defaults when a job omits a phase budget; the key names match the job schema. A job's budgets cannot exceed its resource's lifecycle budgets. |
 | `limits` | Object of positive integers: `request_bytes`, `log_bytes_per_stream`, `artifact_bytes`, `artifact_count`, `event_retention_days`, `result_retention_days` | 1 MiB, 256 MiB, 1 GiB, 1000, 30, 90 | Resource-protection limits. Truncation and omissions appear in results; required evidence is never silently discarded. |
 
@@ -49,11 +48,11 @@ The [configuration example](../examples/config.template.json) shows every field.
 
 VM tests run in the development loop, and the owner expects 10–30 VM jobs a day. The defaults above stay conservative. For this load, the recommended setup is:
 
-- **Two `utm-macos` resources, each bound to its own baseline.** Bind them to the two most-used profiles, such as the product-absent install profile and the prior-version migration profile. Throughput per profile stays at one VM. If one profile dominates, bind both resources to separate baselines of that profile, each with regenerated identities.
+- **Two `utm-macos` resources.** Each is its own persistent VM with its own MAC address, used without reset in queue order ([ADR-0018](../architecture-decision-records/0018-persistent-vm-no-reset.md)). A job names its resource, for example one VM for install tests and one for migration tests.
 - **`host_macos_guest_limit` 2,** when the operator runs no other macOS VM on the host.
 - **`global_limit` 3:** two VM jobs plus one local job. Advisory locks never count toward it.
 
-**Measure before adding capacity.** TASK-016 records the VM cycle phases, and result `timings` give queue wait p50/p95. The host allows at most two macOS guests. If waits stay high with two VMs, shorten the cycle (restore and boot-to-SSH) instead of adding VMs.
+**Measure before adding capacity.** TASK-016 records the VM cycle phases, and result `timings` give queue wait p50/p95. The host allows at most two macOS guests. If waits stay high with two VMs, shorten the job cycle instead of adding VMs.
 
 ## Queue deadlines for capacity-one resources
 
@@ -79,6 +78,6 @@ A failed validation keeps the old effective configuration and refuses startup. R
 - **Raising limits** takes effect for future dispatch.
 - **Lowering a limit below current occupancy** never evicts jobs; dispatch pauses until occupancy is below the new limit.
 - **Lowering resource capacity** also preserves existing reservations and pauses further dispatch.
-- **Changing identity, baseline or adapter** requires zero active reservations. Queued requests pinned to the old revision need explicit handling: keep the old immutable definition until they drain, or cancel them with explicit receipts. Never retarget silently.
+- **Changing VM identity or adapter** requires zero active reservations. Queued requests pinned to the old revision need explicit handling: keep the old immutable definition until they drain, or cancel them with explicit receipts. Never retarget silently.
 - **Removal** requires an idle resource, no queued or pinned requests and no retained recovery reference. Removing a registration never deletes a VM package.
-- **Baseline registration** validates ownership, a powered-off source, digest and package identity, the one-resource binding, and distinct MAC, machine/serial and SSH host-key identities. It does not claim a qualified reset until a real trial passes.
+- **VM registration** checks that UTM lists the UUID, that no other resource names the same UUID or MAC address, and that the SSH host key pin is present. It never creates, clones, boots or deletes a VM.

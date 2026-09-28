@@ -1,6 +1,6 @@
 # Advisory lock contract
 
-Design Revision 3.2. This contract owns `kind: lock` resources and the `haepari lock` command family. [ADR-0017](../architecture-decision-records/0017-advisory-named-locks.md) records the decision.
+Design Revision 3.4. This contract owns `kind: lock` resources and the `haepari lock` command family. [ADR-0017](../architecture-decision-records/0017-advisory-named-locks.md) records the decision.
 
 ## Purpose and limits
 
@@ -33,10 +33,9 @@ A lock is registered like any resource, with `haepari.resource/v1` and `kind: lo
 | `capacity` | Grants that may be held at once | 1 |
 | `liveness_seconds` | A grant must be renewed within this window, or it ends | 120 |
 | `max_hold_seconds` | Upper bound from grant time, including every renewal. Set it at or above the holder tool's maximum run time. | 21600 |
-| `default_queue_seconds` | Queue deadline when `acquire` omits `--queue-seconds` | 7200 |
 | `revision` | Resource revision for updates | 1 |
 
-A lock resource has no adapter, baseline or execution mode. See the [lock resource example](../examples/resource-lock.template.json).
+A lock resource has no adapter or execution mode. See the [lock resource example](../examples/resource-lock.template.json).
 
 **Availability.** A lock uses only `available` and `paused`.
 
@@ -60,14 +59,16 @@ A lock resource has no adapter, baseline or execution mode. See the [lock resour
 | `haepari lock keepalive <grant-id>` | Renew every `liveness_seconds / 3` until the grant ends, then exit. Stopping the process stops the renewals. |
 | `haepari lock release <grant-id> --json` | Release the grant. An exact replay of the caller's own release returns the original receipt and exits 0. Releasing a grant that ended some other way returns its terminal receipt and never touches a later grant. |
 | `haepari lock cancel <request-id> [--force --reason <text>] --json` | Remove a queued request. If the request is granted, release the grant in the same transaction. `--force` records an operator action and its reason. |
-| `haepari locks list [--lock <id>] --json` | Show each request ID, grant ID, holder label and state, with waiters in FIFO order and every deadline. |
+| `haepari locks list [--lock <id>] --json` | Show the installation ID and each lock ID, request ID, grant ID/generation, holder label and state, with waiters in FIFO order and every deadline. This supplies read-only inherited-grant validation. |
 | `haepari lock release <grant-id> --force --reason <text> --json` | Operator release. The receipt records the reason. |
+
+**Queue deadline.** A lock has no default queue deadline. A request waits until it is granted or cancelled, unless `acquire` sets `--queue-seconds`.
 
 **Replay.** Resending `acquire` with the same key and payload returns the stored receipt together with the request's current state. It never creates a second request. A request that has ended cannot be revived; a new acquisition needs a new key.
 
 **Request keys.** Lock request keys are scoped to the lock within one installation. They are separate from job request keys. Callers persist the key and the full payload before sending, so a replay sends identical content. The holder label is part of the payload.
 
-**Grants and identity.** Every grant starts a new generation of its slot. The grant ID is a random identifier. `locks list` shows it, because same-user code is outside the security boundary anyway. The holder label is a non-secret description, such as the tool and run.
+**Grants and identity.** Every grant starts a new generation of its slot. The grant ID is a random identifier. `locks list` shows it, because same-user code is outside the security boundary anyway. The holder label is a non-secret description, such as the tool and run. The controller handshake and lock inspection expose its stable installation ID, so an inherited grant can be checked against the currently selected installation.
 
 **Nested callers.** A caller whose parent context occupies managed capacity cannot acquire a lock; it gets `NESTED_ACQUISITION_REJECTED`. The [nested acquisition rule](managed-transitions.md#nested-acquisition) covers locks.
 
@@ -82,7 +83,7 @@ Every lock mutation first applies the lock's due deadlines, in the same transact
 | any existing | acquire with a reused key | Same key, different payload | unchanged | `CONFLICT` |
 | queued | a slot frees, or the lock is resumed | Request is the FIFO head and the lock is `available` | granted | Grant fields as above. Recorded in the transaction that freed the slot or resumed the lock. |
 | queued | cancel | — | cancelled | Cancellation receipt, forced or not |
-| queued | queue deadline passes | Persisted UTC deadline | queue_expired | Expiry receipt |
+| queued | queue deadline passes | The request set `--queue-seconds`, and its persisted UTC deadline passed | queue_expired | Expiry receipt |
 | granted | renew | Before the liveness and maximum-hold deadlines | granted | New liveness deadline, capped at the maximum hold |
 | granted | release, or cancel of the request | Grant ID matches the current generation | released | Release receipt. The next waiter is granted in the same transaction. |
 | granted | force release | Operator action with a reason | released | Forced receipt with the reason. The next waiter is granted in the same transaction. |
@@ -116,9 +117,11 @@ The capability identifier is `advisory-lock/v1`.
 1. Persist the key and payload.
 2. Acquire and wait for the grant. The queue wait happens inside the review run, so the agent's own tool calls are not held open.
 3. Renew the grant from inside the running review process.
-4. Release on every path: success, failure and cancellation.
+4. As the acquiring owner, release on every path: success, failure and cancellation.
 
-**Nested tools.** A tool that already holds the grant passes it to nested tools through `HAEPARI_LOCK_GRANT`. A tool that sees a live grant for the same lock does not acquire again. `use-mulgae` does not acquire a separate lock.
+**Owned and borrowed grants.** An invocation that acquires a grant owns its renewal and eventual release. It also owns cancellation of its request. It may pass an inherited-grant reference through `HAEPARI_LOCK_GRANT` with installation ID, lock ID, grant ID and generation. A nested invocation that inherits this reference borrows the grant: it must not renew, release, cancel or force-release the parent's request/grant, including on child failure or cancellation. Renewal stays with the owner; v0.1.0 has no ownership transfer. Advisory expiry does not terminate the holder's native work.
+
+Before skipping acquisition, the borrower performs a read-only lookup on its selected Haepari installation and requires matching installation ID, intended lock ID, current grant ID/generation and `granted` state with unexpired deadlines. An environment variable alone is not proof. Wrong installation/lock is `CONFLICT`; ended or stale grants are `LOCK_EXPIRED` (an unknown grant is `NOT_FOUND`). Return that condition to the owning integration; do not silently acquire under another key. This is a same-user coordination check, not a new security boundary. `use-mulgae` does not acquire a separate lock.
 
 **A caller without an in-process holder.**
 

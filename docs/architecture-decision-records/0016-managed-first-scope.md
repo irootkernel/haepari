@@ -8,7 +8,7 @@ R2 added public external leases and linked recovery segments under ADR-0014/0015
 
 ## Decision
 
-v0.1.0 supports managed local and UTM macOS Jobs only. Internal managed ownership, generations, fencing, capacity accounting, restoration and quarantine remain mandatory. EPIC-008/TASK-029–032 and HP-REQ-063–079/E01–E20 are deferred. Linux runtime qualification and actual upgrade from a nonexistent public Haepari predecessor are outside the release gate. Ordinary Mulgae reviews do not require Haepari admission; Mulgae owns its provider/account investigation and native partial recovery.
+v0.1.0 supports managed local and UTM macOS Jobs only. Internal managed ownership, generations, fencing, capacity accounting, job cleanup and quarantine remain mandatory. EPIC-008/TASK-029–032 and HP-REQ-063–079/E01–E20 are deferred. Linux runtime qualification and actual upgrade from a nonexistent public Haepari predecessor are outside the release gate. Ordinary Mulgae reviews do not require Haepari admission; Mulgae owns its provider/account investigation and native partial recovery.
 
 ## Alternatives considered
 
@@ -26,7 +26,7 @@ v0.1.0 supports managed local and UTM macOS Jobs only. Internal managed ownershi
 
 **A different VM backend (tart), or a beta UTM snapshot/disposable mode.** Not selected for v0.1.0.
 
-- ADR-0006 keeps UTM, and `reset_strategy` keeps the backend boundary replaceable.
+- ADR-0006 keeps UTM. ADR-0018 later removes per-job reset, so no reset strategy is needed.
 - Revisit after the TASK-034 and TASK-016 evidence.
 
 ## Amendment (Design Revision 3.2)

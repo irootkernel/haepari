@@ -1,6 +1,6 @@
 # Haepari requirements
 
-Target: v0.1.0, Design Revision 3.2. All requirements below are planned and unchecked. A checkbox may be checked only after its acceptance evidence has been reviewed. Every active requirement (HP-REQ-001 through HP-REQ-062, plus HP-REQ-080 and HP-REQ-081 added in Design Revision 3.2) is mandatory for v0.1.0; there is no optional tier. Deferred requirements (HP-REQ-063 through HP-REQ-079) do not count toward the release. [Traceability](traceability.md) maps each active requirement to its task and verifying cases.
+Target: v0.1.0, Design Revision 3.4. All requirements below are planned and unchecked. A checkbox may be checked only after its acceptance evidence has been reviewed. Every active requirement (HP-REQ-001 through HP-REQ-062, plus HP-REQ-080 and HP-REQ-081 added in Design Revision 3.2) is mandatory for v0.1.0; there is no optional tier. Deferred requirements (HP-REQ-063 through HP-REQ-079) do not count toward the release. [Traceability](traceability.md) maps each active requirement to its task and verifying cases.
 
 ## Scope and ownership
 
@@ -35,7 +35,7 @@ Implementation owner: `TASK-003`.
 
 ### HP-REQ-006
 - [ ] Qualify general macOS process supervision and filesystem behavior early; qualify installed UTM automation in TASK-016 before promising VM support.
-Acceptance: TASK-004 records the macOS supervision, service-manager and durability decisions with observations. TASK-034 records an early non-destructive UTM probe. TASK-016 records exact UTM/backend/macOS versions and a real cold restore trial. Missing UTM conditions block VM acceptance, not independent local-core development.
+Acceptance: TASK-004 records the macOS supervision, service-manager and durability decisions with observations. TASK-034 recorded an early UTM probe ([probe record](records/TASK-034-utm-probe.md)). TASK-016 records exact UTM/backend/macOS versions and a real job cycle on the persistent VM. Missing UTM conditions block VM acceptance, not independent local-core development.
 Implementation owner: `TASK-004` (macOS decisions) and `TASK-034` (UTM probe).
 
 ### HP-REQ-007
@@ -60,7 +60,7 @@ Implementation owner: `TASK-006`.
 
 ### HP-REQ-011
 - [ ] Schedule FIFO within each resource and enforce resource capacity plus a controller-wide occupancy limit across reserved, active and unresolved managed Jobs.
-Acceptance: Competing submitters cannot exceed capacity. A paused or unavailable resource does not prevent another eligible resource from progressing. A caller whose parent context occupies capacity cannot submit a job or block-wait on a non-terminal job; nested acquisition is rejected before admission.
+Acceptance: Competing submitters cannot exceed managed or host VM capacity, including concurrent starts and uncertain power effects. A paused or unavailable resource does not prevent another eligible resource from progressing; a paused VM is not an automatic-stop victim. A caller whose parent context occupies capacity cannot submit a job or block-wait on a non-terminal job; nested acquisition is rejected before admission.
 Implementation owner: `TASK-007`.
 
 ### HP-REQ-012
@@ -70,7 +70,7 @@ Implementation owner: `TASK-007`.
 
 ### HP-REQ-013
 - [ ] Fence every resource mutation with the resource revision, job identity, and lease generation.
-Acceptance: A delayed old runner response or stale recovery request cannot release, replace, or reset a resource owned by a later lease.
+Acceptance: A delayed old runner response or stale recovery request cannot release, replace, or act on a resource owned by a later lease.
 Implementation owner: `TASK-007`.
 
 ### HP-REQ-014
@@ -80,7 +80,7 @@ Implementation owner: `TASK-008`.
 
 ### HP-REQ-015
 - [ ] Separate operation success, workload outcome, cleanup outcome, and final verdict.
-Acceptance: A passing command with missing evidence or failed cleanup cannot return an overall PASS; inspection itself can succeed while reporting a failed job.
+Acceptance: The common final-verdict decision table makes missing required evidence or failed cleanup INCOMPLETE even when a workload failure is known; the failure fact is retained. Inspection itself can succeed while reporting a failed job.
 Implementation owner: `TASK-008`.
 
 ### HP-REQ-016
@@ -95,7 +95,7 @@ Implementation owner: `TASK-009`.
 
 ### HP-REQ-018
 - [ ] Always attempt bounded collection and cleanup after any effectful preparation or workload failure.
-Acceptance: Preparation failure, workload failure, cancellation, and collection failure each reach verified release or explicit quarantine; no path silently frees a dirty resource.
+Acceptance: Preparation failure, workload failure, cancellation, and collection failure each reach verified release or explicit quarantine; no path silently frees a resource whose Haepari processes are unconfirmed or deletes required uncollected evidence. Proven termination may settle INCOMPLETE while retained evidence keeps the resource quarantined.
 Implementation owner: `TASK-010`.
 
 ### HP-REQ-019
@@ -114,28 +114,28 @@ Acceptance: Tests cover exit-receipt loss and crash after spawn but before ackno
 Implementation owner: `TASK-011`.
 
 ### HP-REQ-022
-- [ ] Collect bounded logs and an artifact manifest outside the disposable VM before reset.
-Acceptance: Every collected artifact has a path, size, and digest. Disk-full, truncated collection, and missing required files produce evidence gaps, not successful empty results.
+- [ ] Collect bounded logs and an artifact manifest to the host before job cleanup.
+Acceptance: Every collected artifact has a path, size, and digest. Disk-full, truncated collection, and missing required files produce evidence gaps, not successful empty results. Protected guest evidence survives failed collection and restart until bounded re-collection or explicitly authorized disposal and verified cleanup.
 Implementation owner: `TASK-012`.
 
 ### HP-REQ-023
 - [ ] Support explicit completed-job retention and purge without deleting active resources or deduplication tombstones.
-Acceptance: Purging selected finished jobs removes only owned payloads and logs; a repeated old request key cannot become a fresh execution.
+Acceptance: Purging selected finished jobs removes only unprotected owned payloads and logs; unresolved evidence/recovery references and request-key tombstones survive. A repeated old key cannot become a fresh execution.
 Implementation owner: `TASK-012`.
 
 ### HP-REQ-024
-- [ ] Identify a UTM resource by verified backend, VM UUID, owned package path, and baseline identity.
-Acceptance: Duplicate display names cannot select the wrong VM. A template VM, foreign package, symlink escape, or changed registration is refused before destructive control.
+- [ ] Identify a UTM resource by verified backend, VM UUID, MAC address and pinned SSH host key.
+Acceptance: Duplicate display names cannot select the wrong VM. An unknown UUID, a UUID or MAC address already registered to another resource, or a changed registration is refused before any VM control. Expired or ambiguous DHCP lease entries fail even if written after VM start; a pre-start unexpired entry requires current guest identity proof.
 Implementation owner: `TASK-013`.
 
 ### HP-REQ-025
-- [ ] Restore the complete powered-off VM state through a qualified whole-package clone strategy.
-Acceptance: A real trial removes seeded files, settings, skill changes, and service changes. Snapshot/disposable optimization is not required for v0.1.0.
+- [ ] Use one persistent VM per resource without resetting it between jobs; after each job, remove only Haepari-owned job files.
+Acceptance: After verified cleanup, a second job on the same VM finds none of the first job's Haepari files; protected uncollected evidence instead quarantines the VM and blocks that second job. Workload changes outside the job directory are left for consumer recipes. Haepari never clones, restores or deletes the VM ([ADR-0018](architecture-decision-records/0018-persistent-vm-no-reset.md)).
 Implementation owner: `TASK-013`.
 
 ### HP-REQ-026
 - [ ] Use host-side UTM automation for VM lifecycle and SSH/SFTP for macOS guest operations.
-Acceptance: The adapter works without assuming a QEMU Guest Agent or guest IP query is available; unavailable automation reports a prerequisite gap.
+Acceptance: The adapter works without assuming a QEMU Guest Agent or guest IP query is available; it controls UTM only through `utmctl` and treats `Error from event` on stderr as a failure even with exit 0. Unavailable automation reports a prerequisite gap.
 Implementation owner: `TASK-014`.
 
 ### HP-REQ-027
@@ -145,22 +145,22 @@ Implementation owner: `TASK-014`.
 
 ### HP-REQ-028
 - [ ] Verify SSH host identity and disable agent forwarding and broad host credential inheritance.
-Acceptance: Wrong host key, wrong guest identity, wrong baseline, and wrong job nonce fail before candidate installation; no StrictHostKeyChecking=no fallback exists.
+Acceptance: Wrong host key, wrong guest identity, wrong VM, and wrong job nonce fail before candidate installation; no StrictHostKeyChecking=no fallback exists.
 Implementation owner: `TASK-014`.
 
 ### HP-REQ-029
-- [ ] Prepare, collect, reset, and health-check a VM under one lease, quarantining on uncertainty.
-Acceptance: A failed reset blocks all later jobs for that resource while unrelated resources remain usable; stale recovery cannot reset a later job.
+- [ ] Prepare, collect, clean up, and health-check a VM under one lease, quarantining on uncertainty.
+Acceptance: A failed cleanup or health check blocks all later jobs for that resource while unrelated resources remain usable; stale recovery cannot act on a later job.
 Implementation owner: `TASK-015`.
 
 ### HP-REQ-030
 - [ ] Keep test host paths separate from guest installation paths.
-Acceptance: No VM job mounts the host home, live skills, plugin cache, source checkout, or production runtime writable. Project-controlled guest recipes are never promoted to host reset hooks.
+Acceptance: No VM job mounts the host home, live skills, plugin cache, source checkout, or production runtime writable. Project-controlled guest recipes are never promoted to host hooks.
 Implementation owner: `TASK-015`.
 
 ### HP-REQ-031
-- [ ] Prove UTM operation and reset on one real macOS guest before accepting the adapter.
-Acceptance: Retain observed startup, authenticated execution, failure, log collection, reset, and next-job readiness evidence; mock-only success cannot qualify the adapter. Record per-phase VM timings (restore, boot-to-SSH, collection, reset) for throughput planning.
+- [ ] Prove UTM operation and job cleanup on one real macOS guest before accepting the adapter.
+Acceptance: Retain observed startup, authenticated execution, failure, log collection, cleanup, and next-job readiness evidence; mock-only success cannot qualify the adapter. Record per-phase VM timings (VM start when needed, SSH ready, transfer, collection, cleanup) for throughput planning.
 Implementation owner: `TASK-016`.
 
 ### HP-REQ-032
@@ -170,7 +170,7 @@ Implementation owner: `TASK-017`.
 
 ### HP-REQ-033
 - [ ] Support explicit install, migration, regression, and all suite selection, with auto/manual mode independent of suite.
-Acceptance: An all run uses separate jobs and baseline resets between install and migration; a migration job never resets between old-state creation and candidate checks.
+Acceptance: An all run uses separate jobs for install and migration. Haepari never resets the VM, so each job's recipe establishes its own starting state; a migration recipe creates the old state before the candidate checks.
 Implementation owner: `TASK-017`.
 
 ### HP-REQ-034
@@ -199,7 +199,7 @@ Acceptance: A fixture with different binary and skill source revisions can pass 
 Implementation owner: `TASK-018`.
 
 ### HP-REQ-039
-- [ ] Record consumer-submitted installed-file, fresh-session discovery, behavior, and restoration results as distinct evidence classes; enforce declared required-result completeness.
+- [ ] Record consumer-submitted installed-file, fresh-session discovery, behavior, and cleanup results as distinct evidence classes; enforce declared required-result completeness.
 Acceptance: A file hash check or a prompt containing copied skill text cannot satisfy installed-skill discovery or behavior acceptance.
 Implementation owner: `TASK-019`.
 
@@ -225,7 +225,7 @@ Implementation owner: `TASK-020`.
 
 ### HP-REQ-044
 - [ ] Provide sample fault cases and required-result declarations for consumer-owned interrupted installation/migration and supported recovery or explicit unsupported upgrade paths.
-Acceptance: A retry does not duplicate logical work; unknown workload effects remain inconclusive. Downgrade support is not inferred from successful VM reset.
+Acceptance: A retry does not duplicate logical work; unknown workload effects remain inconclusive. Downgrade support is never inferred from test cleanup.
 Implementation owner: `TASK-020`.
 
 ### HP-REQ-045
@@ -244,8 +244,8 @@ Acceptance: Socket/state permissions, path containment, redacted diagnostics, se
 Implementation owner: `TASK-022`.
 
 ### HP-REQ-048
-- [ ] Keep live credentials and external side effects outside reset guarantees.
-Acceptance: No authentication files are bundled from the host. Live scenarios disclose exact endpoints and budget scope; snapshot restoration is never described as undoing network writes or model charges.
+- [ ] Keep live credentials and external side effects outside the VM test boundary.
+Acceptance: No authentication files are bundled from the host. Live scenarios disclose exact endpoints and budget scope; no cleanup is described as undoing network writes or model charges.
 Implementation owner: `TASK-022`.
 
 ### HP-REQ-049
@@ -284,7 +284,7 @@ Acceptance: The consumer checks declared schema, backend, wait, manual, and reco
 Implementation owner: `TASK-025`.
 
 ### HP-REQ-056
-- [ ] Document baseline creation, skills, migration, manual runs, crash recovery, and decommissioning.
+- [ ] Document VM preparation, skills, migration, manual runs, crash recovery, and decommissioning.
 Acceptance: An operator can follow the runbook without undeclared paths or invented UTM commands; unsupported capabilities stop at a precise prerequisite.
 Implementation owner: `TASK-026`.
 
@@ -300,7 +300,7 @@ Implementation owner: `TASK-027`.
 
 ### HP-REQ-059
 - [ ] Qualify at least two distinct managed resource use cases before calling the queue general purpose.
-Acceptance: Run real local-command jobs and the macOS VM campaign through the same scheduling ledger; record distinct resource occupancy and restoration evidence.
+Acceptance: Run real local-command jobs and the macOS VM campaign through the same scheduling ledger; record distinct resource occupancy and cleanup evidence.
 Implementation owner: `TASK-027`.
 
 ### HP-REQ-060
@@ -320,7 +320,7 @@ Implementation owner: `TASK-002`, with freeze gates in `TASK-012` (F1), `TASK-01
 
 ### HP-REQ-080
 - [ ] Provide advisory named locks with FIFO queuing, blocking wait, explicit release, liveness renewal bounded by a maximum hold, expiry and operator force release.
-Acceptance: Two cooperating callers never hold a capacity-one lock at once. A lost acquire reply recovers the same request, and a replay of an ended request reports that it ended. A holder that stops renewing, or a grant nobody claims, ends after one liveness window, and the next waiter is granted in the same transaction. A stale release cannot release a later grant. Forced releases and expiries are recorded.
+Acceptance: Two cooperating callers never hold a capacity-one lock at once. A lost acquire reply recovers the same request, and a replay of an ended request reports that it ended. A holder that stops renewing, or a grant nobody claims, ends after one liveness window, and the next waiter is granted in the same transaction. A stale release cannot release a later grant. An inherited grant is verified against the intended installation, lock and current generation, and only its acquiring owner renews or ends it. Forced releases and expiries are recorded.
 Implementation owner: `TASK-035`.
 
 ### HP-REQ-081
@@ -419,7 +419,7 @@ Implementation owner: `TASK-032`.
 
 ## Explicit exclusions
 
-No distributed controllers, public service, multi-tenant authorization, arbitrary DAG language, multi-resource atomic reservation, Windows backend, recurring scheduler, cloud-provider fleet, automatic AI remediation, automatic provider authentication, or default LLM evaluator is required. Snapshot optimization is deferred until the cold-clone implementation is qualified. No runtime component reads Aquarium roadmap state to decide whether a generic job can run.
+No distributed controllers, public service, multi-tenant authorization, arbitrary DAG language, multi-resource atomic reservation, Windows backend, recurring scheduler, cloud-provider fleet, automatic AI remediation, automatic provider authentication, or default LLM evaluator is required. VM reset, whether by whole-VM copy, snapshot or disposable start, is not part of v0.1.0 (ADR-0018). No runtime component reads Aquarium roadmap state to decide whether a generic job can run.
 
 ## Completion rule
 

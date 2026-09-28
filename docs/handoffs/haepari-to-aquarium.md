@@ -14,18 +14,18 @@ This is a completion template, not completed evidence. Aquarium:TASK-086 accepts
 ## Observed acceptance
 
 - Requirements coverage and the finite verification matrix with actual outcomes.
-- Independent local-command use case plus real UTM lifecycle/reset use case.
+- Independent local-command use case plus a real UTM persistent-VM use case.
 - Lost reply, restart, SSH disconnection, cancellation, manual ownership and quarantined-resource recovery.
-- Immutable candidate/test transfer and skill installation/discovery/restoration fixtures.
+- Immutable candidate/test transfer and skill installation/discovery/cleanup fixtures.
 - Old-state migration and interruption-recovery fixture results.
 - Protected host state and independent controller self-test evidence.
-- Exact environment/UTM/OS prerequisites, permissions, runner identity and observed restore strategy.
+- Exact environment/UTM/OS prerequisites, permissions, runner identity and the persistent-VM model (no reset, ADR-0018).
 
 ## Consumer assets
 
 - Versioned schemas and marked examples that the consumer can validate locally.
 - Project Make wrapper and separate guest entrypoint reference implementation.
-- Result collection/export guidance, profile/baseline registration interface and manual completion format.
+- Result collection/export guidance, profile and VM resource registration interface and manual completion format.
 - Operator runbook, known limits and evidence that remains unobserved.
 
 ## Acceptance boundary
@@ -34,4 +34,4 @@ Do not populate fields with assumed values. A local build is not an official rel
 
 ## Design Revision 3 managed-first packet
 
-Include exact managed schemas/capabilities frozen at gates F1, F2 and F3, the advisory lock contract and `advisory-lock/v1`, local and real UTM execution evidence, V01–V65 results, nested acquisition and recovery cases, controller/runner exit behavior, whole-VM restoration, installed skill behavior, storage schema classes, and known gaps. External lease activation, dispatch, settlement, continuation and E01–E20 are deferred and cannot block Aquarium:TASK-086. State any unqualified macOS session, Automation permission, guest identity or reset prerequisite explicitly. State the Aquarium-side plan alignment from [external requests](../to-external.md) §1.2 as a consumer prerequisite. No packet content implies Aquarium acceptance or publication.
+Include exact managed schemas/capabilities frozen at gates F1, F2 and F3, the advisory lock contract and `advisory-lock/v1`, local and real UTM execution evidence, V01–V65 results, nested acquisition and recovery cases, controller/runner exit behavior, job cleanup, installed skill behavior, storage schema classes, and known gaps. External lease activation, dispatch, settlement, continuation and E01–E20 are deferred and cannot block Aquarium:TASK-086. State any unqualified macOS session, Automation permission, guest identity or cleanup prerequisite explicitly. State the Aquarium-side plan alignment from [external requests](../to-external.md) §1.2 as a consumer prerequisite. No packet content implies Aquarium acceptance or publication.

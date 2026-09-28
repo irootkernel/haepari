@@ -4,15 +4,16 @@
   "kind": "utm-macos",
   "capacity": 1,
   "revision": 1,
-  "baseline": {
-    "id": "<qualified-baseline>",
-    "profile_digest": "<sha256>",
-    "registration_reference": "<operator-owned-registration>"
+  "vm": {
+    "utm_vm_uuid": "<observed-vm-uuid>",
+    "mac_address": "<vm-mac-address>",
+    "allow_automatic_stop": false,
+    "address_discovery": "dhcp-lease-by-mac",
+    "guest_job_root": "<guest-owned-job-root>"
   },
   "adapter": {
     "utmctl": "/Applications/UTM.app/Contents/MacOS/utmctl",
-    "qualification_reference": "<verified-backend-receipt>",
-    "reset_strategy": "cold-whole-package-clone"
+    "qualification_reference": "<verified-backend-receipt>"
   },
   "guest": {
     "connection_reference": "<approved-ssh-mapping>",

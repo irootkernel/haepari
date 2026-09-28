@@ -8,8 +8,8 @@ ADR-0001 through ADR-0013 apply to the active managed design. ADR-0014/0015 pres
 | ADR-0002 | [Single local controller with durable SQLite state](0002-local-durable-controller.md) | Accepted for v0.1.0 design |
 | ADR-0003 | [Schedule resources rather than application workflows](0003-resource-scheduling.md) | Accepted for v0.1.0 design |
 | ADR-0004 | [Freeze input and deduplicate admission before execution](0004-immutable-admission.md) | Accepted for v0.1.0 design |
-| ADR-0005 | [Resource release requires verified cleanup](0005-cleanup-before-release.md) | Accepted for v0.1.0 design |
-| ADR-0006 | [UTM lifecycle on the host, SSH supervision in the guest](0006-utm-ssh.md) | Accepted for v0.1.0 design |
+| ADR-0005 | [Resource reuse requires verified cleanup](0005-cleanup-before-release.md) | Accepted for v0.1.0 design; clarified in Design Revision 3.4 |
+| ADR-0006 | [UTM lifecycle on the host, SSH supervision in the guest](0006-utm-ssh.md) | Accepted for v0.1.0 design; amended by ADR-0018 |
 | ADR-0007 | [Keep tests in their owning product repositories](0007-project-owned-tests.md) | Accepted for v0.1.0 design |
 | ADR-0008 | [Use frozen installation combinations including skills](0008-installation-combinations.md) | Accepted for v0.1.0 design |
 | ADR-0009 | [Test migration with prior-version state](0009-real-migration-state.md) | Accepted for v0.1.0 design |
@@ -21,5 +21,6 @@ ADR-0001 through ADR-0013 apply to the active managed design. ADR-0014/0015 pres
 | ADR-0015 | [Logical recovery spans distinct capacity leases](0015-linked-recovery-segments.md) | R2 design retained; deferred by ADR-0016 (B2 open) |
 | ADR-0016 | [Managed-first v0.1.0 scope](0016-managed-first-scope.md) | Accepted for v0.1.0 design (Design Revision 3; alternatives added in 3.1; amended by ADR-0017 in 3.2) |
 | ADR-0017 | [Advisory named locks for cooperating tools](0017-advisory-named-locks.md) | Accepted for v0.1.0 design (Design Revision 3.2) |
+| ADR-0018 | [One persistent VM per resource, without per-job reset](0018-persistent-vm-no-reset.md) | Accepted for v0.1.0 design (Design Revision 3.3); amends ADR-0006 |
 
 ADR-0014 and ADR-0015 record the Design Revision 2 external-lease and linked-segment decisions. ADR-0016 (Design Revision 3) defers their application; re-entry requires B1/B2 closure in the [deferred contract](../contracts/external-leases.md) and a separate accepted consumer need. Existing decision IDs are preserved.

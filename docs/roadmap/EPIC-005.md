@@ -33,13 +33,13 @@ Requirement coverage: `HP-REQ-032`, `HP-REQ-033`, `HP-REQ-034`.
 Requirement coverage: `HP-REQ-035`, `HP-REQ-036`, `HP-REQ-037`, `HP-REQ-038`.
 
 #### Implement
-- [ ] Validate and transport frozen consumer profiles and before/candidate/restored inventory evidence. Add fixture installers for complete skill trees, independent binary/skill refs and declared home scopes.
+- [ ] Validate and transport frozen consumer profiles and before and candidate inventory evidence. Add fixture installers for complete skill trees, independent binary/skill refs and declared home scopes.
 
 #### Do not
 - [ ] Do not resolve latest at execution, invent a global compatibility registry, vendor real third-party skills, or assume all skills share a binary tag.
 
 #### Verify
-- [ ] Test skill-only candidate, obsolete/extra/missing files, duplicate discovery roots, changed effective settings and baseline revision changes.
+- [ ] Test skill-only candidate, obsolete/extra/missing files, duplicate discovery roots, changed effective settings and resource revision changes.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -81,7 +81,7 @@ Requirement coverage: `HP-REQ-042`, `HP-REQ-043`, `HP-REQ-044`, `HP-REQ-062` (fr
 - [ ] Freeze gate F3: freeze the project Make and guest entrypoint conventions, `haepari.environment-lock/v1`, installation inventories, the manual result format and migration evidence fields, recording each change since TASK-002 and its evidence.
 
 #### Do not
-- [ ] Do not reset between old-state creation and upgrade assertions or present VM restore as product downgrade.
+- [ ] Do not reset state between old-state creation and upgrade assertions or present test cleanup as product downgrade.
 
 #### Verify
 - [ ] Run a genuine old-state migration of the synthetic product through the VM job contract on the fake backend, include failed/interrupted upgrade and a first-release not-applicable case, and validate source/target evidence. The real UTM migration run is part of TASK-027.

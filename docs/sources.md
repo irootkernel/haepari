@@ -73,3 +73,15 @@ Date: 2026-09-28.
 **Owner observation.** One Mulgae review with six or seven roles works, and two concurrent reviews sometimes fail. This is an owner report, not a remeasurement.
 
 **Sources and repositories.** No new external source was consulted, and no other repository was read or changed.
+
+## Design Revision 3.3 provenance
+
+Date: 2026-09-28.
+
+**Owner decisions:**
+- one persistent VM per resource, without per-job reset
+- no code-signing requirement for local services
+
+**Observation.** The TASK-034 probe ran on the owner's host and VM; its [record](records/TASK-034-utm-probe.md) lists the host and UTM versions and the results.
+
+**Sources and repositories.** No new external source was consulted, and no other repository was read or changed.

@@ -1,11 +1,11 @@
 # External change requests
 
-Status: request list for other repositories, Design Revision 3.2 (2026-09-28). Nothing here has been applied to those repositories. Each owner reviews the request, allocates its own IDs and records accepted work in its own roadmap. This file records what Haepari's managed-first design needs from other projects and why; it is not an authority over them.
+Status: request list for other repositories, Design Revision 3.4 (2026-09-28). Nothing here has been applied to those repositories. Each owner reviews the request, allocates its own IDs and records accepted work in its own roadmap. This file records what Haepari's managed-first design needs from other projects and why; it is not an authority over them.
 
 Order:
 
 1. The Mulgae request (§2.1) has two parts. Queuing reviews on Haepari's advisory lock needs the Haepari v0.1.0 lock capability. The measurement and the optional safeguards can start at any time.
-2. The Aquarium baseline and alignment (§1.1 and §1.2) must be complete before Aquarium:TASK-086 accepts a Haepari handoff.
+2. The Aquarium alignment (§1.2) must be complete before Aquarium:TASK-086 accepts a Haepari handoff. §1.1 is done (Aquarium commit `910ef29`).
 3. Everything marked advisory is a proposal for the owner's decision.
 
 Cross-project IDs are always qualified: `Haepari:TASK-0nn`, `Aquarium:TASK-0nn`, `Aquarium:EPIC-002`. Aquarium:EPIC-002 (Cancelled development environment) and Haepari:EPIC-002 (Durable queue) are unrelated.
@@ -14,17 +14,12 @@ Cross-project IDs are always qualified: `Haepari:TASK-0nn`, `Aquarium:TASK-0nn`,
 
 **Observed state (read-only, 2026-09-28).**
 
-- HEAD `f987ada` ("[DOC] Mark TASK-085 completed") does not contain Aquarium:EPIC-019.
-- The Aquarium:EPIC-019 plan exists only as uncommitted working-tree edits:
-  - modified `docs/roadmap/README.md`
-  - modified `docs/todo/README.md`
-  - modified `docs/todo/TODO-AQUARIUM-DEV.md`
-  - untracked `docs/todo/TODO-HAEPARI-VM-ADOPTION.md`
-- These edits still describe the Haepari Design Revision 2 scope.
+- Aquarium commit `910ef29` ("[DOC] Plan Haepari VM adoption and legacy channel retirement") committed the Aquarium:EPIC-019 plan, including `docs/todo/TODO-HAEPARI-VM-ADOPTION.md`. HEAD is now `0c5330b`.
+- The committed plan still describes the Haepari Design Revision 2 scope and a per-job VM reset.
 
-### 1.1 Commit a planning baseline (required)
+### 1.1 Commit a planning baseline (done)
 
-Review and commit the Aquarium:EPIC-019 planning edits, preferably together with §1.2. The Haepari handoff and the Sorage packets can then cite an exact Aquarium revision.
+Done: Aquarium commit `910ef29` committed the Aquarium:EPIC-019 plan. The Haepari handoff and the Sorage packets can cite it, or the later commit that applies §1.2.
 
 ### 1.2 Align Aquarium:EPIC-019 with the managed-first scope (required)
 
@@ -34,11 +29,11 @@ Review and commit the Aquarium:EPIC-019 planning edits, preferably together with
 - linked continuation segments
 - E01–E20
 
-Haepari v0.1.0 supplies managed local and UTM macOS Jobs and the advisory lock `mulgae-review` (Haepari ADR-0017), on which ordinary Mulgae reviews queue.
+Haepari v0.1.0 supplies managed local and UTM macOS Jobs and the advisory lock `mulgae-review` (Haepari ADR-0017), on which ordinary Mulgae reviews queue. Haepari ADR-0018 (Design Revision 3.3) also drops per-job VM reset: each VM resource is one persistent VM, and every job's recipe sets up and cleans up its own state. The TODO rows below also align Aquarium's text with that.
 
 **Why this blocks adoption.** Aquarium:EPIC-019 still requires the deferred capabilities. A Haepari v0.1.0 handoff cannot satisfy that plan, so Aquarium:TASK-086 would stay blocked.
 
-**How to read the tables.** Line numbers refer to the uncommitted working tree observed above.
+**How to read the tables.** Line numbers refer to Aquarium HEAD `0c5330b`. If lines move, the quoted text identifies the place.
 
 - **Replace** swaps the quoted text for the proposed text.
 - **Remove** deletes the quoted text only.
@@ -48,12 +43,12 @@ Haepari v0.1.0 supplies managed local and UTM macOS Jobs and the advisory lock `
 
 | Line | Current text | Request |
 | --- | --- | --- |
-| 471 (Aquarium:EPIC-019 blocker) | "…including managed UTM reset, independent local-resource evidence and design-revision-2 external lease/continuation capabilities with independent fixture evidence." | **Replace** with: "…including managed UTM reset and independent local-resource evidence. Public external leases are deferred by Haepari ADR-0016 and are not a blocker." |
-| 479 (Aquarium:TASK-086) | "Verify exact release, runner, skill, managed/external capabilities, first-claim execution and continuation fixtures plus real backend evidence; freeze consumer and authority boundaries." | **Replace** with: "Verify exact release, runner, skill and managed capabilities plus real local and UTM backend evidence; freeze consumer and authority boundaries." |
-| 483 (Aquarium:TASK-090) | "…freeze Sorage packets including Mulgae VM plus external lease/partial-recovery scope…" | **Replace** with: "…freeze managed-first Sorage packets; the Mulgae packet covers managed VM, skill, migration, regression and legacy detachment only…" |
-| 485 (Aquarium:TASK-092) | "Through Sorage accept producer-owned VM/skill/migration tests and use-mulgae external leases, same-lease recovery, release-before-user-wait, fresh-lease continuation and native compose; reconcile Aquarium references and legacy detachment." | **Replace** with: "Through Sorage accept producer-owned VM, skill, migration and regression tests and legacy detachment; Mulgae's native partial-role recovery and composition stay Mulgae-owned; reconcile Aquarium references." |
-| 493 (Aquarium:TASK-100) | "…managed/external occupancy and native Mulgae partial-recovery continuation without a second lease wrapper." | **Replace** with: "…managed occupancy and restoration evidence." |
-| 495 (Aquarium:TASK-102) | "Verify final managed/external behavior and review-recovery acceptance…" | **Replace** with: "Verify final managed behavior…" |
+| 472 (Aquarium:EPIC-019 blocker) | "…including managed UTM reset, independent local-resource evidence and design-revision-2 external lease/continuation capabilities with independent fixture evidence." | **Replace** with: "…including managed UTM execution on a persistent VM and independent local-resource evidence. Public external leases are deferred by Haepari ADR-0016 and are not a blocker." |
+| 480 (Aquarium:TASK-086) | "Verify exact release, runner, skill, managed/external capabilities, first-claim execution and continuation fixtures plus real backend evidence; freeze consumer and authority boundaries." | **Replace** with: "Verify exact release, runner, skill and managed capabilities plus real local and UTM backend evidence; freeze consumer and authority boundaries." |
+| 484 (Aquarium:TASK-090) | "…freeze Sorage packets including Mulgae VM plus external lease/partial-recovery scope…" | **Replace** with: "…freeze managed-first Sorage packets; the Mulgae packet covers managed VM, skill, migration, regression and legacy detachment only…" |
+| 486 (Aquarium:TASK-092) | "Through Sorage accept producer-owned VM/skill/migration tests and use-mulgae external leases, same-lease recovery, release-before-user-wait, fresh-lease continuation and native compose; reconcile Aquarium references and legacy detachment." | **Replace** with: "Through Sorage accept producer-owned VM, skill, migration and regression tests and legacy detachment; Mulgae's native partial-role recovery and composition stay Mulgae-owned; reconcile Aquarium references." |
+| 494 (Aquarium:TASK-100) | "…managed/external occupancy and native Mulgae partial-recovery continuation without a second lease wrapper." | **Replace** with: "…managed occupancy and cleanup evidence." |
+| 496 (Aquarium:TASK-102) | "Verify final managed/external behavior and review-recovery acceptance…" | **Replace** with: "Verify final managed behavior…" |
 
 #### `docs/todo/README.md`
 
@@ -65,22 +60,39 @@ Haepari v0.1.0 supplies managed local and UTM macOS Jobs and the advisory lock `
 
 | Line | Current text | Request |
 | --- | --- | --- |
-| 9 | "This epic adopts project-owned VM tests, delegates external review-lease integration to Mulgae, and retires the old development channel in stages. Haepari design revision 2 supplies both managed and external execution contracts; the product target remains v0.1.0." | **Replace** those two sentences with: "This epic adopts project-owned VM tests and retires the old development channel in stages. Haepari Design Revision 3.2 supplies the managed execution contract and an advisory lock on which Mulgae queues ordinary reviews; the R2 external lease is deferred by Haepari ADR-0016, and the product target remains v0.1.0." **Keep** the rest of the paragraph. |
+| 9 | "This epic adopts project-owned VM tests, delegates external review-lease integration to Mulgae, and retires the old development channel in stages. Haepari design revision 2 supplies both managed and external execution contracts; the product target remains v0.1.0." | **Replace** those two sentences with: "This epic adopts project-owned VM tests and retires the old development channel in stages. Haepari Design Revision 3.4 supplies the managed execution contract and an advisory lock on which Mulgae queues ordinary reviews; the R2 external lease is deferred by Haepari ADR-0016, and the product target remains v0.1.0." **Keep** the rest of the paragraph. |
+| 39 | "…Reset between independent jobs, but never reset between old-state creation and assertions inside one migration job…" | **Replace** with: "…Haepari does not reset the VM between jobs (Haepari ADR-0018); each job's recipe first removes the earlier state it depends on, and never resets between old-state creation and assertions inside one migration job…" |
 | 41 | "### Managed VM execution and external review leases" | **Replace** with: "### Managed VM execution" |
 | 43 | First sentence: "UTM tests use Haepari-managed execution, including manual hands-on ownership." The remaining sentences cover the `mulgae-review` external resource, managed/external naming, shared occupancy and review segments. | **Keep** the first sentence. **Replace** the rest with: "Ordinary Mulgae reviews queue on Haepari's advisory lock `mulgae-review` (Haepari ADR-0017); the R2 external lease stays deferred." |
 | 45, 47, 49 | Atomic grant or queue, first-claim begin, same-lease retry, new-lease continuation, stale-release fencing and owner material | **Remove** these three paragraphs. |
 | 51 | Six-role recovery guidance ending "…complete coverage, publication, findings/CI and returned capacity remain separate facts…" | **Keep** it as Mulgae-owned native recovery guidance. **Remove** "and returned capacity". |
 | 53 | "TASK-092 delegates this implementation to the Mulgae project, including its owned `use-mulgae` skill and any minimal required native helper. … Haepari's standalone fixture evidence does not prove native Mulgae behavior." | **Replace** the first sentence with: "TASK-092 delegates Mulgae's managed VM adoption to the Mulgae project." **Remove** the sentence about Haepari's standalone fixture evidence. **Keep** the isolated test instance rule and the pilot-independence sentence. |
+| 55 | "### Baselines, profiles, and release combinations" | **Replace** with: "### Profiles and release combinations" |
+| 69 | "…observed skill behavior, and restoration are separate evidence classes…" | **Replace** with: "…observed skill behavior, and cleanup are separate evidence classes…" |
+| 83 | "…VM restoration does not reverse external writes or charges." | **Replace** with: "…Test cleanup in the VM does not reverse external writes or charges." |
+| 89 | "…cleanup/restoration, and final verdict. A successful workload with failed reset or missing required observations cannot pass…" | **Replace** with: "…cleanup, and final verdict. A successful workload with failed cleanup or missing required observations cannot pass…" |
+| 91 | "Whole-environment reset must restore binaries, skill roots, plugin/configuration state, services, and guest data. Verify the restored inventory. If cleanup is unproven, Haepari quarantines the resource and blocks its next job…" | **Replace** those three sentences with: "Haepari does not reset the VM (Haepari ADR-0018). Each Aquarium recipe removes what it installed (binaries, skill roots, plugin/configuration state, services and guest data), returns Aquarium to its stable version, and records an after-cleanup inventory. If Haepari cannot confirm its own job cleanup, it quarantines the resource and blocks its next job." **Keep** the rest of the paragraph. |
 | 109 | "The Mulgae return additionally identifies the external request/lease generations, operation/continuation references and native root/rerun/attempt/composite results… VM-only success cannot complete TASK-092." | **Replace** with: "The Mulgae return reports managed VM evidence and Mulgae's own native review evidence (installed `use-mulgae` behavior, rerun lineage, composition). Other producers acquire no external-review obligation." |
+| 131 | "…migration example and real UTM reset evidence…" | **Replace** with: "…migration example and real UTM persistent-VM job evidence…" |
 | 133 | "Require exact managed/external resource capabilities, atomic grant/queue, single-executor activation and first-claim dispatch… Accept Haepari's independent E01 through E20 fixture evidence…" | **Replace** with: "Require exact managed capabilities and real local and UTM evidence. E01–E20 are deferred by Haepari ADR-0016." |
 | 142 | "Parse valid and invalid managed and external input/result fixtures… an uncertain native start cannot be re-dispatched from a replay." | **Replace** with: "Parse valid and invalid managed input/result fixtures and demonstrate supported wait/reconnect through the exact installed test release. Verify that a stale lease cannot return a successor's capacity and that an uncertain managed start is not rerun from a replay." |
+| 149 | "…and before/candidate/restored inventory contracts." | **Replace** with: "…and before/candidate/after-cleanup inventory contracts." |
+| 150 | "…private machine-local baseline registration and supported upgrade edges." | **Replace** with: "…the private machine-local VM resource registration and supported upgrade edges. Each recipe establishes its own starting profile on the persistent VM." |
+| 167 | "Keep UTM/SSH/reset in Haepari…" | **Replace** with: "Keep UTM/SSH control in Haepari…" |
+| 192 | "…verify cleanup restores the original discovery/configuration state." | **Keep.** This is the recipe's own cleanup, which the persistent VM relies on. |
+| 199 | "…disconnect/cancel/reset failure, and a second clean job." | **Replace** with: "…disconnect/cancel/cleanup failure, and a second job on the same VM." |
 | 200 | "…The revised Mulgae packet must cover both managed VM adoption and external `use-mulgae` leases, partial-failure recovery, native compose and explicit advisory limits." | **Replace** the second sentence with: "The revised Mulgae packet covers managed VM adoption only." |
+| 219 | "…failure recovery and resource reset." | **Replace** with: "…failure recovery and job cleanup." |
+| 229 | "…Accept only actual product evidence and restored VM state." | **Replace** with: "…Accept only actual product evidence and the recipe's cleanup evidence." |
 | 233 | "…Send the revised two-part request through Sorage…" | **Replace** "revised two-part request" with "managed VM adoption request". The Mulgae rate-limit work is a separate request (§2.1), not a Sorage rollout part. |
 | 235, 236, 238, 240 | Queue-backed ordinary review, ownership and dispatch checkpoint, lease return before user waiting, and capacity retention under observer timeout | **Remove** these checklist items. |
 | 237 | "Verify the six-role partial-failure case: five accepted results remain unchanged; authorized immediate exact recovery uses the same lease, with no recursive acquisition or repeated successful role." | **Replace** with: "Verify natively that five accepted results remain unchanged and that recovery reruns only the failed role." This is optional Mulgae-owned evidence. |
 | 239 | "Verify later authorized one-role recovery under a new FIFO request/lease linked to the released segment, exact native source/attempt lineage and immutable compose. Reject…" | **Replace** with: "Verify exact native source/attempt lineage and immutable compose; reject mixed targets, missing or corrupt recovery sources and selected-role omissions." |
 | 241, 243, 244 | Isolated test instance in the VM; align only Aquarium-owned references; remove old development references | **Keep.** |
-| 242 | "…whole-environment restoration and the documented advisory limitation of direct unqueued calls." | **Keep.** The lock is advisory, and Haepari HP-REQ-081 requires that limitation to be documented. |
+| 242 | "…whole-environment restoration and the documented advisory limitation of direct unqueued calls." | **Replace** with: "…cleanup of the test's own installation and the documented advisory limitation of direct unqueued calls." Haepari no longer restores the VM (ADR-0018); HP-REQ-081 still requires the advisory limitation to be documented. |
+| 271 | "Verify Haepari remains able to collect and reset when the Dolgorae candidate cannot supervise work." | **Replace** with: "Verify Haepari remains able to collect evidence and clean up its job files when the Dolgorae candidate cannot supervise work." |
+| 292 | "…into bundles or the baseline." | **Replace** with: "…into bundles or the VM." |
+| 300 | "…representative inter-tool behavior and reset." | **Replace** with: "…representative inter-tool behavior and cleanup." |
 | 302 | "Exercise the accepted queue-backed Mulgae skill alongside managed VM ownership: independent resource queues, shared global occupancy, same-lease failed-role recovery, slot return during user waiting, fresh-lease continuation…" | **Replace** with: "Exercise Mulgae's installed skill alongside managed VM ownership and record actual native/installed-skill evidence separately." |
 | 336 | "…Include managed/external capacity and accepted Mulgae partial-failure continuation, preserving incomplete native reviews as distinct from released leases." | **Replace** that sentence with: "Include managed capacity and Mulgae's accepted native review behavior." |
 | 351 | "Haepari is independently implemented and its exact managed/external native handoff and independent fixture evidence are accepted." | **Replace** with: "Haepari is independently implemented and its exact managed handoff is accepted." |
@@ -119,7 +131,7 @@ Consider making Podway and Sorage the required producers after the Aquarium pilo
 - queue wait p50/p95
 - flake rate
 
-VM tests run in the development loop, and the owner expects 10–30 jobs a day. Plan for the development-loop profile in the [configuration contract](contracts/configuration.md#development-loop-profile): two VM resources and a host guest limit of two.
+VM tests run in the development loop, and the owner expects 10–30 jobs a day. Plan for the development-loop profile in the [configuration contract](contracts/configuration.md#development-loop-profile): two VM resources, `host_macos_guest_limit` 2 and `global_limit` 3.
 
 A suggested go/no-go for wider rollout has two parts:
 
@@ -185,9 +197,9 @@ It does not supply the deferred external-lease capabilities.
    - Persist the request key and payload.
    - Acquire and wait inside the review run.
    - Renew the grant from the running review process at least every liveness window (120 s by default).
-   - Release on every path: success, failure and cancellation.
+   - The invocation that acquired the grant releases it on every path: success, failure and cancellation, after its protected review work ends.
 
-   **Avoid double acquisition.** `use-mulgae` does not acquire a separate lock. A caller that already holds a grant passes it through `HAEPARI_LOCK_GRANT`, and Mulgae then skips acquisition.
+   **Avoid double acquisition and preserve ownership.** `use-mulgae` does not acquire a separate lock. A caller that already owns a grant passes its installation ID, `mulgae-review` lock ID, grant ID and generation through `HAEPARI_LOCK_GRANT`. The nested Mulgae invocation checks those against the selected installation's current grant before skipping acquisition. It borrows the grant and does not renew, cancel, force-release or release it, even on child failure/cancellation. Wrong-installation, wrong-lock, ended or stale references return a clear condition to the owner; they do not trigger acquisition under a new key. The owner remains responsible for renewal and release.
 
    **Hold bound.** Set the lock's `max_hold_seconds` from the run deadline Mulgae's preflight reports. That deadline grows when roles exceed lanes. With 60-minute role timeouts:
 

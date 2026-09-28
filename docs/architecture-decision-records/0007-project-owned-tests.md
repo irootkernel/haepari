@@ -8,7 +8,7 @@ The user explicitly prefers each project to own its E2E and hands-on scenarios a
 
 ## Decision
 
-Define a small common submission/guest-result contract. Project Makefiles package tests and submit to Haepari. Haepari owns VM lifecycle. Aquarium owns the integration behavior it consumes.
+Define a small common submission/guest-result contract. Project Makefiles package tests and submit to Haepari. The operator owns the VM; Haepari starts it and runs jobs on it. Aquarium owns the integration behavior it consumes.
 
 ## Alternatives considered
 
