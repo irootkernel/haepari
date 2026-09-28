@@ -1,0 +1,14 @@
+{
+  "schema": "haepari.resource/v1",
+  "id": "build-slots",
+  "kind": "local",
+  "execution_mode": "managed",
+  "capacity": 2,
+  "revision": 1,
+  "adapter": {
+    "qualification_reference": "<verified-local-supervision-receipt>"
+  },
+  "cleanup": {
+    "policy_reference": "<operator-owned-cleanup-policy>"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "design_revision": "3.2",
+  "validation_date": "2026-09-28",
+  "scope": "documentation only",
+  "generator": "docs/tools/validate_docs.py",
+  "document_checks": {
+    "utf8": "passed",
+    "relative_links_and_anchors": "passed",
+    "markdown_fences": "passed",
+    "json_syntax": "passed",
+    "task_titles_match_epics": "passed",
+    "roadmap_dag": "passed",
+    "parsers_found_items": "passed",
+    "requirement_task_case_traceability": "passed",
+    "qualified_cross_project_ids": "passed",
+    "deferred_terms_in_active_text": "passed",
+    "worktree_diff_check": "passed",
+    "schema_validation": "not run; no implemented JSON schemas exist",
+    "stated_counts_match": "passed",
+    "collision_id_review_lines": "7 lines listed for manual review (not a failure)"
+  },
+  "roadmap_dag": {
+    "sinks": [
+      "TASK-028"
+    ],
+    "utm_gated": [
+      "TASK-016",
+      "TASK-027",
+      "TASK-028",
+      "TASK-034"
+    ],
+    "longest_chain": 21
+  },
+  "counts": {
+    "requirements": {
+      "total": 81,
+      "active": 64,
+      "deferred": 17
+    },
+    "epics": {
+      "total": 8,
+      "active": 7,
+      "deferred": 1
+    },
+    "tasks": {
+      "total": 35,
+      "active": 31,
+      "deferred": 4
+    },
+    "adrs": {
+      "total": 17,
+      "deferred": 2,
+      "active": 15
+    },
+    "verification_cases": {
+      "total": 85,
+      "active_managed": 65,
+      "deferred_external": 20
+    },
+    "markdown_documents": 61,
+    "json_templates": 12,
+    "producer_request_drafts": 9,
+    "relative_links_checked": 372
+  },
+  "product_tests": "not run",
+  "platform_experiments": "not run",
+  "aquarium_or_mulgae_repository_edits": "none",
+  "external_messages": "not sent",
+  "package_zip": "not built",
+  "committed": false
+}

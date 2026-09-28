@@ -1,0 +1,419 @@
+{
+  "package": "Haepari v0.1.0 managed-first design with advisory locks and Aquarium adoption handoff",
+  "design_revision": "3.2",
+  "revision_date": "2026-09-28",
+  "status": "design-only; no implementation, product acceptance or release claimed",
+  "counts": {
+    "package_files_excluding_manifest": 76,
+    "requirements": {
+      "total": 81,
+      "active": 64,
+      "deferred": 17
+    },
+    "epics": {
+      "total": 8,
+      "active": 7,
+      "deferred": 1
+    },
+    "tasks": {
+      "total": 35,
+      "active": 31,
+      "deferred": 4
+    },
+    "adrs": {
+      "total": 17,
+      "deferred": 2,
+      "active": 15
+    },
+    "verification_cases": {
+      "total": 85,
+      "active_managed": 65,
+      "deferred_external": 20
+    },
+    "markdown_documents": 61,
+    "json_templates": 12,
+    "producer_request_drafts": 9
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 7365,
+      "sha256": "60137ee76e6c6437acccdbb91093c32a6870884c2bf09f7721a5f1b70ff10aaa"
+    },
+    {
+      "path": "REVISION-NOTES.md",
+      "bytes": 8373,
+      "sha256": "4d8903c3d715a628e744256414a2b1147e25df9312439c310483fde772f64691"
+    },
+    {
+      "path": "aquarium-adoption.md",
+      "bytes": 10067,
+      "sha256": "82a139bbce6eac0449bbef564161c43d14ad4b5b90ee386f5249e13ef205f8eb"
+    },
+    {
+      "path": "architecture-decision-records/0001-go-independent-cli.md",
+      "bytes": 1254,
+      "sha256": "b499026fb0ede55834e536b74c066ed2e7756a0008684c3a3178cc0386e28397"
+    },
+    {
+      "path": "architecture-decision-records/0002-local-durable-controller.md",
+      "bytes": 1138,
+      "sha256": "c113a8905639872722c6c0763028c06dbed4cdbaca88f5e08cdca97657c7f911"
+    },
+    {
+      "path": "architecture-decision-records/0003-resource-scheduling.md",
+      "bytes": 1336,
+      "sha256": "163ef94cc9bb532e28aeeacce9757da22cbbb0150d7b9773bf7cf737c5d9dcbd"
+    },
+    {
+      "path": "architecture-decision-records/0004-immutable-admission.md",
+      "bytes": 2038,
+      "sha256": "7e70aa8bb2e4fe68772bb6db3509e13e9826308d7ff5193a8ff5ce28dd81613f"
+    },
+    {
+      "path": "architecture-decision-records/0005-cleanup-before-release.md",
+      "bytes": 1262,
+      "sha256": "4179cf90373d43332e94c8944edf1d6d8d7c153905dcaa5b5c0f138d01c91bf5"
+    },
+    {
+      "path": "architecture-decision-records/0006-utm-ssh.md",
+      "bytes": 1449,
+      "sha256": "bcc82f4499cf7a5286dd171c83207653d7beef40a24ed2573338f6b2f57f3523"
+    },
+    {
+      "path": "architecture-decision-records/0007-project-owned-tests.md",
+      "bytes": 1075,
+      "sha256": "7cf76278561fe57d07ed244567d8b6892da58780715709d3a799607656a419c0"
+    },
+    {
+      "path": "architecture-decision-records/0008-installation-combinations.md",
+      "bytes": 1268,
+      "sha256": "63a92bafd1b623c8e1f074a7eec82ed2fc9be6253a3c2b6535a4bccb95c4d741"
+    },
+    {
+      "path": "architecture-decision-records/0009-real-migration-state.md",
+      "bytes": 1086,
+      "sha256": "282924887883c3d7e87f711f63500b4feac17ac621af0dfab57cb9cbdfdc2e27"
+    },
+    {
+      "path": "architecture-decision-records/0010-manual-evidence.md",
+      "bytes": 1106,
+      "sha256": "d9a87a427f80dc1e7f61d471f56c08dacb663ea1ac263343d6c48c16fc7d7bea"
+    },
+    {
+      "path": "architecture-decision-records/0011-native-cli-first.md",
+      "bytes": 1000,
+      "sha256": "7ceb4bb117204c1756c9a9598a1ad4b3b907674317f8456fe9572e65a00cf790"
+    },
+    {
+      "path": "architecture-decision-records/0012-isolation-and-effects.md",
+      "bytes": 1163,
+      "sha256": "e26204009a979d938697b358d7d75c66186a7ad7eb8c9d3df4a435308511ff7f"
+    },
+    {
+      "path": "architecture-decision-records/0013-consumer-owned-rollout.md",
+      "bytes": 1255,
+      "sha256": "bfbe53ccd170f839230d800e7cf56caeb2cf6e297362ca142e0070f2721be8ae"
+    },
+    {
+      "path": "architecture-decision-records/0014-external-execution-leases.md",
+      "bytes": 1969,
+      "sha256": "9c130d5fd25d8e33adce835cac03d7c109c3aa9178be69dce18123505ea3ac7c"
+    },
+    {
+      "path": "architecture-decision-records/0015-linked-recovery-segments.md",
+      "bytes": 2179,
+      "sha256": "0fff18e2ed3aef9ebfb84cd4415ae69bf3ec4b6bef5449e26956a4ae643caa5c"
+    },
+    {
+      "path": "architecture-decision-records/0016-managed-first-scope.md",
+      "bytes": 3343,
+      "sha256": "d5343dcfaec1052471c56b00c732a061ca7156776b36144a71e35e25af319b49"
+    },
+    {
+      "path": "architecture-decision-records/0017-advisory-named-locks.md",
+      "bytes": 4556,
+      "sha256": "a9449c0e43f1ff25655eb97186ad28b003bdbc4d98256a6ea9102156efb4d920"
+    },
+    {
+      "path": "architecture-decision-records/README.md",
+      "bytes": 2916,
+      "sha256": "5cb2951a266a48a9c4cb41cc9f1b78c5a52280abb4eefd1d5c146fc16ea9720c"
+    },
+    {
+      "path": "architecture.md",
+      "bytes": 22496,
+      "sha256": "1941f64f50f9b0afcf6e7fdc329703ba79aa44728c2404e17f386c1d5f1a251c"
+    },
+    {
+      "path": "checks.json",
+      "bytes": 1752,
+      "sha256": "883f5cb1e4663822094fd9a7372437f7ce173d0fb559e85cfefdd35faa03d9c3"
+    },
+    {
+      "path": "contracts/artifact-and-profile.md",
+      "bytes": 9872,
+      "sha256": "e73afd79204bb1e2e58a68c3c16d25425726373136bfcdb1969aa65aabd449bb"
+    },
+    {
+      "path": "contracts/cli-and-jobs.md",
+      "bytes": 17345,
+      "sha256": "f634f5266ca0b26693f2d9640939345e4e339d5d966a863ef509c96bec4a78cc"
+    },
+    {
+      "path": "contracts/configuration.md",
+      "bytes": 6689,
+      "sha256": "cf271c9df11f5400817ad8667f8dd440d41b64bb3c844c48799950a259c1b189"
+    },
+    {
+      "path": "contracts/external-leases.md",
+      "bytes": 20162,
+      "sha256": "4714512e8a2b97795041c3e0e79feb861840d49921c95e433ecdf7ebd4311ecc"
+    },
+    {
+      "path": "contracts/locks.md",
+      "bytes": 10930,
+      "sha256": "2e7a2a5b8cc0c80bfe9b804647994f739ddb76e5d6a8fee6069b71de380692b1"
+    },
+    {
+      "path": "contracts/managed-transitions.md",
+      "bytes": 14177,
+      "sha256": "93d08e9bfcf1fe79f885f2bc3cd61651f68f159c6bf22811f7075540d53a2551"
+    },
+    {
+      "path": "contracts/resource-and-runner.md",
+      "bytes": 12924,
+      "sha256": "fd74824b1e823ae19a174e5db5c9657ad0d4209eb80fa84b867decb0b8c24fb0"
+    },
+    {
+      "path": "examples/Makefile.example",
+      "bytes": 706,
+      "sha256": "d085647e3a97f8dbba678bb3c7a86e992564635ff20809a4ce8edb1894859be2"
+    },
+    {
+      "path": "examples/README.md",
+      "bytes": 3061,
+      "sha256": "f2527f777e36069ea1d266df8712302b209390cbc57019e9defd0814131f8b8e"
+    },
+    {
+      "path": "examples/baseline-registration.template.json",
+      "bytes": 672,
+      "sha256": "73df2817be023597695ea62f8e7895256a5c0c3ccd3e38cf19f967d8aa30af01"
+    },
+    {
+      "path": "examples/config.template.json",
+      "bytes": 513,
+      "sha256": "3d002e32f4e187f0e5aab63ecc4869e200f41d2a7c0d1216b2f5165a0fae3f3d"
+    },
+    {
+      "path": "examples/environment-lock.template.json",
+      "bytes": 1232,
+      "sha256": "3e87577f432b770e850045b57e85b522b82a411d074dcb1b42a37b092141d591"
+    },
+    {
+      "path": "examples/job-local.template.json",
+      "bytes": 927,
+      "sha256": "7d5270014fd500ba8a56adf8320d270389442adcd852c03aff4d846e7c4235e4"
+    },
+    {
+      "path": "examples/job-vm.template.json",
+      "bytes": 1043,
+      "sha256": "07626ba1a614f72b6cf76d391547b4a9e3ed31c0060eea9b5896e239994cefd6"
+    },
+    {
+      "path": "examples/lease-continuation.template.json",
+      "bytes": 554,
+      "sha256": "02b7a9e8afe0af8490da6a87d7593bbb19afcf4b978d92968b6f93a54cf29dac"
+    },
+    {
+      "path": "examples/lease-request.template.json",
+      "bytes": 490,
+      "sha256": "9a9b6ade6db7c4c3c811cd3f80d47322be7839b86ffa81ca15e9653b7c32dcbe"
+    },
+    {
+      "path": "examples/resource-external.template.json",
+      "bytes": 282,
+      "sha256": "00f3e4a2265f1635b815fdd7750470c24fa8faaf68fdd7a6803a6f5e38ace5e0"
+    },
+    {
+      "path": "examples/resource-local.template.json",
+      "bytes": 313,
+      "sha256": "38f5b6ad0246bad6305faaef5dfa56b67b8b94637e92e12c166a6a1b2818e347"
+    },
+    {
+      "path": "examples/resource-lock.template.json",
+      "bytes": 204,
+      "sha256": "fb772e073571e093aefd122a1fe4cae1497ebfb6712e7e2b127b817b350affb3"
+    },
+    {
+      "path": "examples/resource-macos.template.json",
+      "bytes": 619,
+      "sha256": "0b72df16640fd90267a4eefc787d33526da4a97d0073aafa1dcd323953ad9c13"
+    },
+    {
+      "path": "examples/result-local.template.json",
+      "bytes": 1203,
+      "sha256": "a5afbcfaa9c8583c16f1a28a66d1f16e72e79c2ff0b7241676fb64b6cf8fb2cc"
+    },
+    {
+      "path": "handoffs/README.md",
+      "bytes": 1089,
+      "sha256": "eebe179985a7240a6e4011091ef89399d0e854710e7f44328a8fb4a4d5a741ae"
+    },
+    {
+      "path": "handoffs/haepari-to-aquarium.md",
+      "bytes": 2931,
+      "sha256": "8abdf85a0e5d545e67995d41cb17a696fef97e3a2a8494a1c424f911ce8a64b3"
+    },
+    {
+      "path": "handoffs/implementation-prompt.md",
+      "bytes": 3535,
+      "sha256": "fe8b023bd0ebb97bd951140457336dae98b6def87991a79a899b8734830c46b7"
+    },
+    {
+      "path": "handoffs/producer-completion-template.md",
+      "bytes": 3202,
+      "sha256": "a9d522c89d756913090604002d9d638ad80d527534f94c47e1e73912b9a6848e"
+    },
+    {
+      "path": "integrations/mulgae-review.md",
+      "bytes": 3420,
+      "sha256": "3a7d6ae6bcdea9384de2fffb1ba790b6e5a9f2abb99abc1d19c050f123110e38"
+    },
+    {
+      "path": "operations.md",
+      "bytes": 9852,
+      "sha256": "2e3859de732aa469b443c1790f69b752ec2c2f7e03cc4819d2f11132dbd1c0b0"
+    },
+    {
+      "path": "package-validation.md",
+      "bytes": 6283,
+      "sha256": "d12ea87dc954805bd96d2f94321c1d1a78bcfc7756a4f765323cf363acb20abd"
+    },
+    {
+      "path": "requirements.md",
+      "bytes": 30479,
+      "sha256": "97270a0203b9cfa8e2bb1c27df307d0fc7c5b33bc4dfd3a40c962ab1d6181ce9"
+    },
+    {
+      "path": "review-disposition.md",
+      "bytes": 21288,
+      "sha256": "22f1b8e7706206d7ddf4fa9620185db352a8a2476c27cd71b38d5248b960bd77"
+    },
+    {
+      "path": "roadmap.md",
+      "bytes": 10848,
+      "sha256": "a189061da623b8448b4a9aab6ea293356f8bb16a844589158523e1ab18fd30e5"
+    },
+    {
+      "path": "roadmap/EPIC-001.md",
+      "bytes": 9606,
+      "sha256": "e5ba766eb01d12d521f160b273c83e236104974182e2d221ef04adc0acd6f667"
+    },
+    {
+      "path": "roadmap/EPIC-002.md",
+      "bytes": 9241,
+      "sha256": "026d81a3a0bc68c356c1c3869464d22cd485b7ea24fedd1d9a19c367b1c3a2a6"
+    },
+    {
+      "path": "roadmap/EPIC-003.md",
+      "bytes": 7632,
+      "sha256": "70e6a325facb445eafee0e2de02f0d876410bdb670a154ae0b2257d1837e994f"
+    },
+    {
+      "path": "roadmap/EPIC-004.md",
+      "bytes": 9205,
+      "sha256": "006429ac458d7809693a39e03e2968e56ab447780b965e66bf660920e1e04fa0"
+    },
+    {
+      "path": "roadmap/EPIC-005.md",
+      "bytes": 6970,
+      "sha256": "4d4f5225bd52d84b52ec1bbab3fd5c7357f9de56692b7e9fbb46e19ac1246c0f"
+    },
+    {
+      "path": "roadmap/EPIC-006.md",
+      "bytes": 6588,
+      "sha256": "8abdb3fce553452bfd76259718929527df6d941658ef328d0535f0cf6fcb5888"
+    },
+    {
+      "path": "roadmap/EPIC-007.md",
+      "bytes": 7350,
+      "sha256": "96bad465095c8fdc4a2915c045c29f9328f1d2e4d5491f6045c84cb5bcb1262f"
+    },
+    {
+      "path": "roadmap/EPIC-008.md",
+      "bytes": 8477,
+      "sha256": "4e2d13b7edb98ddc765b624c49f56a783afedbc41234dcec99ca52efea5090a0"
+    },
+    {
+      "path": "rollout-requests/01-podway.md",
+      "bytes": 4863,
+      "sha256": "0439108b1ad713ba9a8005c020ac978de994b7718e6e648d3f128b93390916ce"
+    },
+    {
+      "path": "rollout-requests/02-mulgae.md",
+      "bytes": 5477,
+      "sha256": "4a98b17db94758e7dd61829d3d3d65717865524bd7ffa6709af0bb6ead7426d2"
+    },
+    {
+      "path": "rollout-requests/03-gaori.md",
+      "bytes": 4778,
+      "sha256": "6c7edc1321cd64fda7e9930ea6535844559516fa8170900b6d7b08897c91c06f"
+    },
+    {
+      "path": "rollout-requests/04-sorage.md",
+      "bytes": 4804,
+      "sha256": "bd537bdea060da9f7e21846a92d6d6a198b0c33c9963a45cb3a2d2d79da3f178"
+    },
+    {
+      "path": "rollout-requests/05-sanho.md",
+      "bytes": 4739,
+      "sha256": "2f60747510ede6313c3cb5cbe99941315e1a5397efa74a2b8531a86c62cde4bf"
+    },
+    {
+      "path": "rollout-requests/06-dolgorae.md",
+      "bytes": 4812,
+      "sha256": "a3a5e3e07d1a1506f0815e8b6ba5a40c4f5168f0fe12ceb6510254beaf0689c1"
+    },
+    {
+      "path": "rollout-requests/07-gul.md",
+      "bytes": 4769,
+      "sha256": "d44db306446d185ae7757ee93fe062a48c73fddb59d07185fb2df7c1a357bb40"
+    },
+    {
+      "path": "rollout-requests/08-seongge.md",
+      "bytes": 4808,
+      "sha256": "13637e50caabaada265f3f7f4ab1e884dc128a1510a0227d9079631c0419f09f"
+    },
+    {
+      "path": "rollout-requests/09-gaebokchi.md",
+      "bytes": 4807,
+      "sha256": "a46614b9682429a0e1a8dd60e5cf327d4da4e5a70332f45de2077dca6ccef0af"
+    },
+    {
+      "path": "sources.md",
+      "bytes": 8908,
+      "sha256": "63d0b8ecd196f5a8226314f270bb1dd2f35b33849a3b1a2eb9db806da49e00b8"
+    },
+    {
+      "path": "to-external.md",
+      "bytes": 19950,
+      "sha256": "5e0b727cc87d05c277931d46d565216ad783a89e0b83fad741ac4974691829e8"
+    },
+    {
+      "path": "tools/validate_docs.py",
+      "bytes": 21496,
+      "sha256": "8c8dc476b10ac0f47c93389cbc7c7aac5f7c2265942cbf6afc73a7bfa0f72749"
+    },
+    {
+      "path": "traceability.md",
+      "bytes": 6585,
+      "sha256": "3813a9c817bc9ce7a504c554bae502c5f8ba47e4c691f34893ccbe6386d94c47"
+    },
+    {
+      "path": "verification.md",
+      "bytes": 22449,
+      "sha256": "a818a1a12843ba0323adf87728d4dbfe75864e62d6789369716713b51f4939f6"
+    }
+  ]
+}

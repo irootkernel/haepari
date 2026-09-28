@@ -1,0 +1,22 @@
+{
+  "schema": "haepari.resource/v1",
+  "id": "macos-e2e",
+  "kind": "utm-macos",
+  "capacity": 1,
+  "revision": 1,
+  "baseline": {
+    "id": "<qualified-baseline>",
+    "profile_digest": "<sha256>",
+    "registration_reference": "<operator-owned-registration>"
+  },
+  "adapter": {
+    "utmctl": "/Applications/UTM.app/Contents/MacOS/utmctl",
+    "qualification_reference": "<verified-backend-receipt>",
+    "reset_strategy": "cold-whole-package-clone"
+  },
+  "guest": {
+    "connection_reference": "<approved-ssh-mapping>",
+    "known_hosts_reference": "<approved-pinned-host-key>"
+  },
+  "execution_mode": "managed"
+}

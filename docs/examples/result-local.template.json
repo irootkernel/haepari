@@ -1,0 +1,51 @@
+{
+  "schema": "haepari.result/v1",
+  "job_id": "<durably-recorded-job-id>",
+  "resource_id": "build-slots",
+  "resource_revision": 1,
+  "lease_generation": 1,
+  "job_state": "finished",
+  "resource_availability": "available",
+  "workload_outcome": "pass",
+  "evidence_completeness": "complete",
+  "cleanup_outcome": "verified",
+  "final_verdict": "PASS",
+  "timings": {
+    "admitted_at": "<utc-timestamp>",
+    "reserved_at": "<utc-timestamp>",
+    "phases": [
+      {
+        "phase": "preparing",
+        "started_at": "<utc-timestamp>",
+        "ended_at": "<utc-timestamp>"
+      },
+      {
+        "phase": "running",
+        "started_at": "<utc-timestamp>",
+        "ended_at": "<utc-timestamp>"
+      },
+      {
+        "phase": "collecting",
+        "started_at": "<utc-timestamp>",
+        "ended_at": "<utc-timestamp>"
+      },
+      {
+        "phase": "cleaning",
+        "started_at": "<utc-timestamp>",
+        "ended_at": "<utc-timestamp>"
+      }
+    ],
+    "adapter_steps": []
+  },
+  "artifacts": [
+    {
+      "path": "results/build.json",
+      "size_bytes": 123,
+      "sha256": "<sha256>"
+    }
+  ],
+  "observations": {
+    "source": "machine",
+    "operator_attested": false
+  }
+}

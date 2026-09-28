@@ -1,0 +1,10 @@
+{
+  "schema": "haepari.resource/v1",
+  "id": "mulgae-review",
+  "kind": "lock",
+  "capacity": 1,
+  "liveness_seconds": 120,
+  "max_hold_seconds": 21600,
+  "default_queue_seconds": 7200,
+  "revision": 1
+}

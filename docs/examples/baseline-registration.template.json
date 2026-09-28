@@ -1,0 +1,16 @@
+{
+  "schema": "haepari.baseline-registration/v1",
+  "resource_id": "macos-e2e",
+  "resource_revision": 1,
+  "baseline_id": "<qualified-baseline>",
+  "powered_off_package_digest": "<sha256>",
+  "owned_package_reference": "<operator-owned-private-path>",
+  "utm_backend": "<qualified-backend-id>",
+  "utm_vm_uuid": "<observed-vm-uuid>",
+  "guest_mac_address": "<observed-unique-mac>",
+  "machine_identity_digest": "<sha256-of-machine-identifier>",
+  "address_discovery": "dhcp-lease-by-mac",
+  "guest_identity_reference": "<operator-owned-guest-marker>",
+  "ssh_host_key_reference": "<approved-pinned-host-key>",
+  "qualification_reference": "<real-cold-restore-receipt>"
+}

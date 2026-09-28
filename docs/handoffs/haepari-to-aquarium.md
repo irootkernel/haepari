@@ -1,0 +1,37 @@
+# Haepari producer completion packet
+
+This is a completion template, not completed evidence. Aquarium:TASK-086 accepts the exact packet before implementation begins.
+
+## Product and interface identity
+
+- Product version, source commit, release state and supported platform executions.
+- Archive and executable SHA-256 for the host CLI/controller and guest runner.
+- Complete use-haepari source/tree identity and native installation guidance.
+- Supported job/resource/result/event/runner/manual schemas and exact CLI exit semantics.
+- Capability output distinguishing compiled features from actually qualified UTM capability.
+- Storage schema compatibility and stable-controller update/recovery policy.
+
+## Observed acceptance
+
+- Requirements coverage and the finite verification matrix with actual outcomes.
+- Independent local-command use case plus real UTM lifecycle/reset use case.
+- Lost reply, restart, SSH disconnection, cancellation, manual ownership and quarantined-resource recovery.
+- Immutable candidate/test transfer and skill installation/discovery/restoration fixtures.
+- Old-state migration and interruption-recovery fixture results.
+- Protected host state and independent controller self-test evidence.
+- Exact environment/UTM/OS prerequisites, permissions, runner identity and observed restore strategy.
+
+## Consumer assets
+
+- Versioned schemas and marked examples that the consumer can validate locally.
+- Project Make wrapper and separate guest entrypoint reference implementation.
+- Result collection/export guidance, profile/baseline registration interface and manual completion format.
+- Operator runbook, known limits and evidence that remains unobserved.
+
+## Acceptance boundary
+
+Do not populate fields with assumed values. A local build is not an official release; a test result is not host installation or publication authority. The packet may be produced before publication, but the consumer must explicitly choose and verify the exact evidence class it accepts. Default stable adoption requires the verified official Haepari release. No part of this packet removes the old Aquarium development channel.
+
+## Design Revision 3 managed-first packet
+
+Include exact managed schemas/capabilities frozen at gates F1, F2 and F3, the advisory lock contract and `advisory-lock/v1`, local and real UTM execution evidence, V01–V65 results, nested acquisition and recovery cases, controller/runner exit behavior, whole-VM restoration, installed skill behavior, storage schema classes, and known gaps. External lease activation, dispatch, settlement, continuation and E01–E20 are deferred and cannot block Aquarium:TASK-086. State any unqualified macOS session, Automation permission, guest identity or reset prerequisite explicitly. State the Aquarium-side plan alignment from [external requests](../to-external.md) §1.2 as a consumer prerequisite. No packet content implies Aquarium acceptance or publication.

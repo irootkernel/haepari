@@ -1,0 +1,13 @@
+{
+  "schema": "haepari.resource/v1",
+  "id": "mulgae-review",
+  "kind": "external",
+  "execution_mode": "external",
+  "capacity": 1,
+  "revision": 1,
+  "termination_policy": "scoped-owner-attestation",
+  "deadlines": {
+    "segment_seconds": 3600,
+    "liveness_seconds": 120
+  }
+}

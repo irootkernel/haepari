@@ -1,0 +1,16 @@
+# DESIGN EXAMPLE ONLY. Implement the project-owned packaging wrapper first.
+# The wrapper resolves profile/input identities and supplies a durable request key.
+SUITE ?= all
+MODE ?= auto
+PROFILE ?= accepted-default
+
+.PHONY: test-vm test-vm-guest
+
+test-vm:
+	python3 tests/vm/submit.py --suite "$(SUITE)" --mode "$(MODE)" --profile "$(PROFILE)"
+
+# This entrypoint validates guest identity and lease context before installation.
+# It must never invoke test-vm, submit a Haepari job, or operate UTM on the host.
+test-vm-guest:
+	@case "$(SUITE)" in install|migration|regression) ;; *) echo "test-vm-guest needs SUITE=install|migration|regression" >&2; exit 2;; esac
+	python3 tests/vm/guest.py --suite "$(SUITE)"

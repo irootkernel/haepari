@@ -1,0 +1,18 @@
+{
+  "schema": "haepari.lease-request/v1",
+  "execution_mode": "external",
+  "resource_id": "mulgae-review",
+  "operation_ref": "<same-caller-namespace:logical-review>",
+  "intent_fingerprint": "<sha256-of-new-approved-recovery-intent>",
+  "continuation_of": "<exact-released-request-id>",
+  "caller_ref": "<non-secret-caller-label>",
+  "deadlines": {
+    "queue_seconds": 7200,
+    "segment_seconds": 3600,
+    "liveness_seconds": 120
+  },
+  "effects": {
+    "mode": "live",
+    "authorization_reference": "<authorized-one-role-recovery-envelope>"
+  }
+}

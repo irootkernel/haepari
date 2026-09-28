@@ -1,0 +1,45 @@
+{
+  "schema": "haepari.environment-lock/v1",
+  "profile_id": "<consumer-profile>",
+  "profile_revision": 1,
+  "owner": "<repository-scope>",
+  "platform": {
+    "guest_os": "macOS",
+    "architecture": "arm64",
+    "qualification_reference": "<qualified-environment>"
+  },
+  "components": [
+    {
+      "id": "<tool>",
+      "binary": {
+        "version": "<exact-version>",
+        "sha256": "<sha256>"
+      },
+      "skills": [
+        {
+          "name": "<native-skill-name>",
+          "source_commit": "<exact-commit>",
+          "tree_sha256": "<sha256>",
+          "location_scope": "shared-agents-or-selected-codex-home",
+          "target": "<native-target>"
+        }
+      ],
+      "configuration_digest": "<sha256>"
+    }
+  ],
+  "starting_profile": "<old-profile-or-product-absent-profile>",
+  "expected_inventory": "<bundled-inventory-path>",
+  "recipes": {
+    "install": "<sha256>",
+    "migration": "<sha256>",
+    "regression": "<sha256>",
+    "manual": "<sha256>",
+    "state_creation": "<sha256>"
+  },
+  "evidence_class": "candidate-integration",
+  "host_runtime": {
+    "controller_capabilities_digest": "<sha256>",
+    "guest_runner_digest": "<sha256>",
+    "client_identity": "<exact-client-identity>"
+  }
+}
