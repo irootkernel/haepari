@@ -1,6 +1,6 @@
 # Haepari roadmap
 
-Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. TASK-001, TASK-002, TASK-003, TASK-004, TASK-033 and TASK-034 are Accepted; EPIC-001 is In progress. Other active tasks are Planned, and EPIC-008 is Deferred. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
+Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. TASK-001, TASK-002, TASK-003, TASK-004, TASK-033 and TASK-034 are Accepted; EPIC-001 is Accepted. Other active tasks are Planned, and EPIC-008 is Deferred. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
 
 ## Execution policy
 
@@ -24,7 +24,7 @@ Lifecycle status vocabulary:
 
 | Epic | Goal | Tasks | Scope | Status |
 | --- | --- | --- | --- | --- |
-| [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | In progress |
+| [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | Accepted |
 | [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | Planned |
 | [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Planned |
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Planned |
