@@ -18,7 +18,7 @@ The R2 references were recorded as checked on 2026-09-27. Selected primary pages
 | S12 | https://keith.github.io/xcode-man-pages/launchd.plist.5.html | launchd kills the remaining processes in a job's process group when the job exits, unless `AbandonProcessGroup` is true. `LimitLoadToSessionType` selects the session type, such as `Aqua`. |
 | S13 | https://sqlite.org/pragma.html | `PRAGMA fullfsync` and `checkpoint_fullfsync` default to off and use `F_FULLFSYNC` on macOS. |
 | S14 | https://go.dev/dl/ | Go 1.27.1 has an official macOS arm64 distribution. |
-| S15 | https://pkg.go.dev/modernc.org/sqlite@v1.59.0 | The pinned SQLite driver is pure Go, supports darwin/arm64, and lists BSD-3-Clause licensing. Its installed behavior still requires TASK-004 qualification. |
+| S15 | https://pkg.go.dev/modernc.org/sqlite@v1.59.0 | The pinned SQLite driver is pure Go, supports darwin/arm64, and lists BSD-3-Clause licensing. The [TASK-004 record](records/TASK-004-macos-supervision.md) bounds its observed host behavior. |
 
 ## User decisions
 

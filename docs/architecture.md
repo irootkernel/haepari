@@ -185,7 +185,7 @@ Control records use SQLite WAL with `synchronous=FULL` on a qualified local file
 **Runner survival.**
 
 - Runners start in their own session and process group, so launchd does not kill them when the controller exits.
-- TASK-004 observes this behavior and TASK-011 verifies it.
+- TASK-004 records an isolated one-shot launchd survival observation; TASK-011 verifies product restart reconciliation under the installed development service.
 - `setsid` alone is not proof of survival from service-manager cleanup.
 
 **Reattachment after restart.**

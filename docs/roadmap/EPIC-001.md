@@ -111,26 +111,26 @@ Requirement coverage: `HP-REQ-007`, `HP-REQ-009`, `HP-REQ-010`, `HP-REQ-011`, `H
 Requirement coverage: `HP-REQ-006`.
 
 #### Implement
-- [ ] On an isolated macOS host, observe and record a decision for each of the following. TASK-005, TASK-009 and TASK-011 consume the decision record.
+- [x] On an isolated macOS host, observe and record a decision for each of the following. TASK-005, TASK-009 and TASK-011 consume the decision record.
   1. **Development LaunchAgent.** Configuration: `gui/<uid>` domain, `LimitLoadToSessionType=Aqua`, `AbandonProcessGroup=true`. A runner started in its own session and process group must survive controller exit and restart.
   2. **SQLite durability.** On darwin, use `synchronous=FULL` with `PRAGMA fullfsync=ON` and `PRAGMA checkpoint_fullfsync=ON`. Record whether the pinned pure-Go driver honors these settings.
   3. **Unix socket paths.** Record the path limits and adopt the short-root rule.
   4. **Process groups.** Record process-group termination and escaped-descendant detection limits. Detection is best effort on macOS.
 
 #### Do not
-- [ ] Do not assume `setsid` alone defeats service-manager cleanup, claim power-loss durability from kill tests, or operate UTM. TASK-034 probes UTM.
+- [x] Do not assume `setsid` alone defeats service-manager cleanup, claim power-loss durability from kill tests, or operate UTM. TASK-034 probes UTM.
 
 #### Verify
-- [ ] Record the observed behavior behind each decision.
-- [ ] If the driver ignores the fullfsync settings, record that the power-loss durability claim is blocked.
-- [ ] Restart reconciliation itself is verified in TASK-011; TASK-016 owns actual UTM identification, SSH and job-cleanup qualification.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Record the observed behavior behind each decision.
+- [x] If the driver ignores the fullfsync settings, record that the power-loss durability claim is blocked.
+- [x] Restart reconciliation itself is verified in TASK-011; TASK-016 owns actual UTM identification, SSH and job-cleanup qualification.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## Epic acceptance
 

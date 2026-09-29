@@ -4,7 +4,7 @@
   "revision_date": "2026-09-28",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 77,
+    "package_files_excluding_manifest": 78,
     "requirements": {
       "total": 81,
       "active": 64,
@@ -30,15 +30,15 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 63,
+    "markdown_documents": 64,
     "json_templates": 11,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 8637,
-      "sha256": "a5b016684e9ad362e93b64d85e9b324474ab005ccdd30b0fdc0dd9d9f74c2dd7"
+      "bytes": 8768,
+      "sha256": "078256f6fda6aff56035fb03894713b2630bfbdca6b94619335df9aa46e6fc85"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -147,13 +147,13 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 27481,
-      "sha256": "7d2df03d266989f954ee475e69ac1b147cd2cf71038527d6f4e411cf72c568e8"
+      "bytes": 27581,
+      "sha256": "c9abb4fb32a6448498df37beb6a84a9e8bf422ae86b77cf48981f8b1e475287f"
     },
     {
       "path": "checks.json",
-      "bytes": 1774,
-      "sha256": "30e8c8f9aa2463f82dc7fa2ee423372a2cec45455285d257d7d9808dffd69181"
+      "bytes": 1828,
+      "sha256": "e987199934156d8c3d9a1aa341c14d0269879d8fdab69ac71a912a4518a1222d"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -287,8 +287,13 @@
     },
     {
       "path": "package-validation.md",
-      "bytes": 8141,
-      "sha256": "0517705a2320ba000662a3351e0754954cdfa86300b86facf2da3aa8b23cb403"
+      "bytes": 8318,
+      "sha256": "f4e60a6a36af173f843fc035924e66e8a1dc5c22e51b0266cf96f6142d812dd0"
+    },
+    {
+      "path": "records/TASK-004-macos-supervision.md",
+      "bytes": 5621,
+      "sha256": "0b588842d8a8cad7def2364f5e29845de0f8841cf59276032331a6ab32f9129c"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
@@ -307,13 +312,13 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11170,
-      "sha256": "bb0bbbb4f73aff998c5199c0be7725163982a75bc077bf542e50a007d0fc8195"
+      "bytes": 11181,
+      "sha256": "639e46d549935622242b9d21d1c134ce159dc44e7ddc600ea9e11a6472f3d2a5"
     },
     {
       "path": "roadmap/EPIC-001.md",
       "bytes": 10929,
-      "sha256": "a5297f1c77f7bc7d1d9e8173330a353d648adc337ed01275b65eef3bd33cdaec"
+      "sha256": "dd4cec73a288694ebe18cd3ddf5b174f72df92112e3cdaf6912b5482e93e7078"
     },
     {
       "path": "roadmap/EPIC-002.md",
@@ -397,8 +402,8 @@
     },
     {
       "path": "sources.md",
-      "bytes": 9710,
-      "sha256": "f584d839d3e426f731713dd4c9019795d89b1db3d62d0f691d328e82ba580467"
+      "bytes": 9744,
+      "sha256": "35a1f1f96910bb1dce90840b553d222e8158ea799d113f24eefa469a6ac67e6c"
     },
     {
       "path": "to-external.md",
@@ -407,8 +412,8 @@
     },
     {
       "path": "tools/validate_docs.py",
-      "bytes": 21547,
-      "sha256": "823f4cdd3e3409b3037a4152016cb50690c9578566421b648509a958f534c298"
+      "bytes": 21601,
+      "sha256": "67603e0b8e6cc8bf67752d3facd6cb9e68e37fed067d5b0c51113c2ebd0789a5"
     },
     {
       "path": "traceability.md",

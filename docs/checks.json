@@ -56,13 +56,13 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 63,
+    "markdown_documents": 64,
     "json_templates": 11,
     "producer_request_drafts": 9,
-    "relative_links_checked": 460
+    "relative_links_checked": 465
   },
-  "product_tests": "not run",
-  "platform_experiments": "not run",
+  "product_tests": "not run by documentation validator",
+  "platform_experiments": "not run by documentation validator",
   "aquarium_or_mulgae_repository_edits": "none",
   "external_messages": "not sent",
   "package_zip": "not built",
