@@ -153,7 +153,7 @@
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "e987199934156d8c3d9a1aa341c14d0269879d8fdab69ac71a912a4518a1222d"
+      "sha256": "e698e97c32dfa32d8b6ee6a81648c93706d5641eae974955fe6a9975461b8500"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -287,13 +287,13 @@
     },
     {
       "path": "package-validation.md",
-      "bytes": 8318,
-      "sha256": "f4e60a6a36af173f843fc035924e66e8a1dc5c22e51b0266cf96f6142d812dd0"
+      "bytes": 8580,
+      "sha256": "810b631d41f7ffe573f85d668e93813311364d3e522a4fe8f670962654f10856"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
-      "bytes": 5621,
-      "sha256": "0b588842d8a8cad7def2364f5e29845de0f8841cf59276032331a6ab32f9129c"
+      "bytes": 5697,
+      "sha256": "a1d3b842d02d65af1cb0eec124ee194317853ec8e4121f25ad6f9039162b52a3"
     },
     {
       "path": "records/TASK-034-utm-probe.md",

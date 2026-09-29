@@ -12,7 +12,7 @@ The documentation results below come from [`tools/validate_docs.py`](tools/valid
 | Check | Result |
 | --- | --- |
 | UTF-8, balanced code fences and JSON syntax | Passed |
-| Relative links and anchors (465 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (466 links, GitHub-style anchors) | Passed |
 | Roadmap DAG | Passed. See below. |
 | Task titles, roadmap versus epic files | Passed |
 | Requirement–task–case traceability, both directions | Passed. See below. |
@@ -137,7 +137,7 @@ This historical comparison is against commit `91a874d` (Design Revision 3.2). It
 
 ## Remaining gaps
 
-**Decided but not yet observed.** The launchd keys, SQLite `fullfsync` behavior, the host guest limit, `utmctl` behavior with the screen locked or the user logged out, SSH identity, job cleanup on the persistent VM and VM cycle timings are fixed as design decisions. TASK-004 and TASK-016 must observe them. TASK-034 observed `utmctl` control from a LaunchAgent, TCC behavior, result signalling and DHCP address discovery.
+**Bounded host observations and remaining gaps.** TASK-004 observed the Aqua LaunchAgent keys, SQLite `fullfsync` driver setting/readback, socket path limit, and owned process-group behavior on one macOS 27.0 arm64 host; see [its decision record](records/TASK-004-macos-supervision.md). Power-loss durability, actual Haepari restart reconciliation, and other macOS releases are unqualified. TASK-016 must observe the host guest limit, `utmctl` behavior with the screen locked or the user logged out, SSH identity, job cleanup on the persistent VM, and VM cycle timings. TASK-034 observed `utmctl` control from a LaunchAgent, TCC behavior, result signalling and DHCP address discovery.
 
 **Owned by Mulgae.** The lock integration and the behavior when Haepari is unavailable are Mulgae decisions; see [external requests](to-external.md) §2.1.
 

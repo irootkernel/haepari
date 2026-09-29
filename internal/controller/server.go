@@ -385,23 +385,31 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 				}
 				break
 			}
-			go s.execute(ctx, r, queued.Spec, queued.ObjectID)
+			go s.execute(ctx, r, queued.Spec, queued.ObjectID, time.Now().Add(time.Duration(queued.Spec.Deadlines.PrepareSeconds)*time.Second))
 		}
 	}
 }
 
-func (s *runtimeServer) failed(id string, _ error) {
+func (s *runtimeServer) failed(id string, cause error) {
+	if errors.Is(cause, errPrepareUnproven) {
+		_ = s.ledger.ReconcileLocalFailure(id)
+		return
+	}
 	receipt, readErr := s.ledger.Snapshot(id)
 	if readErr != nil {
 		return
 	}
 	if receipt.JobState == "preparing" || receipt.JobState == "ready" {
 		jobRoot := filepath.Join(s.root.Path, "jobs", id)
-		if os.RemoveAll(filepath.Join(jobRoot, "workspace")) == nil && writeReceipt(jobRoot, "prepare-failure.json", map[string]any{"reason": "prepare_failed"}) == nil {
+		reason := "prepare_failed"
+		if errors.Is(cause, context.DeadlineExceeded) {
+			reason = "prepare_deadline"
+		}
+		if os.MkdirAll(jobRoot, 0700) == nil && os.RemoveAll(filepath.Join(jobRoot, "workspace")) == nil && writeReceipt(jobRoot, "prepare-failure.json", map[string]any{"reason": reason}) == nil {
 			if next, e := s.ledger.AbortLocalBeforeStart(id, receipt.JobRevision); e == nil {
 				if next, e = s.ledger.AdvanceLocal(id, next.JobRevision, "collecting", "cleaning", "abort-collected-"+id); e == nil {
 					if next, e = s.ledger.AdvanceLocal(id, next.JobRevision, "cleaning", "settling", "abort-cleaned-"+id); e == nil {
-						result := managed.Result{Schema: "haepari.result/v1", JobID: id, ResourceID: next.ResourceID, ResourceRevision: next.ResourceConfigRevision, LeaseGeneration: next.LeaseGeneration, JobState: "finished", ResourceAvailability: "available", WorkloadOutcome: "inconclusive", EvidenceCompleteness: "unobserved", CleanupOutcome: "verified", FinalVerdict: managed.Incomplete, Reason: "prepare_failed"}
+						result := managed.Result{Schema: "haepari.result/v1", JobID: id, ResourceID: next.ResourceID, ResourceRevision: next.ResourceConfigRevision, LeaseGeneration: next.LeaseGeneration, JobState: "finished", ResourceAvailability: "available", WorkloadOutcome: "inconclusive", EvidenceCompleteness: "unobserved", CleanupOutcome: "verified", FinalVerdict: managed.Incomplete, Reason: reason}
 						if _, e = s.ledger.SettleLocal(id, next.JobRevision, result); e == nil {
 							s.signalFinished(id)
 							return

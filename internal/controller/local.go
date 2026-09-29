@@ -21,32 +21,40 @@ import (
 	"github.com/irootkernel/haepari/internal/snapshot"
 )
 
-func (s *runtimeServer) execute(_ context.Context, receipt managed.Receipt, job managed.JobSpec, objectID string) {
-	if err := s.executeLocal(receipt, job, objectID); err != nil {
+func (s *runtimeServer) execute(_ context.Context, receipt managed.Receipt, job managed.JobSpec, objectID string, prepareDeadline time.Time) {
+	if err := s.executeLocal(receipt, job, objectID, prepareDeadline); err != nil {
 		s.failed(receipt.JobID, err)
 	}
 	s.notifyScheduler()
 }
 
-func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpec, objectID string) error {
+var errPrepareUnproven = errors.New("preparation termination unproven after deadline")
+
+func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpec, objectID string, prepareDeadline time.Time) error {
 	if receipt.JobState != "preparing" {
 		return managed.ErrConflict
 	}
 	jobRoot := filepath.Join(s.root.Path, "jobs", receipt.JobID)
 	workspace := filepath.Join(jobRoot, "workspace")
-	if err := os.Mkdir(jobRoot, 0700); err != nil {
+	if err := prepareLocal(prepareDeadline, func() error {
+		if !time.Now().Before(prepareDeadline) {
+			return context.DeadlineExceeded
+		}
+		if err := os.Mkdir(jobRoot, 0700); err != nil {
+			return err
+		}
+		if err := writeReceipt(jobRoot, "request.json", map[string]any{"job_id": receipt.JobID, "snapshot_object_id": objectID, "lease_generation": receipt.LeaseGeneration}); err != nil {
+			return err
+		}
+		snap, err := s.store.Read(objectID)
+		if err != nil {
+			return err
+		}
+		return copyInput(snap, workspace, prepareDeadline)
+	}); err != nil {
 		return err
 	}
-	if err := writeReceipt(jobRoot, "request.json", map[string]any{"job_id": receipt.JobID, "snapshot_object_id": objectID, "lease_generation": receipt.LeaseGeneration}); err != nil {
-		return err
-	}
-	snap, err := s.store.Read(objectID)
-	if err != nil {
-		return err
-	}
-	if err := copyInput(snap, workspace); err != nil {
-		return err
-	}
+	var err error
 	receipt, err = s.ledger.AdvanceLocal(receipt.JobID, receipt.JobRevision, "preparing", "ready", "prepared-"+receipt.JobID)
 	if err != nil {
 		return err
@@ -243,6 +251,22 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	return nil
 }
 
+func prepareLocal(deadline time.Time, work func() error) error {
+	if !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	prepareErr, prepareStatus := boundedPhase(deadline, work)
+	if prepareStatus == phaseUnproven {
+		// The worker may still write the owned workspace. It cannot claim a
+		// run; retain occupancy and evidence until reconciliation proves stop.
+		return errPrepareUnproven
+	}
+	if prepareStatus == phaseLate || !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return prepareErr
+}
+
 type collectionAttempt struct {
 	artifacts []managed.ResultArtifact
 	complete  bool
@@ -295,19 +319,26 @@ func completionStatus(finishedAt, deadline time.Time) phaseStatus {
 	return phaseInTime
 }
 
-func copyInput(snap snapshot.Snapshot, destination string) error {
+func copyInput(snap snapshot.Snapshot, destination string, deadline time.Time) error {
 	if err := os.Mkdir(destination, 0700); err != nil {
 		return err
 	}
 	for _, entry := range snap.Manifest.Entries {
+		if !time.Now().Before(deadline) {
+			return context.DeadlineExceeded
+		}
 		name := filepath.FromSlash(entry.Path)
 		target := filepath.Join(destination, name)
 		if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 			return err
 		}
-		input, err := os.Open(filepath.Join(snap.Root, name))
+		input, info, err := openContainedOutput(snap.Root, entry.Path)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: open %s: %v", snapshot.ErrCorrupt, entry.Path, err)
+		}
+		if (info.Mode().Perm()&0111 != 0) != entry.Executable {
+			input.Close()
+			return fmt.Errorf("%w: mode of %s", snapshot.ErrCorrupt, entry.Path)
 		}
 		mode := os.FileMode(0600)
 		if entry.Executable {
@@ -318,7 +349,9 @@ func copyInput(snap snapshot.Snapshot, destination string) error {
 			input.Close()
 			return err
 		}
-		_, copyErr := io.Copy(output, input)
+		h := sha256.New()
+		size, copyErr := copyUntil(io.MultiWriter(output, h), input, deadline)
+		after, statErr := input.Stat()
 		closeIn := input.Close()
 		syncErr := output.Sync()
 		closeOut := output.Close()
@@ -333,6 +366,12 @@ func copyInput(snap snapshot.Snapshot, destination string) error {
 		}
 		if closeOut != nil {
 			return closeOut
+		}
+		if statErr != nil || !os.SameFile(info, after) || after.Size() != entry.Size || (after.Mode().Perm()&0111 != 0) != entry.Executable {
+			return fmt.Errorf("%w: changed source metadata of %s", snapshot.ErrCorrupt, entry.Path)
+		}
+		if size != entry.Size || "sha256:"+hex.EncodeToString(h.Sum(nil)) != entry.SHA256 {
+			return fmt.Errorf("%w: copied bytes of %s", snapshot.ErrCorrupt, entry.Path)
 		}
 	}
 	return nil

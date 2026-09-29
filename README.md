@@ -12,7 +12,7 @@ make check
 ./bin/haepari version --json
 ```
 
-`make test-macos-supervision` and `make test-utm` are explicit real-environment gates. They fail until their owning tasks provide observed evidence; `make check` does not run them. No host service is installed by these targets.
+`make test-macos-supervision` is the uncached macOS arm64 host probe for the bounded TASK-004 decisions recorded in [its evidence](docs/records/TASK-004-macos-supervision.md). `make test-utm` remains the later real-VM gate. `make check` does not run either gate. No host service is installed by these targets.
 
 ## Isolated foreground controller
 
