@@ -1,6 +1,6 @@
 # Haepari v0.1.0 development package
 
-Status: implementation in progress. TASK-001 has an accepted Go bootstrap with identity reporting and an isolated foreground controller. TASK-002 has provisional internal schemas and a managed state ledger under implementation. Managed Job submission, installed service, accepted product test results, and a published release are not yet supplied. The TASK-034 host probe remains the only accepted real-environment observation ([record](records/TASK-034-utm-probe.md)).
+Status: implementation in progress. TASK-001 has an accepted Go bootstrap with identity reporting and an isolated foreground controller. TASK-002 has accepted provisional internal schemas and a managed state ledger. TASK-003 adds an internal selected-file snapshot store; Job admission and queued-input behavior remain with TASK-033. Managed Job submission, installed service, accepted product test results, and a published release are not yet supplied. The TASK-034 host probe remains the only accepted real-environment observation ([record](records/TASK-034-utm-probe.md)).
 
 Haepari is an independent Go CLI and local daemon for durable resource scheduling. Managed execution covers local commands and UTM macOS VM tests through one durable controller, capacity ledger, and fenced safe-return path. Cooperating tools, such as Mulgae reviews, can queue on advisory named locks. Public external leases are deferred. Aquarium is the first planned consumer; Haepari has no runtime dependency on Aquarium or its tools.
 

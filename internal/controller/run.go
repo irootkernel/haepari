@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/snapshot"
 	"github.com/irootkernel/haepari/internal/state"
 	"github.com/irootkernel/haepari/internal/store/sqlite"
 )
@@ -29,6 +30,9 @@ func Run(ctx context.Context, root state.Root) error {
 	defer db.Close()
 	if _, err := managed.NewLedger(db, 1); err != nil {
 		return fmt.Errorf("initialize managed state: %w", err)
+	}
+	if _, err := snapshot.OpenStore(root.Path); err != nil {
+		return fmt.Errorf("initialize sealed input store: %w", err)
 	}
 	if _, err := os.Lstat(root.SocketPath); err == nil {
 		return fmt.Errorf("%w: %s; see README stale-socket recovery", ErrSocketExists, root.SocketPath)

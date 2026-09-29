@@ -1,6 +1,6 @@
 # Haepari roadmap
 
-Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. TASK-001, TASK-002 and TASK-034 are Accepted; EPIC-001 is In progress. Other active tasks are Planned, and EPIC-008 is Deferred. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
+Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. TASK-001, TASK-002, TASK-003 and TASK-034 are Accepted; EPIC-001 is In progress. Other active tasks are Planned, and EPIC-008 is Deferred. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
 
 ## Execution policy
 
@@ -39,7 +39,7 @@ Lifecycle status vocabulary:
 | --- | --- | --- | --- | --- |
 | [TASK-001](roadmap/EPIC-001.md#task-001) | Bootstrap the independent Go product | None | Active | Accepted |
 | [TASK-002](roadmap/EPIC-001.md#task-002) | Define provisional managed schemas and state invariants | TASK-001 | Active | Accepted |
-| [TASK-003](roadmap/EPIC-001.md#task-003) | Implement contained snapshots and identity | TASK-002 | Active | Planned |
+| [TASK-003](roadmap/EPIC-001.md#task-003) | Implement contained snapshots and identity | TASK-002 | Active | Accepted |
 | [TASK-033](roadmap/EPIC-001.md#task-033) | Deliver the first production-path local walking skeleton | TASK-001, TASK-002, TASK-003 | Active | Planned |
 | [TASK-004](roadmap/EPIC-001.md#task-004) | Qualify general macOS OS supervision | TASK-001 | Active | Planned |
 | [TASK-034](roadmap/EPIC-004.md#task-034) | Probe UTM host automation non-destructively | None | Active | Accepted |

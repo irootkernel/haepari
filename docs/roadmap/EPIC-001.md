@@ -67,20 +67,20 @@ Requirement coverage: `HP-REQ-003`, `HP-REQ-062`.
 Requirement coverage: `HP-REQ-004`, `HP-REQ-005`.
 
 #### Implement
-- [ ] Implement explicit selected-file ingestion, versioned tree digests, executable modes, regular-file containment and content sealing. Preserve base Git identity separately from actual dirty snapshot identity.
+- [x] Implement explicit selected-file ingestion, versioned tree digests, executable modes, regular-file containment and content sealing. Preserve base Git identity separately from actual dirty snapshot identity.
 
 #### Do not
-- [ ] Do not read the whole home, follow links outside scope, copy credentials, mutate Git state, or infer current bytes from HEAD.
+- [x] Do not read the whole home, follow links outside scope, copy credentials, mutate Git state, or infer current bytes from HEAD.
 
 #### Verify
-- [ ] Test concurrent file edits, removed inputs, path traversal, links, case collisions, changed executable bits and input reuse after source deletion.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Test concurrent file edits, removed inputs, path traversal, links, case collisions, changed executable bits and input reuse after source deletion.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-033
 

@@ -37,8 +37,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 8516,
-      "sha256": "f7494b08dc6889b80f147b2b90f6920da6cb174af263f9c31acadc30f410bc88"
+      "bytes": 8622,
+      "sha256": "8a50e973b05b1c5e4b63c720eddd1bd026039b4676527a7aa2db604764cfbf86"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -147,8 +147,8 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 25386,
-      "sha256": "ba00a96788a72c2fd25e85d6fa1de7556768204f6512d6f32f7e7105e7ce5059"
+      "bytes": 26573,
+      "sha256": "f4632cc27dd330845b9554e2028386f5717c1eddb5368c37f43ee657f64eab09"
     },
     {
       "path": "checks.json",
@@ -157,13 +157,13 @@
     },
     {
       "path": "contracts/artifact-and-profile.md",
-      "bytes": 10705,
-      "sha256": "25a02c187df9f0578d236a057803dd9f1f1425dc148180bdc60375dc058f0272"
+      "bytes": 12517,
+      "sha256": "8c0e17e49ecb6c919fc7fffa276601da0a1693706d39602748195bdf92f93f04"
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 20907,
-      "sha256": "642dff1cb07815522618e655cc7a43801f10d7a8f1d6334eed0e42e98923b3f7"
+      "bytes": 21016,
+      "sha256": "d0f5dfaff348c29c366521b1570165d0623c59913f11a264d5ae8caa77981b96"
     },
     {
       "path": "contracts/configuration.md",
@@ -307,13 +307,13 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11148,
-      "sha256": "d7c9e3ed0a15773a5fd1321a80802568885c92c5815c23d5048ac9b1b0bf5228"
+      "bytes": 11159,
+      "sha256": "2210532d20e6dbf49f2492642dbc7097765ddf62e7eec39d8858be4c2812d816"
     },
     {
       "path": "roadmap/EPIC-001.md",
       "bytes": 10929,
-      "sha256": "2fa18a53e69e970133ff1fb1c7be548a05359f683f254f6e066a6f609a64262e"
+      "sha256": "2a9b15c95392eb6137871d221837369ce6c9059e7bce98b2a83b8b98733ebafa"
     },
     {
       "path": "roadmap/EPIC-002.md",

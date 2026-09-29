@@ -86,7 +86,7 @@ Each machine error code maps to one CLI exit:
 - `resource_id`: exactly one registered resource; no list in v0.1.0.
 - `mode`: `auto` or `manual`.
 - `suite`: a consumer label such as `install`, `migration`, or `regression`.
-- `input`: a contained bundle root and an inventory digest. Admission copies and seals it.
+- `input`: a contained bundle root and an inventory digest. TASK-003 provides the internal selected-file sealer; TASK-033 admission copies, verifies and binds the object before accepting the request.
 - `environment`: the consumer profile reference and its expected digest, recorded as evidence for VM jobs; an explicit local environment reference for local jobs.
 - `workload`: argv, bundle-relative working directory, non-secret environment, and required output declarations.
 - `setup`: optional bounded argv for manual-mode preparation; ordinary install recipes may be the workload for auto mode.

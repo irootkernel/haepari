@@ -70,6 +70,9 @@ func TestIsolatedControllerStartup(t *testing.T) {
 	if info, err := os.Stat(root.DBPath); err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("SQLite file permissions: %v, %v", info, err)
 	}
+	if info, err := os.Lstat(filepath.Join(root.Path, "objects")); err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
+		t.Fatalf("sealed input store permissions: %v, %v", info, err)
+	}
 }
 
 func TestShutdownPreservesReplacedSocketPath(t *testing.T) {
