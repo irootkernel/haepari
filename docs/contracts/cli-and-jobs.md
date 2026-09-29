@@ -77,6 +77,8 @@ Each machine error code maps to one CLI exit:
 
 `inspect`, `events`, and `logs` return 0 when their own read succeeds, regardless of workload verdict. Preserve a native command's exact exit code/signal inside the run result; do not substitute it for the CLI operation code. `run --json` may stream versioned admission/event/final objects as NDJSON, while ordinary command responses remain one JSON object. The schema must distinguish those modes.
 
+In the TASK-033 local slice, `run` waits for at most 24 hours after admission, and each `wait` call accepts at most a 24-hour timeout. A caller wait deadline returns exit 5 while the Job continues; use its printed Job ID to wait again. This bound is separate from the admitted Job's run deadline.
+
 ## Job input
 
 `haepari.job/v1` contains the following closed fields (the example is provisional until freeze gate F1, and its VM-specific fields until F2):

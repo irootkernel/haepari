@@ -1,6 +1,6 @@
 # Haepari architecture
 
-Target: v0.1.0. This document specifies the intended system. The TASK-001 candidate implements identity reporting, a private foreground controller root, SQLite opening, and a Unix socket; managed Job behavior remains planned.
+Target: v0.1.0. This document specifies the intended system. TASK-001 provides identity reporting and the private foreground controller bootstrap. TASK-033 implements the first local auto-Job path: sealed admission, capacity-one scheduling, execution, collection, settlement and blocking wait. Restart reattachment, cancellation, manual Jobs, VM execution and installed service supervision remain with their owning later tasks.
 
 ## System boundary
 

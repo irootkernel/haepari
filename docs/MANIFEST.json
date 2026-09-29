@@ -147,8 +147,8 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 27581,
-      "sha256": "c9abb4fb32a6448498df37beb6a84a9e8bf422ae86b77cf48981f8b1e475287f"
+      "bytes": 27783,
+      "sha256": "8a8f89823774481395305279db37df8a6353ad6457a550184a6f70460f7b38d5"
     },
     {
       "path": "checks.json",
@@ -162,8 +162,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 21706,
-      "sha256": "55d229ad3b7742180bcdb2730e80353b89a8fd59d86f673af2d191a15b190765"
+      "bytes": 22004,
+      "sha256": "5f0091de203b743f8b35b039ffc9e1aab67c46c18f257e88b6137df79dc2a560"
     },
     {
       "path": "contracts/configuration.md",
@@ -197,8 +197,8 @@
     },
     {
       "path": "examples/README.md",
-      "bytes": 3255,
-      "sha256": "a6fbae05b40d02d8a0053ca31639b11c31187e1fc191072b56049f57b70a5bc5"
+      "bytes": 3360,
+      "sha256": "8eec2340053abfd970718f3aee0c27b8e2235acc114e76b43d032a03cfe55e21"
     },
     {
       "path": "examples/config.template.json",
@@ -292,8 +292,8 @@
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
-      "bytes": 5697,
-      "sha256": "a1d3b842d02d65af1cb0eec124ee194317853ec8e4121f25ad6f9039162b52a3"
+      "bytes": 6645,
+      "sha256": "9b4069e9dbbe2b67931ff015e4c494f16142fb952b9ff028415c4131dacc9ac8"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
