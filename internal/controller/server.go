@@ -73,19 +73,22 @@ func reject(w http.ResponseWriter, op string, err error) {
 		status = http.StatusConflict
 	case errors.Is(err, managed.ErrInvalid), errors.Is(err, snapshot.ErrInvalid):
 		code = "INVALID_REQUEST"
+	case errors.Is(err, snapshot.ErrSourceUnavailable):
+		code = "PREREQUISITE_UNAVAILABLE"
 	default:
 		code = "STORAGE_UNAVAILABLE"
 		status = http.StatusServiceUnavailable
 		retry = "reconcile"
 	}
 	message := map[string]string{
-		"INVALID_REQUEST":     "The request is malformed or unsafe.",
-		"CONFLICT":            "The request conflicts with existing or changed input.",
-		"NOT_FOUND":           "The requested job or resource was not found.",
-		"RESOURCE_BUSY":       "The resource is occupied or already registered.",
-		"UNSUPPORTED":         "This mode or resource is not supported.",
-		"STALE_REVISION":      "The expected revision is no longer current.",
-		"STORAGE_UNAVAILABLE": "Durable state is unavailable; reconcile before retrying.",
+		"INVALID_REQUEST":          "The request is malformed or unsafe.",
+		"PREREQUISITE_UNAVAILABLE": "The selected input source is unavailable; correct it before submitting again.",
+		"CONFLICT":                 "The request conflicts with existing or changed input.",
+		"NOT_FOUND":                "The requested job or resource was not found.",
+		"RESOURCE_BUSY":            "The resource is occupied or already registered.",
+		"UNSUPPORTED":              "This mode or resource is not supported.",
+		"STALE_REVISION":           "The expected revision is no longer current.",
+		"STORAGE_UNAVAILABLE":      "Durable state is unavailable; reconcile before retrying.",
 	}[code]
 	send(w, status, op, nil, &responseError{Code: code, Message: message, Retry: retry})
 }
@@ -168,7 +171,7 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		reject(w, "submit", err)
 		return
 	}
-	if job.Mode != "auto" || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 || input.RequestKey == "" {
+	if input.RequestKey == "" {
 		reject(w, "submit", managed.ErrUnsupported)
 		return
 	}
@@ -212,6 +215,10 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 	}
 	if !errors.Is(err, managed.ErrNotFound) {
 		reject(w, "submit", err)
+		return
+	}
+	if job.Mode != "auto" || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 {
+		reject(w, "submit", managed.ErrUnsupported)
 		return
 	}
 	sealed, err := s.store.Seal(r.Context(), job.Input.Root, job.Input.SelectedFiles, snapshot.Provenance{EvidenceClass: job.Provenance.EvidenceClass})

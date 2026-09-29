@@ -32,6 +32,7 @@ const (
 var ErrInvalid = errors.New("invalid snapshot input")
 var ErrChanged = errors.New("source changed during snapshot")
 var ErrCorrupt = errors.New("sealed snapshot is corrupt")
+var ErrSourceUnavailable = errors.New("snapshot source unavailable")
 
 type Entry struct {
 	Path       string `json:"path"`

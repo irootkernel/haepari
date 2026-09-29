@@ -37,7 +37,7 @@ func openSourceRoot(name string) (*sourceRoot, error) {
 	}
 	info, err := os.Lstat(name)
 	if err != nil {
-		return nil, err
+		return nil, sourceUnavailable(err)
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("%w: source root is not a real directory", ErrInvalid)
@@ -46,7 +46,7 @@ func openSourceRoot(name string) (*sourceRoot, error) {
 	// root, then open every actual component without following a symlink.
 	canonical, err := filepath.EvalSymlinks(name)
 	if err != nil {
-		return nil, err
+		return nil, sourceUnavailable(err)
 	}
 	fd, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -59,7 +59,7 @@ func openSourceRoot(name string) (*sourceRoot, error) {
 		next, openErr := unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		unix.Close(fd)
 		if openErr != nil {
-			return nil, openErr
+			return nil, sourceUnavailable(openErr)
 		}
 		fd = next
 	}
@@ -73,6 +73,13 @@ func openSourceRoot(name string) (*sourceRoot, error) {
 		return nil, err
 	}
 	return &sourceRoot{file: opened, canonical: canonical}, nil
+}
+
+func sourceUnavailable(err error) error {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
+		return fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+	}
+	return err
 }
 
 func (r *sourceRoot) Close() error { return r.file.Close() }
@@ -90,7 +97,7 @@ func (r *sourceRoot) openRegular(name string) (*os.File, sourceVersion, error) {
 			if errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
 				return nil, sourceVersion{}, fmt.Errorf("%w: selected directory changed type", ErrInvalid)
 			}
-			return nil, sourceVersion{}, err
+			return nil, sourceVersion{}, sourceUnavailable(err)
 		}
 		dir, owned = next, true
 	}
@@ -102,7 +109,7 @@ func (r *sourceRoot) openRegular(name string) (*os.File, sourceVersion, error) {
 		if errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
 			return nil, sourceVersion{}, fmt.Errorf("%w: selected input changed type", ErrInvalid)
 		}
-		return nil, sourceVersion{}, err
+		return nil, sourceVersion{}, sourceUnavailable(err)
 	}
 	file := os.NewFile(uintptr(fd), name)
 	version, err := sourceVersionOf(file)

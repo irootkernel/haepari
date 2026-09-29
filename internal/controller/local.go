@@ -79,22 +79,33 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	runCtx, cancel := context.WithTimeout(context.Background(), time.Duration(job.Deadlines.RunSeconds)*time.Second)
 	defer cancel()
 	runDeadline, _ := runCtx.Deadline()
-	cmd := exec.Command(job.Workload.Argv[0], job.Workload.Argv[1:]...)
-	cmd.Dir = filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD))
-	cmd.Env = []string{"PATH=/usr/bin:/bin"}
+	workDir := filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD))
+	workPath := "/usr/bin:/bin"
+	if declared, ok := job.Workload.Environment["PATH"]; ok {
+		workPath = declared
+	}
+	commandPath, resolveErr := resolveWorkloadCommand(job.Workload.Argv[0], workDir, workPath)
+	cmd := &exec.Cmd{Path: commandPath, Args: job.Workload.Argv, Dir: workDir}
+	cmd.Env = []string{"PATH=" + workPath}
 	keys := make([]string, 0, len(job.Workload.Environment))
 	for key := range job.Workload.Environment {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
+		if key == "PATH" {
+			continue
+		}
 		cmd.Env = append(cmd.Env, key+"="+job.Workload.Environment[key])
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	started := false
-	startErr := cmd.Start()
+	startErr := resolveErr
+	if startErr == nil {
+		startErr = cmd.Start()
+	}
 	if startErr == nil {
 		started = true
 		if err := writeReceipt(jobRoot, "start.json", map[string]any{"run_id": runID, "pid": cmd.Process.Pid, "started_at": time.Now().UTC()}); err != nil {
@@ -260,6 +271,26 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	}
 	s.signalFinished(receipt.JobID)
 	return nil
+}
+
+func resolveWorkloadCommand(name, workDir, pathEnv string) (string, error) {
+	if filepath.IsAbs(name) {
+		return name, nil
+	}
+	if strings.ContainsRune(name, filepath.Separator) {
+		return filepath.Join(workDir, name), nil
+	}
+	for _, directory := range filepath.SplitList(pathEnv) {
+		if !filepath.IsAbs(directory) {
+			directory = filepath.Join(workDir, directory)
+		}
+		candidate := filepath.Join(directory, name)
+		info, err := os.Stat(candidate)
+		if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0 {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("workload executable %q unavailable in its PATH", name)
 }
 
 func prepareLocal(deadline time.Time, work func() error) error {

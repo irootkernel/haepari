@@ -72,6 +72,30 @@ func TestCopyInputRevalidatesSealedBytes(t *testing.T) {
 	}
 }
 
+func TestResolveWorkloadCommandUsesDeclaredPath(t *testing.T) {
+	workDir := t.TempDir()
+	bin := filepath.Join(workDir, "bin")
+	if err := os.Mkdir(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	tool := filepath.Join(bin, "selected-tool")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\nprintf declared-path"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "/usr/bin:/bin")
+	resolved, err := resolveWorkloadCommand("selected-tool", workDir, "bin")
+	if err != nil || resolved != tool {
+		t.Fatalf("workload PATH resolution: %q %v", resolved, err)
+	}
+	output, err := (&exec.Cmd{Path: resolved, Args: []string{"selected-tool"}, Dir: workDir, Env: []string{"PATH=bin"}}).Output()
+	if err != nil || string(output) != "declared-path" {
+		t.Fatalf("resolved workload execution: %q %v", output, err)
+	}
+	if _, err := resolveWorkloadCommand("selected-tool", workDir, "/usr/bin:/bin"); err == nil {
+		t.Fatal("controller-only executable path was accepted")
+	}
+}
+
 func TestPreparationDeadlineAndUnprovenWorkerKeepCorrectOwnership(t *testing.T) {
 	for _, tc := range []struct {
 		name, wantState, wantAvailability, wantReason string

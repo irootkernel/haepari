@@ -108,6 +108,12 @@ func TestLocalWalkingSkeleton(t *testing.T) {
 	if _, err := managed.DecodeJob(spec); err != nil {
 		t.Fatalf("fixture job: %v", err)
 	}
+	missingSource := job
+	missingSource.Input.Root = filepath.Join(parent, "absent-input")
+	absentSpec, _ := json.Marshal(missingSource)
+	if _, _, err := c.Submit(context.Background(), absentSpec, "missing-source-key"); !errors.As(err, &issue) || issue.Code != "PREREQUISITE_UNAVAILABLE" {
+		t.Fatalf("missing source should reject admission as a prerequisite: %v", err)
+	}
 	for _, unsupported := range []managed.JobSpec{
 		func() managed.JobSpec {
 			j := job
@@ -119,7 +125,6 @@ func TestLocalWalkingSkeleton(t *testing.T) {
 		func() managed.JobSpec { j := job; j.Input.SelectedFiles = nil; return j }(),
 	} {
 		encoded, _ := json.Marshal(unsupported)
-		var issue *client.Issue
 		if _, _, err := c.Submit(context.Background(), encoded, "walk-key"); !errors.As(err, &issue) || issue.Code != "UNSUPPORTED" {
 			t.Fatalf("unsupported job admitted: %+v, %v", unsupported, err)
 		}
@@ -148,6 +153,12 @@ func TestLocalWalkingSkeleton(t *testing.T) {
 	}
 	if receipt.JobID == "" {
 		t.Fatal("empty admitted identity")
+	}
+	unsupportedReplay := job
+	unsupportedReplay.Input.SelectedFiles = nil
+	unsupportedSpec, _ := json.Marshal(unsupportedReplay)
+	if _, _, err := c.Submit(context.Background(), unsupportedSpec, "walk-key"); !errors.As(err, &issue) || issue.Code != "CONFLICT" {
+		t.Fatalf("consumed key with unsupported changed spec should conflict: %v", err)
 	}
 	_, _, err = c.Wait(context.Background(), receipt.JobID, 20*time.Millisecond)
 	if !errors.As(err, &issue) || issue.Code != "WAIT_TIMEOUT" {
@@ -312,5 +323,15 @@ func TestRequestSizeAndChangedSourceMapping(t *testing.T) {
 	var envelope client.Envelope
 	if err := json.Unmarshal(reply.Body.Bytes(), &envelope); err != nil || envelope.Error == nil || envelope.Error.Code != "CONFLICT" || envelope.Error.Message == envelope.Error.Code || envelope.Error.Retry != "none" {
 		t.Fatalf("changed source response: %+v, %v", envelope, err)
+	}
+	for _, timeout := range []string{"25h", "0s", "notaduration"} {
+		reply := httptest.NewRecorder()
+		request := httptest.NewRequest("GET", "/v1/jobs/missing/wait?timeout="+timeout, nil)
+		request.Header.Set("X-Haepari-Protocol", protocol)
+		(&runtimeServer{}).routes().ServeHTTP(reply, request)
+		var response client.Envelope
+		if err := json.Unmarshal(reply.Body.Bytes(), &response); err != nil || reply.Code != 400 || response.Error == nil || response.Error.Code != "INVALID_REQUEST" {
+			t.Fatalf("invalid wait timeout %q: status=%d response=%+v error=%v", timeout, reply.Code, response, err)
+		}
 	}
 }

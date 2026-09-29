@@ -90,7 +90,7 @@ In the TASK-033 local slice, `run` waits for at most 24 hours after admission, a
 - `suite`: a consumer label such as `install`, `migration`, or `regression`.
 - `input`: a contained bundle root, an explicit `selected_files` list and an inventory digest. TASK-003 provides the internal selected-file sealer; TASK-033 local admission copies, verifies and binds the object before accepting the request. The submitted digest is the lowercase 64-character hex portion of the manifest's `tree_sha256` value.
 - `environment`: the consumer profile reference and its expected digest, recorded as evidence for VM jobs; an explicit local environment reference for local jobs.
-- `workload`: argv, bundle-relative working directory, non-secret environment, and required output declarations.
+- `workload`: argv, bundle-relative working directory, non-secret environment, and required output declarations. Local execution resolves a bare `argv[0]` against the workload's `PATH` (default `/usr/bin:/bin`, overridable in the workload environment); a relative path containing `/` resolves against the declared working directory.
 - `setup`: optional bounded argv for manual-mode preparation; ordinary install recipes may be the workload for auto mode.
 - `manual`: required scenario document and completion schema only when mode is manual.
 - `deadlines`: positive finite queue, preparation, run/manual, collection, and cleanup budgets.
