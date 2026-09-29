@@ -116,6 +116,9 @@ func decodeBody(r *http.Request, target any) error {
 	if err != nil || len(encoded) > maxBody {
 		return managed.ErrInvalid
 	}
+	if err := managed.ValidateUniqueJSONKeys(encoded); err != nil {
+		return err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
@@ -197,7 +200,11 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else if sealErr != nil {
-			reject(w, "submit", sealErr)
+			if errors.Is(sealErr, snapshot.ErrInvalid) || errors.Is(sealErr, snapshot.ErrChanged) {
+				reject(w, "submit", managed.ErrConflict)
+			} else {
+				reject(w, "submit", sealErr)
+			}
 			return
 		}
 		send(w, 200, "submit", prior.Receipt, nil)

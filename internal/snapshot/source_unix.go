@@ -87,6 +87,9 @@ func (r *sourceRoot) openRegular(name string) (*os.File, sourceVersion, error) {
 			unix.Close(dir)
 		}
 		if err != nil {
+			if errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
+				return nil, sourceVersion{}, fmt.Errorf("%w: selected directory changed type", ErrInvalid)
+			}
 			return nil, sourceVersion{}, err
 		}
 		dir, owned = next, true
@@ -96,6 +99,9 @@ func (r *sourceRoot) openRegular(name string) (*os.File, sourceVersion, error) {
 		unix.Close(dir)
 	}
 	if err != nil {
+		if errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
+			return nil, sourceVersion{}, fmt.Errorf("%w: selected input changed type", ErrInvalid)
+		}
 		return nil, sourceVersion{}, err
 	}
 	file := os.NewFile(uintptr(fd), name)

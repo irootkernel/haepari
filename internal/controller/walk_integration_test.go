@@ -254,6 +254,15 @@ func TestLocalWalkingSkeleton(t *testing.T) {
 	if _, _, err := c.Submit(context.Background(), spec, "walk-key"); !errors.As(err, &issue) || issue.Code != "CONFLICT" {
 		t.Fatalf("changed payload should conflict: %v", err)
 	}
+	if err := os.Remove(filepath.Join(source, "source", "input.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(count, filepath.Join(source, "source", "input.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.Submit(context.Background(), spec, "walk-key"); !errors.As(err, &issue) || issue.Code != "CONFLICT" {
+		t.Fatalf("type-changed replay should conflict: %v", err)
+	}
 	if err := os.RemoveAll(source); err != nil {
 		t.Fatal(err)
 	}
@@ -292,6 +301,11 @@ func TestRequestSizeAndChangedSourceMapping(t *testing.T) {
 	oversized := valid + strings.Repeat(" ", 4096)
 	if err := decodeBody(httptest.NewRequest("POST", "/v1/jobs", strings.NewReader(oversized)), &input); !errors.Is(err, managed.ErrInvalid) {
 		t.Fatalf("oversized trailing whitespace accepted: %v", err)
+	}
+	for _, duplicate := range []string{`{"spec":"a","spec":"b"}`, `{"spec":"a","request_key":"one","request_key":"two"}`} {
+		if err := decodeBody(httptest.NewRequest("POST", "/v1/jobs", strings.NewReader(duplicate)), &input); !errors.Is(err, managed.ErrInvalid) {
+			t.Fatalf("duplicate envelope key accepted: %s: %v", duplicate, err)
+		}
 	}
 	reply := httptest.NewRecorder()
 	reject(reply, "submit", snapshot.ErrChanged)

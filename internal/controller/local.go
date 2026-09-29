@@ -78,6 +78,7 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	defer logFile.Close()
 	runCtx, cancel := context.WithTimeout(context.Background(), time.Duration(job.Deadlines.RunSeconds)*time.Second)
 	defer cancel()
+	runDeadline, _ := runCtx.Deadline()
 	cmd := exec.Command(job.Workload.Argv[0], job.Workload.Argv[1:]...)
 	cmd.Dir = filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD))
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
@@ -107,20 +108,30 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	var waitErr error
 	timedOut := false
 	if started {
-		ended := make(chan error, 1)
-		go func() { ended <- cmd.Wait() }()
+		type waitResult struct {
+			err error
+			at  time.Time
+		}
+		ended := make(chan waitResult, 1)
+		go func() { err := cmd.Wait(); ended <- waitResult{err: err, at: time.Now()} }()
+		var result waitResult
 		select {
-		case waitErr = <-ended:
+		case result = <-ended:
 		case <-runCtx.Done():
-			timedOut = true
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 			select {
-			case waitErr = <-ended:
-			case <-time.After(2 * time.Second):
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-				waitErr = <-ended
+			case result = <-ended:
+			default:
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+				select {
+				case result = <-ended:
+				case <-time.After(2 * time.Second):
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					result = <-ended
+				}
 			}
 		}
+		waitErr = result.err
+		timedOut = result.at.After(runDeadline)
 	} else {
 		waitErr = startErr
 	}

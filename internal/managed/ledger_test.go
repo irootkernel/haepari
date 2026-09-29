@@ -357,6 +357,27 @@ func TestQuarantinePreservedAndCursorScoped(t *testing.T) {
 	if finished.ResourceAvailability != "quarantined" || finished.CapacityDelta != -1 {
 		t.Fatalf("quarantine changed: %+v", finished)
 	}
+	for _, tc := range []struct {
+		availability string
+		revision     int64
+	}{
+		{"quarantined", 2},
+		{"paused", 3},
+	} {
+		if tc.availability == "paused" {
+			if _, err := db.Exec(`UPDATE managed_resources SET availability='paused',availability_revision=3 WHERE id='local-a'`); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, err := l.Reserve(ReserveRequest{JobID: "job-two", ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: tc.revision, MutationKey: "blocked-" + tc.availability})
+		if !errors.Is(err, ErrBusy) {
+			t.Fatalf("%s resource reserved successor: %v", tc.availability, err)
+		}
+		seen, err := l.Snapshot("job-two")
+		if err != nil || seen.JobState != "queued" || seen.GlobalOccupancy != 0 || seen.LeaseGeneration != 0 {
+			t.Fatalf("%s resource changed successor: %+v %v", tc.availability, seen, err)
+		}
+	}
 	batch, err := l.EventsAfter("job-one", 0, 20)
 	events := batch.Events
 	if err != nil || len(events) != 5 {

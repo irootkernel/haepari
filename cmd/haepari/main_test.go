@@ -296,6 +296,28 @@ func TestLocalCLIAdmissionWaitAndReplay(t *testing.T) {
 	if code := run([]string{"wait", slowAdmission.Data.JobID, "--timeout", "5s", "--json"}, &out, &diagnostic); code != 0 {
 		t.Fatalf("wait reconnect: exit %d: %s", code, diagnostic.String())
 	}
+	deadlineJob := job
+	deadlineJob.Deadlines.RunSeconds = 1
+	deadlineJob.Workload.Argv = []string{"/bin/sh", "-c", "mkdir -p ../results; printf timed > ../results/out.txt; trap '' TERM; exec /bin/sleep 30"}
+	deadlineJSON, _ := json.Marshal(deadlineJob)
+	if err := os.WriteFile(jobPath, deadlineJSON, 0600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := run([]string{"run", "--spec", jobPath, "--request-key", "cli-deadline-key", "--json"}, &out, &diagnostic); code != 3 {
+		t.Fatalf("run deadline: exit %d: %s %s", code, out.String(), diagnostic.String())
+	}
+	lines = bytes.Split(bytes.TrimSpace(out.Bytes()), []byte("\n"))
+	if len(lines) != 2 {
+		t.Fatalf("run deadline NDJSON: %s", out.String())
+	}
+	var deadlineFinal struct {
+		Data managed.Result `json:"data"`
+	}
+	if err := json.Unmarshal(lines[1], &deadlineFinal); err != nil || deadlineFinal.Data.FinalVerdict != managed.Incomplete || deadlineFinal.Data.WorkloadOutcome != "timed_out" || deadlineFinal.Data.Reason != "run_deadline" || deadlineFinal.Data.NativeSignal == "" || deadlineFinal.Data.CleanupOutcome != "verified" {
+		t.Fatalf("run deadline result: %+v %v", deadlineFinal, err)
+	}
 }
 
 func TestCLIContractErrorAndVerdictExits(t *testing.T) {

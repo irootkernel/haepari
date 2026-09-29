@@ -338,6 +338,10 @@ func rejectDuplicateKeys(data []byte) error {
 	return nil
 }
 
+// ValidateUniqueJSONKeys checks a complete JSON value before a transport
+// decoder can silently apply Go's last-key-wins behavior.
+func ValidateUniqueJSONKeys(data []byte) error { return rejectDuplicateKeys(data) }
+
 func scanValue(decoder *json.Decoder) error {
 	token, err := decoder.Token()
 	if err != nil {
