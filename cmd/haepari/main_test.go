@@ -2,14 +2,22 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/irootkernel/haepari/internal/client"
+	"github.com/irootkernel/haepari/internal/controller"
+	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/snapshot"
+	"github.com/irootkernel/haepari/internal/state"
 )
 
 func TestVersionIdentity(t *testing.T) {
@@ -146,6 +154,176 @@ func TestUsageRejectsUnsupportedArguments(t *testing.T) {
 		}
 		if errors.Len() == 0 {
 			t.Errorf("%q: rejected without a diagnostic", args)
+		}
+	}
+}
+
+func TestLocalCLIAdmissionWaitAndReplay(t *testing.T) {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		t.Skip("local controller requires Darwin arm64")
+	}
+	parent, err := os.MkdirTemp("/tmp", "hp-cli-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(parent) })
+	root, err := state.Resolve(filepath.Join(parent, "state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HAEPARI_HOME", root.Path)
+	source := filepath.Join(parent, "input")
+	if err := os.MkdirAll(filepath.Join(source, "source"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "source", "input.txt"), []byte("input\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := snapshot.OpenStore(root.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := store.Seal(context.Background(), source, []string{"source/input.txt"}, snapshot.Provenance{EvidenceClass: "development"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- controller.Run(ctx, root) }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("controller shutdown: %v", err)
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Lstat(root.SocketPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("controller socket did not appear")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	resource := managed.ResourceSpec{Schema: "haepari.resource/v1", ID: "local-one", Kind: "local", ExecutionMode: "managed", Capacity: 1, Revision: 1, Adapter: managed.Adapter{QualificationReference: "cli-integration"}, Cleanup: &managed.CleanupPolicy{PolicyReference: "owned-workspace"}}
+	resourceJSON, _ := json.Marshal(resource)
+	resourcePath := filepath.Join(parent, "resource.json")
+	if err := os.WriteFile(resourcePath, resourceJSON, 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, diagnostic bytes.Buffer
+	if code := run([]string{"resource", "register", "--file", resourcePath, "--json"}, &out, &diagnostic); code != 0 {
+		t.Fatalf("register: exit %d: %s", code, diagnostic.String())
+	}
+	digest := strings.Repeat("a", 64)
+	job := managed.JobSpec{Schema: "haepari.job/v1", ExecutionMode: "managed", ResourceID: "local-one", Mode: "auto", Suite: "cli", Input: managed.Input{Root: source, InventoryDigest: strings.TrimPrefix(sealed.Manifest.TreeSHA256, "sha256:"), SelectedFiles: []string{"source/input.txt"}}, Environment: managed.Environment{ProfileID: "local", ProfileDigest: digest}, Workload: managed.Workload{Argv: []string{"/bin/sh", "-c", "mkdir -p ../results; cat input.txt > ../results/out.txt"}, CWD: "source", RequiredOutputs: []string{"results/out.txt"}}, Deadlines: managed.Deadlines{QueueSeconds: 30, PrepareSeconds: 30, RunSeconds: 30, CollectSeconds: 30, CleanupSeconds: 30}, Effects: managed.Effects{Mode: "offline", AuthorizationReference: "cli-integration"}, Provenance: managed.Provenance{CandidateDigest: digest, TestsDigest: digest, TargetProfileDigest: digest, EvidenceClass: "development"}}
+	jobJSON, _ := json.Marshal(job)
+	jobPath := filepath.Join(parent, "job.json")
+	if err := os.WriteFile(jobPath, jobJSON, 0600); err != nil {
+		t.Fatal(err)
+	}
+	submit := func() managed.Receipt {
+		out.Reset()
+		diagnostic.Reset()
+		if code := run([]string{"submit", "--spec", jobPath, "--request-key", "cli-key", "--json"}, &out, &diagnostic); code != 0 {
+			t.Fatalf("submit: exit %d: %s", code, diagnostic.String())
+		}
+		var response struct {
+			Data managed.Receipt `json:"data"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &response); err != nil || response.Data.JobID == "" {
+			t.Fatalf("submit receipt: %+v %v", response, err)
+		}
+		return response.Data
+	}
+	receipt := submit()
+	out.Reset()
+	diagnostic.Reset()
+	if code := run([]string{"wait", receipt.JobID, "--timeout", "5s", "--json"}, &out, &diagnostic); code != 0 {
+		t.Fatalf("wait: exit %d: %s", code, diagnostic.String())
+	}
+	var final struct {
+		Data managed.Result `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &final); err != nil || final.Data.FinalVerdict != managed.Pass {
+		t.Fatalf("wait result: %+v %v", final, err)
+	}
+	if replay := submit(); replay.JobID != receipt.JobID {
+		t.Fatalf("same-key replay created another job: %+v", replay)
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := run([]string{"inspect", receipt.JobID, "--json"}, &out, &diagnostic); code != 0 || !bytes.Contains(out.Bytes(), []byte(`"final_verdict":"PASS"`)) {
+		t.Fatalf("inspect: exit %d: %s %s", code, out.String(), diagnostic.String())
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := run([]string{"run", "--spec", jobPath, "--request-key", "cli-run-key", "--json"}, &out, &diagnostic); code != 0 {
+		t.Fatalf("run: exit %d: %s", code, diagnostic.String())
+	}
+	lines := bytes.Split(bytes.TrimSpace(out.Bytes()), []byte("\n"))
+	if len(lines) != 2 || !bytes.Contains(lines[0], []byte(`"kind":"admission"`)) || !bytes.Contains(lines[1], []byte(`"kind":"final"`)) {
+		t.Fatalf("run NDJSON: %s", out.String())
+	}
+	slow := job
+	slow.Workload.Argv = []string{"/bin/sh", "-c", "sleep 0.3; mkdir -p ../results; cat input.txt > ../results/out.txt"}
+	slowJSON, _ := json.Marshal(slow)
+	if err := os.WriteFile(jobPath, slowJSON, 0600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := run([]string{"submit", "--spec", jobPath, "--request-key", "cli-slow-key", "--json"}, &out, &diagnostic); code != 0 {
+		t.Fatalf("slow submit: exit %d: %s", code, diagnostic.String())
+	}
+	var slowAdmission struct {
+		Data managed.Receipt `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &slowAdmission); err != nil || slowAdmission.Data.JobID == "" {
+		t.Fatalf("slow admission: %+v %v", slowAdmission, err)
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := run([]string{"wait", slowAdmission.Data.JobID, "--timeout", "10ms", "--json"}, &out, &diagnostic); code != 5 || !bytes.Contains(out.Bytes(), []byte(`"code":"WAIT_TIMEOUT"`)) {
+		t.Fatalf("wait timeout: exit %d: %s %s", code, out.String(), diagnostic.String())
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := run([]string{"wait", slowAdmission.Data.JobID, "--timeout", "5s", "--json"}, &out, &diagnostic); code != 0 {
+		t.Fatalf("wait reconnect: exit %d: %s", code, diagnostic.String())
+	}
+}
+
+func TestCLIContractErrorAndVerdictExits(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		want int
+	}{
+		{"CONFLICT", 2}, {"UNSUPPORTED", 2}, {"WAIT_TIMEOUT", 5},
+		{"STORAGE_UNAVAILABLE", 6}, {"TRANSPORT_UNCERTAIN", 6},
+	} {
+		var out, diagnostic bytes.Buffer
+		issue := &client.Issue{Code: tc.code, Message: "bounded explanation", Retry: "none"}
+		envelope := client.Envelope{Schema: "haepari.envelope/v1", Operation: "submit", Error: issue}
+		if got := clientFailure(&out, &diagnostic, envelope, issue); got != tc.want {
+			t.Errorf("%s exit = %d, want %d", tc.code, got, tc.want)
+		}
+		if out.Len() == 0 {
+			t.Errorf("%s error envelope missing", tc.code)
+		}
+	}
+	for _, tc := range []struct {
+		verdict managed.Verdict
+		want    int
+	}{
+		{managed.Pass, 0}, {managed.Fail, 1}, {managed.Incomplete, 3}, {managed.Cancelled, 4},
+	} {
+		if got := verdictExit(tc.verdict); got != tc.want {
+			t.Errorf("%s exit = %d, want %d", tc.verdict, got, tc.want)
 		}
 	}
 }

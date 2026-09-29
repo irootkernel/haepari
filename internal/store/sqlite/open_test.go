@@ -96,4 +96,22 @@ func TestPrivateWALFiles(t *testing.T) {
 			t.Fatalf("SQLite file permissions for %s: %v, %v", name, info, err)
 		}
 	}
+	// Closing the idle connection forces database/sql to use a new driver
+	// connection, where connection-local pragmas must still be in force.
+	db.SetMaxIdleConns(0)
+	for _, setting := range []struct {
+		name string
+		want int
+	}{
+		{"foreign_keys", 1},
+		{"busy_timeout", 5000},
+		{"synchronous", 2},
+		{"fullfsync", 1},
+		{"checkpoint_fullfsync", 1},
+	} {
+		var got int
+		if err := db.QueryRow("PRAGMA " + setting.name).Scan(&got); err != nil || got != setting.want {
+			t.Fatalf("replacement SQLite %s: %d, %v", setting.name, got, err)
+		}
+	}
 }

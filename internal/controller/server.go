@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -57,7 +58,7 @@ func send(w http.ResponseWriter, status int, operation string, data any, issue *
 func reject(w http.ResponseWriter, op string, err error) {
 	code, status, retry := "INVALID_REQUEST", http.StatusBadRequest, "none"
 	switch {
-	case errors.Is(err, managed.ErrConflict):
+	case errors.Is(err, managed.ErrConflict), errors.Is(err, snapshot.ErrChanged):
 		code = "CONFLICT"
 	case errors.Is(err, managed.ErrNotFound):
 		code = "NOT_FOUND"
@@ -70,14 +71,23 @@ func reject(w http.ResponseWriter, op string, err error) {
 	case errors.Is(err, managed.ErrStale):
 		code = "STALE_REVISION"
 		status = http.StatusConflict
-	case errors.Is(err, managed.ErrInvalid), errors.Is(err, snapshot.ErrInvalid), errors.Is(err, snapshot.ErrChanged):
+	case errors.Is(err, managed.ErrInvalid), errors.Is(err, snapshot.ErrInvalid):
 		code = "INVALID_REQUEST"
 	default:
 		code = "STORAGE_UNAVAILABLE"
 		status = http.StatusServiceUnavailable
 		retry = "reconcile"
 	}
-	send(w, status, op, nil, &responseError{Code: code, Message: code, Retry: retry})
+	message := map[string]string{
+		"INVALID_REQUEST":     "The request is malformed or unsafe.",
+		"CONFLICT":            "The request conflicts with existing or changed input.",
+		"NOT_FOUND":           "The requested job or resource was not found.",
+		"RESOURCE_BUSY":       "The resource is occupied or already registered.",
+		"UNSUPPORTED":         "This mode or resource is not supported.",
+		"STALE_REVISION":      "The expected revision is no longer current.",
+		"STORAGE_UNAVAILABLE": "Durable state is unavailable; reconcile before retrying.",
+	}[code]
+	send(w, status, op, nil, &responseError{Code: code, Message: message, Retry: retry})
 }
 func (s *runtimeServer) routes() http.Handler {
 	mux := http.NewServeMux()
@@ -99,7 +109,14 @@ func (s *runtimeServer) routes() http.Handler {
 }
 func decodeBody(r *http.Request, target any) error {
 	defer r.Body.Close()
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20+1))
+	// The CLI accepts a 1 MiB spec. Leave room for the JSON envelope and
+	// bounded request key, and reject any bytes beyond the complete limit.
+	const maxBody = 1<<20 + 4096
+	encoded, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
+	if err != nil || len(encoded) > maxBody {
+		return managed.ErrInvalid
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return managed.ErrInvalid

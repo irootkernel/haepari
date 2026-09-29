@@ -23,6 +23,15 @@ func openLedger(t *testing.T, path string, limit int) (*sql.DB, *Ledger) {
 	return db, l
 }
 
+func TestAdvanceLocalRejectsInvalidPhasePairs(t *testing.T) {
+	var ledger Ledger
+	for _, pair := range [][2]string{{"preparing", "collecting"}, {"ready", "cleaning"}, {"running", "settling"}} {
+		if _, err := ledger.AdvanceLocal("job", 1, pair[0], pair[1], "invalid-transition"); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s -> %s: %v", pair[0], pair[1], err)
+		}
+	}
+}
+
 func noEffectProof() NoEffectProof {
 	return NoEffectProof{ObservationReference: "observed-prerequisite-no-effect", NoOwnedJobEffect: true, NoUnprovenProcess: true, NoProtectedPath: true, PowerReconciled: true}
 }

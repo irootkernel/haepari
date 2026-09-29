@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,23 @@ func TestLocalWalkingSkeleton(t *testing.T) {
 	}
 	defer c.Close()
 	resource := managed.ResourceSpec{Schema: "haepari.resource/v1", ID: "local-one", Kind: "local", ExecutionMode: "managed", Capacity: 1, Revision: 1, Adapter: managed.Adapter{QualificationReference: "isolated-integration"}, Cleanup: &managed.CleanupPolicy{PolicyReference: "owned-workspace"}}
+	for _, unsupported := range []managed.ResourceSpec{
+		func() managed.ResourceSpec { r := resource; r.Capacity = 2; return r }(),
+		func() managed.ResourceSpec {
+			r := resource
+			r.Kind, r.Cleanup = "utm-macos", nil
+			r.Adapter.UTMCtl = "/Applications/UTM.app/Contents/MacOS/utmctl"
+			r.VM = &managed.VM{UTMVMUUID: "11111111-1111-4111-8111-111111111111", MACAddress: "aa:bb:cc:dd:ee:ff", AddressDiscovery: "dhcp-lease-by-mac", GuestJobRoot: "/var/haepari/jobs"}
+			r.Guest = &managed.Guest{ConnectionReference: "ssh-map", KnownHostsReference: "host-key"}
+			return r
+		}(),
+	} {
+		encoded, _ := json.Marshal(unsupported)
+		var issue *client.Issue
+		if _, err := c.Register(context.Background(), encoded); !errors.As(err, &issue) || issue.Code != "UNSUPPORTED" {
+			t.Fatalf("unsupported resource admitted: %+v, %v", unsupported, err)
+		}
+	}
 	resourceJSON, _ := json.Marshal(resource)
 	if _, err := c.Register(context.Background(), resourceJSON); err != nil {
 		t.Fatal(err)
@@ -89,6 +107,22 @@ func TestLocalWalkingSkeleton(t *testing.T) {
 	spec, _ := json.Marshal(job)
 	if _, err := managed.DecodeJob(spec); err != nil {
 		t.Fatalf("fixture job: %v", err)
+	}
+	for _, unsupported := range []managed.JobSpec{
+		func() managed.JobSpec {
+			j := job
+			j.Mode, j.Manual = "manual", &managed.Manual{ScenarioDocument: "scenarios/check.md", RequiredScenarios: []string{"one"}}
+			j.Deadlines.RunSeconds, j.Deadlines.ManualSeconds = 0, 30
+			return j
+		}(),
+		func() managed.JobSpec { j := job; j.Provenance.EvidenceClass = "release-distribution"; return j }(),
+		func() managed.JobSpec { j := job; j.Input.SelectedFiles = nil; return j }(),
+	} {
+		encoded, _ := json.Marshal(unsupported)
+		var issue *client.Issue
+		if _, _, err := c.Submit(context.Background(), encoded, "walk-key"); !errors.As(err, &issue) || issue.Code != "UNSUPPORTED" {
+			t.Fatalf("unsupported job admitted: %+v, %v", unsupported, err)
+		}
 	}
 	// Read only the HTTP status, then discard the admission body. The server
 	// sends 200 after committing admission, so the same key must recover it.
@@ -243,5 +277,26 @@ func TestLocalWalkingSkeleton(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRequestSizeAndChangedSourceMapping(t *testing.T) {
+	// The spec fits the CLI limit while its surrounding request exceeds 1 MiB.
+	valid := `{"spec":"` + strings.Repeat("a", 1<<20-2) + `"}`
+	var input struct {
+		Spec string `json:"spec"`
+	}
+	if err := decodeBody(httptest.NewRequest("POST", "/v1/jobs", strings.NewReader(valid)), &input); err != nil || len(input.Spec) != 1<<20-2 {
+		t.Fatalf("CLI-sized spec rejected: %v, %d", err, len(input.Spec))
+	}
+	oversized := valid + strings.Repeat(" ", 4096)
+	if err := decodeBody(httptest.NewRequest("POST", "/v1/jobs", strings.NewReader(oversized)), &input); !errors.Is(err, managed.ErrInvalid) {
+		t.Fatalf("oversized trailing whitespace accepted: %v", err)
+	}
+	reply := httptest.NewRecorder()
+	reject(reply, "submit", snapshot.ErrChanged)
+	var envelope client.Envelope
+	if err := json.Unmarshal(reply.Body.Bytes(), &envelope); err != nil || envelope.Error == nil || envelope.Error.Code != "CONFLICT" || envelope.Error.Message == envelope.Error.Code || envelope.Error.Retry != "none" {
+		t.Fatalf("changed source response: %+v, %v", envelope, err)
 	}
 }
