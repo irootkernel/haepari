@@ -55,6 +55,9 @@ func probeGroupParent(root string) int {
 }
 
 func probeController(root string) int {
+	if err := os.WriteFile(filepath.Join(root, "controller.pid"), []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+		return 1
+	}
 	if _, err := os.Stat(filepath.Join(root, "runner.pid")); err == nil {
 		if err := os.WriteFile(filepath.Join(root, "restarted"), []byte(strconv.Itoa(os.Getpid())), 0600); err == nil {
 			return 0
@@ -185,11 +188,28 @@ var _ = ginkgo.Describe("AquaLaunchAgentLeavesIndependentRunnerAlive", ginkgo.La
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		assertProbeRunner(t, runnerPID)
+		controllerPID, err := readProbePID(root, "controller.pid")
+		if err != nil {
+			t.Fatalf("initial controller identity: %v", err)
+		}
+		// The runner can become ready before the controller has exited, especially
+		// with the race detector's exit delay. Kickstart does not restart a live service.
+		if err := waitProbeGroupGone(controllerPID, 5*time.Second); err != nil {
+			t.Fatalf("initial controller did not exit before restart: %v", err)
+		}
+		assertProbeRunner(t, runnerPID)
 		if out, err := exec.Command("/bin/launchctl", "kickstart", target).CombinedOutput(); err != nil {
 			t.Fatalf("restart Aqua probe: %v: %s", err, out)
 		}
 		if err := waitProbeFile(filepath.Join(root, "restarted")); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		}
+		restartedPID, err := readProbePID(root, "restarted")
+		if err != nil || restartedPID == controllerPID {
+			t.Fatalf("controller restart identity: initial=%d restarted=%d err=%v", controllerPID, restartedPID, err)
+		}
+		if err := waitProbeGroupGone(restartedPID, 5*time.Second); err != nil {
+			t.Fatalf("restarted controller did not exit: %v", err)
 		}
 		assertProbeRunner(t, runnerPID)
 		currentPID, err := os.ReadFile(filepath.Join(root, "runner.pid"))

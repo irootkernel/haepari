@@ -1,6 +1,6 @@
 # TASK-004 macOS supervision decision record
 
-Observation date: 2026-09-29. Scope: general host supervision and local storage on the owner-operated development Mac. This is not a product restart-reconciliation, VM, power-loss, or release qualification.
+Observation dates: 2026-09-29 and 2026-09-30. Scope: general host supervision and local storage on the owner-operated development Mac. This is not a product restart-reconciliation, VM, power-loss, or release qualification.
 
 ## Environment and method
 
@@ -19,7 +19,43 @@ After the SQLite connection-setting correction, the gate was re-run uncached on 
 
 After the local execution correction, the same uncached gate was re-run on committed source `95784694c7e2ff11e230e94291f417f913c802cf` on this host and exited 0. The focused controller group case used `internal/controller/local.go` blob `3d5ddfc0e2b9fb71eab59124508e29b2129e3fa1` and `internal/controller/local_integration_test.go` blob `c75ca93e33ee2a66249381008c4794d0ba1629d8`; these supersede their previous blob identities for current consumers. The platform, Makefile, SQLite, and state probe inputs listed above are unchanged. The uncached platform, SQLite/state, and owned-background-group cases passed; this does not extend the qualification boundary below.
 
-On this candidate, `make test-macos-supervision` exited 0. The uncached platform suite passed the Aqua LaunchAgent survival/restart, 103/104-byte socket, local `F_FULLFSYNC`, and escaped-descendant probes. The uncached SQLite/state suites and the focused owned-background-group integration case also passed. `make check` and `python3 docs/tools/validate_docs.py` passed for the candidate documentation. The generated `docs/checks.json` reports only what its documentation validator executes; it does not report the separate host gate.
+On the original TASK-004 candidate, `make test-macos-supervision` exited 0. The uncached platform suite passed the Aqua LaunchAgent survival/restart, 103/104-byte socket, local `F_FULLFSYNC`, and escaped-descendant probes. The uncached SQLite/state suites and the focused owned-background-group integration case also passed. `make check` and `python3 docs/tools/validate_docs.py` passed for that candidate documentation. The generated `docs/checks.json` reports only what its documentation validator executes; it does not report the separate host gate.
+
+### Ginkgo gate requalification (2026-09-30)
+
+The common test-contract commit `dbe740783fe42ac578dd264e0316d47a4620ad21` changed the Make runner and probe tests without re-running this host gate. The first requalification attempt failed: `AquaLaunchAgentLeavesIndependentRunnerAlive` timed out waiting for the restarted controller. A separate bounded helper observation showed that the race-enabled initial controller was still alive when `runner.pid` appeared, and exited about one second later. Calling `launchctl kickstart` while that controller was still running did not establish a restart.
+
+The corrected probe records the initial controller PID, waits for its process group to disappear before kickstart, checks the surviving runner before and after restart, and requires a different controller PID in the restart receipt. It also waits for the restarted controller to exit before the final runner survival and identity checks. Each controller-exit wait is bounded at five seconds and fails closed. It retains the race detector and the existing cleanup checks.
+
+The first corrected host gate passed with `internal/platform/supervision_darwin_test.go` blob `e827502d1064fa89086c1af7448ccccad1cfebd9`. The final successful run, including the restarted-controller exit check, used base commit `dbe740783fe42ac578dd264e0316d47a4620ad21` plus the uncommitted corrected test blob `48ff26dd3540fd98b509dcb7c22608a222ce635f`. All other source and test inputs came from that base commit; documentation changes do not alter them. The following runner and test blobs supersede the corresponding earlier identities:
+
+| Input | Git blob |
+| --- | --- |
+| `Makefile` | `e9f87f50f09799ab3ea074b1c5d3674501dd3200` |
+| `go.mod` | `28ccf2ea94131072eb372295f6fc0c89c7410058` |
+| `go.sum` | `c1e1c187dc23a291500c70e68733cab1cebc8ae4` |
+| `internal/platform/suite_test.go` | `20daed5e7256d7330fccf46d998fcf891d2e8006` |
+| `internal/store/sqlite/open_test.go` | `c3d1bb416821390a681b781cb1d69f0a966db536` |
+| `internal/store/sqlite/suite_test.go` | `d95d2725262baf5994b6b15036713653db5d38d5` |
+| `internal/state/root_test.go` | `01ddbdd0d29f11d222f7eaf2c7fc6377421b215b` |
+| `internal/state/suite_test.go` | `b644ae8600ed5bcec697f322905b6ebe5d73f919` |
+| `internal/controller/local_integration_test.go` | `5bdfaa275702398d5925938bb195a9287afec19b` |
+| `internal/controller/suite_test.go` | `fa1ab13b78ca9d60c8faa2a25a84b402598842e2` |
+
+The product-source probe inputs are unchanged at this base: `internal/store/sqlite/open.go` blob `f57b497d7d0f5e43fe417630d07c8a397d4069a6`, `internal/state/root.go` blob `79a51dc09630e0b56705ad56c03e52e6787343d7`, and `internal/controller/local.go` blob `3d5ddfc0e2b9fb71eab59124508e29b2129e3fa1` match their previously recorded identities.
+
+On the same macOS 27.0 (26A428), Darwin arm64 host and Aqua `gui/501` session, using Go 1.27.1 and the pinned SQLite v1.59.0, `make test-macos-supervision` exited 0. The uncached, race-enabled Ginkgo stages passed all four selected platform probes, three SQLite integration specs, six state unit specs and the single `OwnedBackgroundGroupIsStopped` controller integration spec. Other specs were excluded by the declared label/focus filters, not used as acceptance evidence. A post-run inspection found no task-namespaced LaunchAgent, platform probe process or retained LaunchAgent/escaped-group scratch directory. `go vet -tags=macos_supervision ./internal/platform` also passed. The common `make test` aggregate was not re-run for this correction; the host gate and documentation checks are the evidence for this bounded refresh. The earlier observations remain historical; qualification still excludes product service restart reconciliation, real UTM and sudden power loss.
+
+The implementing coordinator executed the final gate and inspected its terminal output. Its bounded Ginkgo output projection was:
+
+| Suite / selection | Ran / available | Passed | Failed | Filter-excluded |
+| --- | --- | --- | --- | --- |
+| Platform / `macos-supervision` | 4 / 5 | 4 | 0 | 1 |
+| SQLite / `integration` | 3 / 3 | 3 | 0 | 0 |
+| State / `unit` | 6 / 6 | 6 | 0 | 0 |
+| Controller / `integration`, `OwnedBackgroundGroupIsStopped` | 1 / 17 | 1 | 0 | 16 |
+
+All four stages reported `PASS` and `Test Suite Passed`; the Make process exited 0. This is coordinator-observed execution evidence, separate from the static reviewer assessment and the documentation validator.
 
 The supervision test bootstraps a one-shot, task-namespaced LaunchAgent into the existing Aqua session. Its plist sets `LimitLoadToSessionType=Aqua` and `AbandonProcessGroup=true`. A test helper stands in for the controller, starts a second helper with `Setsid=true`, and exits. `launchctl kickstart` runs the controller helper again without starting a second runner. Cleanup releases the runner and boots out the LaunchAgent. This test does not install the development service owned by TASK-011.
 
