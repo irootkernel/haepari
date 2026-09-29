@@ -1,6 +1,6 @@
 # Haepari
 
-Haepari is an independent Go CLI and local controller for managed command jobs. The current implementation is the TASK-001 bootstrap: it can report its identity and start an isolated foreground controller, but it cannot yet submit or run a Job. The [development package](docs/README.md) owns the planned contracts and roadmap.
+Haepari is an independent Go CLI and local controller for managed command jobs. The TASK-001 bootstrap can report its identity and start an isolated foreground controller. TASK-002 adds provisional internal managed schemas and a durable state ledger. The CLI cannot yet submit or run a Job. The [development package](docs/README.md) owns the planned contracts and roadmap.
 
 ## Build and check
 

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/state"
 	"github.com/irootkernel/haepari/internal/store/sqlite"
 )
@@ -26,6 +27,9 @@ func Run(ctx context.Context, root state.Root) error {
 		return err
 	}
 	defer db.Close()
+	if _, err := managed.NewLedger(db, 1); err != nil {
+		return fmt.Errorf("initialize managed state: %w", err)
+	}
 	if _, err := os.Lstat(root.SocketPath); err == nil {
 		return fmt.Errorf("%w: %s; see README stale-socket recovery", ErrSocketExists, root.SocketPath)
 	} else if !os.IsNotExist(err) {
@@ -100,6 +104,10 @@ func listenPrivate(path string, inspect func(string) (os.FileInfo, error), prote
 	if original.Mode()&os.ModeSocket == 0 {
 		cleanup()
 		return nil, nil, fmt.Errorf("temporary control socket was replaced")
+	}
+	if err := protect(temporary); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("protect temporary control socket: %w", err)
 	}
 	// Linking publishes the bound socket without replacing an existing path.
 	if err := os.Link(temporary, path); err != nil {

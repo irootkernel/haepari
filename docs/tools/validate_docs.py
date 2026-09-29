@@ -401,7 +401,7 @@ def main():
     diff = git("diff", "--check")
     results["worktree_diff_check"] = "not run" if diff is None else record(
         "diff_check", [l for l in diff.stdout.splitlines() if l.strip()])
-    results["schema_validation"] = "not run; no implemented JSON schemas exist"
+    results["schema_validation"] = "not run; no standalone JSON Schema documents exist (Go decoder tests are separate)"
 
     counts = {
         "requirements": {"total": len(reqs), "active": sum(v["active"] for v in reqs.values()),

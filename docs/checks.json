@@ -15,7 +15,7 @@
     "qualified_cross_project_ids": "passed",
     "deferred_terms_in_active_text": "passed",
     "worktree_diff_check": "passed",
-    "schema_validation": "not run; no implemented JSON schemas exist",
+    "schema_validation": "not run; no standalone JSON Schema documents exist (Go decoder tests are separate)",
     "stated_counts_match": "passed",
     "collision_id_review_lines": "8 lines listed for manual review (not a failure)"
   },

@@ -14,7 +14,7 @@ The [local Job](job-local.template.json) and [local resource](resource-local.tem
 
 The [controller configuration](config.template.json) demonstrates every field of the closed `haepari.config/v1` shape defined by the [configuration contract](../contracts/configuration.md), including the default global limit of one and host macOS guest limit of one. Resources are registered separately. Placeholder paths and identities are not executable defaults.
 
-The [local result](result-local.template.json) shows distinct job, resource availability, workload, evidence, cleanup, verdict and `timings` fields. The [VM job](job-vm.template.json) uses a queue deadline that leaves room for one maximal job ahead on a capacity-one resource. It is illustrative; no result schema implementation exists yet.
+The [local result](result-local.template.json) shows distinct job, resource availability, workload, evidence, cleanup, verdict and `timings` fields. TASK-002 provides a provisional internal validator and durable result record; the CLI does not expose Job submission or results yet. The [VM job](job-vm.template.json) uses a queue deadline that leaves room for one maximal job ahead on a capacity-one resource.
 
 The [VM resource](resource-macos.template.json) names one persistent UTM VM by UUID, MAC address and pinned SSH host key, with automatic capacity-driven stop disabled unless the operator explicitly allows it. Haepari never clones, resets or deletes that VM (ADR-0018).
 

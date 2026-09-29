@@ -37,8 +37,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 8388,
-      "sha256": "7cc80d99092126c38b84dfd7201d15caa9c7b1f5cceff9d40d8afd8cc1f9fdfe"
+      "bytes": 8516,
+      "sha256": "f7494b08dc6889b80f147b2b90f6920da6cb174af263f9c31acadc30f410bc88"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -152,8 +152,8 @@
     },
     {
       "path": "checks.json",
-      "bytes": 1734,
-      "sha256": "6f7d7eacdc655710f87982b184ba413611e4e2114f0259a96c6e22f7f7354bba"
+      "bytes": 1774,
+      "sha256": "30e8c8f9aa2463f82dc7fa2ee423372a2cec45455285d257d7d9808dffd69181"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -162,8 +162,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 18049,
-      "sha256": "2e8e8e197a608c3a35b7bc437f1808f0e026879b44aef573996cd25485c28fdb"
+      "bytes": 20907,
+      "sha256": "642dff1cb07815522618e655cc7a43801f10d7a8f1d6334eed0e42e98923b3f7"
     },
     {
       "path": "contracts/configuration.md",
@@ -197,8 +197,8 @@
     },
     {
       "path": "examples/README.md",
-      "bytes": 3186,
-      "sha256": "0bb2ce692038d7356b0c02a1e1f67d947e161338416eefbe8fbc0c2477942ffc"
+      "bytes": 3255,
+      "sha256": "a6fbae05b40d02d8a0053ca31639b11c31187e1fc191072b56049f57b70a5bc5"
     },
     {
       "path": "examples/config.template.json",
@@ -307,13 +307,13 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11137,
-      "sha256": "2dd150d150983d96693e213c187d53020870ac09402861c954f1b05fcd1b9c19"
+      "bytes": 11148,
+      "sha256": "d7c9e3ed0a15773a5fd1321a80802568885c92c5815c23d5048ac9b1b0bf5228"
     },
     {
       "path": "roadmap/EPIC-001.md",
       "bytes": 10929,
-      "sha256": "1b490d8d00def35b42b8f9a1384a8ef9fa724851ac4c528b7cddc0ecc7aad07f"
+      "sha256": "2fa18a53e69e970133ff1fb1c7be548a05359f683f254f6e066a6f609a64262e"
     },
     {
       "path": "roadmap/EPIC-002.md",
@@ -407,8 +407,8 @@
     },
     {
       "path": "tools/validate_docs.py",
-      "bytes": 21507,
-      "sha256": "206934085302ad859147fbd9091bb3070741e84612c248a70a341be706a6479d"
+      "bytes": 21547,
+      "sha256": "823f4cdd3e3409b3037a4152016cb50690c9578566421b648509a958f534c298"
     },
     {
       "path": "traceability.md",

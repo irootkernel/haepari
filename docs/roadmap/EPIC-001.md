@@ -41,24 +41,24 @@ Requirement coverage: `HP-REQ-001`, `HP-REQ-002`.
 Requirement coverage: `HP-REQ-003`, `HP-REQ-062`.
 
 #### Implement
-- [ ] Define initial managed schemas, capacity accounting, invariants and examples. Mark them provisional during internal implementation.
-- [ ] Define the separate workload/evidence/cleanup/verdict fields, the common final-verdict decision table, `not_needed` no-effect paths, VM automatic-stop policy and power-transition identities, and protected-evidence references in the provisional contracts.
-- [ ] Define reserved no-effect `settling -> finished` with one lease/capacity return and unchanged resource availability, plus the VM-local `available -> paused` `vm_unavailable` row. Specify exact Job/resource/slot/lease and predecessor/successor revision fences, pause-before-release ordering, and replay receipts without adding a lifecycle state.
-- [ ] Keep closed job/resource/result/envelope schemas, lifecycle/outcome enums, error codes, CLI exit codes, canonicalization, event cursors and manual results provisional. Later tasks record changes from TASK-033 and failure evidence. This task does not freeze the contract; freeze gate F1 (TASK-012) and gate F2 (TASK-016) do.
+- [x] Define initial managed schemas, capacity accounting, invariants and examples. Mark them provisional during internal implementation.
+- [x] Define the separate workload/evidence/cleanup/verdict fields, the common final-verdict decision table, `not_needed` no-effect paths, VM automatic-stop policy and power-transition identities, and protected-evidence references in the provisional contracts.
+- [x] Define reserved no-effect `settling -> finished` with one lease/capacity return and unchanged resource availability, plus the VM-local `available -> paused` `vm_unavailable` row. Specify exact Job/resource/slot/lease and predecessor/successor revision fences, pause-before-release ordering, and replay receipts without adding a lifecycle state.
+- [x] Keep closed job/resource/result/envelope schemas, lifecycle/outcome enums, error codes, CLI exit codes, canonicalization, event cursors and manual results provisional. Later tasks record changes from TASK-033 and failure evidence. This task does not freeze the contract; freeze gate F1 (TASK-012) and gate F2 (TASK-016) do.
 
 #### Do not
-- [ ] Do not allow unknown JSON to trigger best-effort execution or add a second source of lifecycle truth.
+- [x] Do not allow unknown JSON to trigger best-effort execution or add a second source of lifecycle truth.
 
 #### Verify
-- [ ] Test malformed/duplicate/unknown fields, missing required output, invalid transitions, stale revisions and table-driven final verdict combinations, including known workload failure with missing evidence or failed cleanup, cancellation and deadlines.
-- [ ] Cover reserved cancellation and proven no-effect preparation failure with `not_needed` cleanup, queued cancellation with no occupancy, replay/restart with no second capacity return, paused/quarantined availability preservation, and a stale VM-local failure observation that cannot pause a newer registration.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Test malformed/duplicate/unknown fields, missing required output, invalid transitions, stale revisions and table-driven final verdict combinations, including known workload failure with missing evidence or failed cleanup, cancellation and deadlines.
+- [x] Cover reserved cancellation and proven no-effect preparation failure with `not_needed` cleanup, queued cancellation with no occupancy, replay/restart with no second capacity return, paused/quarantined availability preservation, and a stale VM-local failure observation that cannot pause a newer registration.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-003
 
