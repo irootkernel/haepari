@@ -147,6 +147,11 @@ func TestUsageRejectsUnsupportedArguments(t *testing.T) {
 		{"capabilities"}, {"daemon", "run", "extra"},
 		{"daemon", "run", "--backend"}, {"daemon", "run", "--nope"},
 		{"runner"}, {"unknown"},
+		{"resource", "register"}, {"resource", "register", "--file", "resource.json"},
+		{"submit"}, {"submit", "--spec", "job.json", "--json"},
+		{"run"}, {"run", "--spec", "job.json"},
+		{"wait", "job"}, {"wait", "job", "--json", "--timeout", "0s"},
+		{"wait", "job", "--json", "--timeout", "25h"},
 	} {
 		var output, errors bytes.Buffer
 		if code := run(args, &output, &errors); code != 2 {
@@ -155,6 +160,29 @@ func TestUsageRejectsUnsupportedArguments(t *testing.T) {
 		if errors.Len() == 0 {
 			t.Errorf("%q: rejected without a diagnostic", args)
 		}
+	}
+}
+
+func TestUnavailableControllerDiagnostic(t *testing.T) {
+	parent, err := os.MkdirTemp("/tmp", "hp-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(parent) })
+	root, err := state.Resolve(filepath.Join(parent, "state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HAEPARI_HOME", root.Path)
+	var output, diagnostic bytes.Buffer
+	if code := run([]string{"inspect", "job", "--json"}, &output, &diagnostic); code != 6 {
+		t.Fatalf("unavailable controller exit %d: %s", code, diagnostic.String())
+	}
+	if !strings.Contains(diagnostic.String(), "check the daemon and HAEPARI_HOME") {
+		t.Fatalf("missing recovery hint: %s", diagnostic.String())
 	}
 }
 

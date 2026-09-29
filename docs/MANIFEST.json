@@ -4,7 +4,7 @@
   "revision_date": "2026-09-28",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 78,
+    "package_files_excluding_manifest": 79,
     "requirements": {
       "total": 81,
       "active": 64,
@@ -30,20 +30,25 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 64,
+    "markdown_documents": 65,
     "json_templates": 11,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 8768,
-      "sha256": "078256f6fda6aff56035fb03894713b2630bfbdca6b94619335df9aa46e6fc85"
+      "bytes": 8863,
+      "sha256": "9fc2f72d5a82d61cf252fe2ee3b91afbaa615e20daa25e781430fa8b88070f00"
     },
     {
       "path": "REVISION-NOTES.md",
       "bytes": 14871,
       "sha256": "ba770d9a876671f2d13d6aeaa3219c247cae7958f6121db87772223caabeb72a"
+    },
+    {
+      "path": "TODO.md",
+      "bytes": 2894,
+      "sha256": "9a48c4eb5c061fc05d0616e6d82b6b9843616ae3c5d37e23a361941035db4b7a"
     },
     {
       "path": "aquarium-adoption.md",
@@ -147,13 +152,13 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 27783,
-      "sha256": "8a8f89823774481395305279db37df8a6353ad6457a550184a6f70460f7b38d5"
+      "bytes": 28425,
+      "sha256": "8034e4432c55aa1d24abb6c484a902c011cde044fec3e62aa66beedfc61df263"
     },
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "e698e97c32dfa32d8b6ee6a81648c93706d5641eae974955fe6a9975461b8500"
+      "sha256": "f5f8f9dc8711f0d8fb2866e51326243b9fb37b31830b01e0439f4e9dd4206628"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -162,8 +167,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 22224,
-      "sha256": "01a39a1fe6804ac2d11ef5e68c634bcf962d324531293bab484e0fe5ca3d2fd4"
+      "bytes": 22290,
+      "sha256": "d54b95fb806e88a34fd9135f70f92b87ea0a21aaa9720c6ab7719a4d00ec224d"
     },
     {
       "path": "contracts/configuration.md",
@@ -287,8 +292,8 @@
     },
     {
       "path": "package-validation.md",
-      "bytes": 8580,
-      "sha256": "810b631d41f7ffe573f85d668e93813311364d3e522a4fe8f670962654f10856"
+      "bytes": 8686,
+      "sha256": "472cdecc90acd92f18960785b3cb44d296e7ef1ea052465efad544dffab9d067"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",

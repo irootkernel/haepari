@@ -125,7 +125,7 @@ func connect(stderr io.Writer) (*client.Client, int) {
 	}
 	c, err := client.Connect(context.Background(), root)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintf(stderr, "cannot connect to Haepari controller: %v (check the daemon and HAEPARI_HOME)\n", err)
 		return nil, 6
 	}
 	return c, 0
@@ -172,7 +172,11 @@ func register(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	path := flags.String("file", "", "resource file")
 	jsonFlag := flags.Bool("json", false, "JSON response")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || !*jsonFlag {
+	if flags.Parse(args) != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || *path == "" || !*jsonFlag {
+		fmt.Fprintln(stderr, "usage: haepari resource register --file <json> --json")
 		return 2
 	}
 	spec, err := readSpec(*path)
@@ -197,7 +201,15 @@ func submit(args []string, stdout, stderr io.Writer, blocking bool) int {
 	path := flags.String("spec", "", "job spec")
 	key := flags.String("request-key", "", "persisted request key")
 	jsonFlag := flags.Bool("json", false, "JSON response")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || *key == "" || (!blocking && !*jsonFlag) {
+	if flags.Parse(args) != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || *path == "" || *key == "" || (!blocking && !*jsonFlag) {
+		if blocking {
+			fmt.Fprintln(stderr, "usage: haepari run --spec <json> --request-key <key> [--json]")
+		} else {
+			fmt.Fprintln(stderr, "usage: haepari submit --spec <json> --request-key <key> --json")
+		}
 		return 2
 	}
 	spec, err := readSpec(*path)
@@ -266,7 +278,11 @@ func wait(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	timeout := flags.Duration("timeout", 5*time.Minute, "caller wait timeout")
 	jsonFlag := flags.Bool("json", false, "JSON response")
-	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || !*jsonFlag || *timeout <= 0 {
+	if flags.Parse(args[1:]) != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || !*jsonFlag || *timeout <= 0 || *timeout > 24*time.Hour {
+		fmt.Fprintln(stderr, "usage: haepari wait <job-id> [--timeout <duration up to 24h>] --json")
 		return 2
 	}
 	c, code := connect(stderr)

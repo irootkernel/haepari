@@ -36,6 +36,8 @@ Use a small Go module with these conceptual packages. Directory names may change
 | `transport/local` | Unix-socket API and blocking event delivery | Application services |
 | `cmd/haepari` | CLI, daemon, runner entrypoints | Application wiring |
 
+In the TASK-033 slice, `internal/managed` holds the domain rules and the SQLite ledger schema and queries, while `internal/store/sqlite` configures the connection. `internal/snapshot` implements sealed input bundles. `internal/controller` currently combines application scheduling, the Unix-socket transport, and local execution and settlement; `internal/client` implements the socket client, and `cmd/haepari` wires the CLI and foreground daemon. A separate runner entrypoint and VM adapter remain with TASK-009 and TASK-013–016. The table names intended responsibilities rather than claiming a one-to-one mapping to current directories.
+
 Dependencies point toward domain and application contracts. UTM names, AppleScript, SSH, skill paths, and Aquarium release rules do not enter the scheduler package. Avoid an in-process plugin ABI or a plugin marketplace in v0.1.0. Registered adapter commands are trusted local configuration, not executable hooks supplied by a submitted repository.
 
 ## Process and installation model
