@@ -16,3 +16,7 @@
 !.gaori/tester/rules/
 .gaori/tester/rules/*
 !.gaori/tester/rules/*.yaml
+
+/.venv/
+/.pytest_cache/
+__pycache__/

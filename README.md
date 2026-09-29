@@ -8,11 +8,13 @@ Use Go 1.27.1 on macOS arm64:
 
 ```sh
 make build
-make check
+make test
 ./bin/haepari version --json
 ```
 
-`make test-macos-supervision` is the uncached macOS arm64 host probe for the bounded TASK-004 decisions recorded in [its evidence](docs/records/TASK-004-macos-supervision.md). `make test-utm` remains the later real-VM gate. `make check` does not run either gate. No host service is installed by these targets.
+`make test` is the serial prepare, unit, integration, and isolated local CLI E2E gate; `make check` is its alias. E2E automatically syncs the pinned pytest harness and may contact the Python package index on first use. Prepare formats Go source, so review any unrelated dirty Go files before running it. [TESTING.md](TESTING.md) documents every stage, the private E2E state root, and failure behavior.
+
+`make test-macos-supervision` is the separate macOS arm64 host probe for the bounded TASK-004 decisions recorded in [its evidence](docs/records/TASK-004-macos-supervision.md). `make test-utm` remains the later real-VM gate and fails until TASK-016. The common gate does not run either host/VM gate or install a host service.
 
 ## Isolated foreground controller
 

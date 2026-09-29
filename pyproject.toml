@@ -1,0 +1,12 @@
+[project]
+name = "haepari-e2e-harness"
+version = "0.0.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/e2e"]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
