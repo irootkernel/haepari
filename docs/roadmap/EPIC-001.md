@@ -11,28 +11,28 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-001`, `HP-REQ-002`.
 
 #### Implement
-- [ ] Create the Go module, native CLI/daemon/runner entrypoint structure, platform build matrix, private state-root resolver and machine-readable identity. Select and pin a supported Go toolchain and pure-Go SQLite dependency after primary-documentation and build verification.
-- [ ] Record the bootstrap decisions. The owner confirmed these on 2026-09-28; they follow sibling repositories:
+- [x] Create the Go module, native CLI/daemon/runner entrypoint structure, platform build matrix, private state-root resolver and machine-readable identity. Select and pin a supported Go toolchain and pure-Go SQLite dependency after primary-documentation and build verification.
+- [x] Record the bootstrap decisions. The owner confirmed the repository choices on 2026-09-28 using sibling repositories; the host observation is dated separately:
   - Module path: `github.com/irootkernel/haepari`, as used by seongge, mulgae, gaori and sanho.
   - License: MIT, as used by gaebokchi, mulgae, podway and sorage.
   - Root `README.md` and `AGENTS.md`: authority summary, commands and prohibited actions.
   - Make targets: `build`, `test`, `lint`, `test-integration` and a combined `check`, plus the explicit real-environment gates `test-macos-supervision` and `test-utm`.
   - CI: local `make check` is the required gate. Hosted CI is optional and never runs real UTM.
-  - Supported macOS test environment and its owner.
-- [ ] Tests create Unix sockets under a short private root such as `/tmp/hp-<random>`. macOS limits `sun_path` to 104 bytes, and `t.TempDir()` paths can exceed it.
+  - Supported bootstrap test environment: the Haepari owner-operated macOS 27.0 arm64 development host (build 26A428), observed on 2026-09-29. The Haepari project owner owns this host's isolated checks and the TASK-004 supervision record; other macOS versions remain unqualified.
+- [x] Tests create Unix sockets under a short private root such as `/tmp/hp-<random>`. macOS limits `sun_path` to 104 bytes, and `t.TempDir()` paths can exceed it.
 
 #### Do not
-- [ ] Do not install or replace any host service, create Aquarium coupling, or claim a platform from cross-compilation alone.
+- [x] Do not install or replace any host service, create Aquarium coupling, or claim a platform from cross-compilation alone.
 
 #### Verify
-- [ ] Build each target, exercise isolated local startup/version, reject unsupported platform/backend selection, and record dependency/license review.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Build each target, exercise isolated local startup/version, reject unsupported platform/backend selection, and record dependency/license review.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-002
 

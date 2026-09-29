@@ -1,6 +1,6 @@
 # Haepari v0.1.0 development package
 
-Status: implementation plan. No software, installed service, accepted product test result, or published release is supplied by this package. The only recorded observation is the TASK-034 host probe ([record](records/TASK-034-utm-probe.md)).
+Status: implementation in progress. TASK-001 has a candidate Go bootstrap with identity reporting and an isolated foreground controller. Managed Job submission, installed service, accepted product test results, and a published release are not yet supplied. The TASK-034 host probe remains the only accepted real-environment observation ([record](records/TASK-034-utm-probe.md)).
 
 Haepari is an independent Go CLI and local daemon for durable resource scheduling. Managed execution covers local commands and UTM macOS VM tests through one durable controller, capacity ledger, and fenced safe-return path. Cooperating tools, such as Mulgae reviews, can queue on advisory named locks. Public external leases are deferred. Aquarium is the first planned consumer; Haepari has no runtime dependency on Aquarium or its tools.
 
@@ -46,7 +46,7 @@ The Aquarium repository's `docs/roadmap/README.md` owns Aquarium IDs and status.
 
 Examples are illustrative design fixtures. They are not working scripts or production-ready configuration. Placeholder identities must be rejected by the implemented validators. No real credentials or current private runtime data are included.
 
-External facts are identified in [sources](sources.md). All architecture choices and acceptance criteria are proposed product contracts, not claims that existing software already implements them. The package preserves the user's settled direction; any later material scope change needs a recorded decision.
+External facts are identified in [sources](sources.md). Architecture choices and acceptance criteria remain target contracts; the TASK-001 bootstrap implements only its stated subset. The package preserves the user's settled direction; any later material scope change needs a recorded decision.
 
 Documentation check results are recorded in [package validation](package-validation.md) and reproducible with `docs/tools/validate_docs.py`. The Aquarium-owned inspector warning is tracked in [external requests](to-external.md) §1.3.
 

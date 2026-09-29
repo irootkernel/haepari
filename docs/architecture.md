@@ -1,6 +1,6 @@
 # Haepari architecture
 
-Target: v0.1.0. This document specifies intended behavior, not an implemented system.
+Target: v0.1.0. This document specifies the intended system. The TASK-001 candidate implements identity reporting, a private foreground controller root, SQLite opening, and a Unix socket; managed Job behavior remains planned.
 
 ## System boundary
 
@@ -42,15 +42,15 @@ Dependencies point toward domain and application contracts. UTM names, AppleScri
 
 One Go executable provides the CLI, `daemon run`, and transient `runner` subcommands. A stable installed release runs the controller. The guest runner is the same tested release or an explicitly compatible, checksum-bound runner artifact; it travels with each job's sealed bundle instead of being preinstalled in the guest, so a Haepari update does not require changing the VM. Its identity is recorded in the result.
 
-Default private state is `~/.haepari/`; `HAEPARI_HOME` may select an explicit absolute local path for an isolated instance. The root contains `control.sock`, `controller.lock`, `state.sqlite`, immutable `objects/`, owned `jobs/`, and private diagnostics. Use mode 0700 for owned directories and 0600 for control/socket/database files where applicable. Output exports require an explicit destination. Do not place the database on a shared network filesystem.
+Default private state is `~/.haepari/`; `HAEPARI_HOME` may select an explicit absolute local path for an isolated instance. TASK-001 creates only the final state-root component; its parent must already exist. The root contains `control.sock`, `controller.lock`, `state.sqlite`, immutable `objects/`, owned `jobs/`, and private diagnostics. Use mode 0700 for owned directories and 0600 for control/socket/database files where applicable. Output exports require an explicit destination. Do not place the database on a shared network filesystem.
 
 An explicitly installed per-user launchd service may supervise the macOS controller. Linux service packaging is deferred. Foreground `daemon run` remains available for development. Service installation does not enroll a VM or copy credentials. Stable controller updates require a drained or reconciled instance; installing a candidate must not replace the controller currently orchestrating its test.
 
-A process-level exclusive lock spans daemon lifetime. The daemon acquires it before opening or repairing the control socket and before dispatch. It does not kill a competing daemon. Socket peer ownership must be checked where supported; filesystem permissions remain mandatory. Same-user code execution is outside the isolation guarantee.
+A process-level exclusive lock spans daemon lifetime. TASK-005 owns this lock; the TASK-001 bootstrap only refuses an existing socket. The daemon acquires the lock before opening or repairing the control socket and before dispatch. It does not kill a competing daemon. Socket peer ownership must be checked where supported; filesystem permissions remain mandatory. Same-user code execution is outside the isolation guarantee.
 
 ## Persistence model
 
-Use SQLite with a pinned pure-Go driver, explicit transactions, foreign keys, a bounded busy timeout, WAL on a supported local filesystem, and FULL synchronous durability for control state. The exact Go toolchain and dependency versions are selected and committed during TASK-001; no document claims a current package version. SQLite permits one writer at a time; keep transactions short and never hold one across a subprocess or network call. See [S4 and S5](sources.md).
+Use SQLite with a pinned pure-Go driver, explicit transactions, foreign keys, a bounded busy timeout, WAL on a supported local filesystem, and FULL synchronous durability for control state. TASK-001 pins the Go toolchain and dependencies in `go.mod`; ADR-0001 records the choice. SQLite permits one writer at a time; keep transactions short and never hold one across a subprocess or network call. See [S4 and S5](sources.md).
 
 | Logical table | Essential fields |
 | --- | --- |

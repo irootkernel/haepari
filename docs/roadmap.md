@@ -1,6 +1,6 @@
 # Haepari roadmap
 
-Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. All active tasks are Planned except TASK-034, whose host probe is Accepted. EPIC-004 remains Planned until its implementation begins; EPIC-008 is Deferred. No product implementation or acceptance is claimed.
+Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. TASK-001 and TASK-034 are Accepted; EPIC-001 is In progress. Other active tasks are Planned, and EPIC-008 is Deferred. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
 
 ## Execution policy
 
@@ -24,7 +24,7 @@ Lifecycle status vocabulary:
 
 | Epic | Goal | Tasks | Scope | Status |
 | --- | --- | --- | --- | --- |
-| [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | Planned |
+| [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | In progress |
 | [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | Planned |
 | [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Planned |
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Planned |
@@ -37,7 +37,7 @@ Lifecycle status vocabulary:
 
 | Task | Title | Actual prerequisites | Scope | Status |
 | --- | --- | --- | --- | --- |
-| [TASK-001](roadmap/EPIC-001.md#task-001) | Bootstrap the independent Go product | None | Active | Planned |
+| [TASK-001](roadmap/EPIC-001.md#task-001) | Bootstrap the independent Go product | None | Active | Accepted |
 | [TASK-002](roadmap/EPIC-001.md#task-002) | Define provisional managed schemas and state invariants | TASK-001 | Active | Planned |
 | [TASK-003](roadmap/EPIC-001.md#task-003) | Implement contained snapshots and identity | TASK-002 | Active | Planned |
 | [TASK-033](roadmap/EPIC-001.md#task-033) | Deliver the first production-path local walking skeleton | TASK-001, TASK-002, TASK-003 | Active | Planned |

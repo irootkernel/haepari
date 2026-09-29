@@ -1,6 +1,6 @@
 # ADR-0001: Independent Go CLI and daemon
 
-Status: accepted for v0.1.0 design; implementation pending.
+Status: accepted for v0.1.0 design; TASK-001 bootstrap accepted.
 
 ## Context
 
@@ -9,6 +9,8 @@ The controller must remain usable while Aquarium and its tools are being changed
 ## Decision
 
 Implement the controller, CLI and transient runner in Go. Distribute an independent stable executable and paired use-haepari skill. Scripts used by project recipes may still be shell or Python.
+
+The bootstrap pins Go 1.27.1, pure-Go `modernc.org/sqlite` v1.59.0, and `golang.org/x/sys` v0.47.0 for the macOS arm64 target. `go.mod` and `go.sum` pin the dependency graph. The SQLite module is BSD-3-Clause and carries additional embedded-component notices; `x/sys` is BSD-3-Clause. Release packaging must retain applicable third-party notices. TASK-001 verifies the build, while TASK-004 checks the installed driver's macOS durability settings. Neither check alone qualifies a public release.
 
 ## Alternatives considered
 

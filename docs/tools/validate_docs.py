@@ -451,7 +451,7 @@ def main():
             "package": "Haepari v0.1.0 managed-first design with advisory locks and Aquarium adoption handoff",
             "design_revision": REVISION,
             "revision_date": "2026-09-28",
-            "status": "design-only; no implementation, product acceptance or release claimed",
+            "status": "implementation in progress; no product acceptance or release claimed",
             "counts": {"package_files_excluding_manifest": len(entries), **{
                 k: v for k, v in counts.items() if k != "relative_links_checked"}},
             "files": entries,

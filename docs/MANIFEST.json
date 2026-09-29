@@ -2,7 +2,7 @@
   "package": "Haepari v0.1.0 managed-first design with advisory locks and Aquarium adoption handoff",
   "design_revision": "3.4",
   "revision_date": "2026-09-28",
-  "status": "design-only; no implementation, product acceptance or release claimed",
+  "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
     "package_files_excluding_manifest": 77,
     "requirements": {
@@ -37,8 +37,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 8262,
-      "sha256": "7a4e809c636ac63dd7d19af416d4cc9681c6d5dfdc87927225ebb067b17f987c"
+      "bytes": 8388,
+      "sha256": "7cc80d99092126c38b84dfd7201d15caa9c7b1f5cceff9d40d8afd8cc1f9fdfe"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -52,8 +52,8 @@
     },
     {
       "path": "architecture-decision-records/0001-go-independent-cli.md",
-      "bytes": 1254,
-      "sha256": "b499026fb0ede55834e536b74c066ed2e7756a0008684c3a3178cc0386e28397"
+      "bytes": 1756,
+      "sha256": "646f27525bf26bbd45c0d120f08f942ac359514d6fa3f1b48c01ffb26931b2d5"
     },
     {
       "path": "architecture-decision-records/0002-local-durable-controller.md",
@@ -147,8 +147,8 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 25121,
-      "sha256": "fe242abf9c4c86d35e33b7a37326b19b718151554ef98d985909f8adc9f95fb6"
+      "bytes": 25386,
+      "sha256": "ba00a96788a72c2fd25e85d6fa1de7556768204f6512d6f32f7e7105e7ce5059"
     },
     {
       "path": "checks.json",
@@ -287,8 +287,8 @@
     },
     {
       "path": "package-validation.md",
-      "bytes": 7950,
-      "sha256": "34aa9f8a34867b8dc310de782a94746ff52fbb70403d3f373c440000c129cc4d"
+      "bytes": 8141,
+      "sha256": "0517705a2320ba000662a3351e0754954cdfa86300b86facf2da3aa8b23cb403"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
@@ -307,13 +307,13 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11139,
-      "sha256": "153af7d71c465c6a1a76c70a20f3144f8108e7bf6ada3b2bda405e838382df6b"
+      "bytes": 11137,
+      "sha256": "2dd150d150983d96693e213c187d53020870ac09402861c954f1b05fcd1b9c19"
     },
     {
       "path": "roadmap/EPIC-001.md",
-      "bytes": 10649,
-      "sha256": "eed8c99e203b1f46ef485d2f69b4aa6f43846f322a2b95564c82d8bfcb1e90f1"
+      "bytes": 10929,
+      "sha256": "1b490d8d00def35b42b8f9a1384a8ef9fa724851ac4c528b7cddc0ecc7aad07f"
     },
     {
       "path": "roadmap/EPIC-002.md",
@@ -397,8 +397,8 @@
     },
     {
       "path": "sources.md",
-      "bytes": 9365,
-      "sha256": "c1227c2cef2d202a3bfe5dfe9293dc49bcab4dc534147704ba441912a03cb787"
+      "bytes": 9710,
+      "sha256": "f584d839d3e426f731713dd4c9019795d89b1db3d62d0f691d328e82ba580467"
     },
     {
       "path": "to-external.md",
@@ -407,8 +407,8 @@
     },
     {
       "path": "tools/validate_docs.py",
-      "bytes": 21508,
-      "sha256": "f87597dcdeb216f2be8a6c00dbb265131dfcc046a95a7c65517453ab345ecbd6"
+      "bytes": 21507,
+      "sha256": "206934085302ad859147fbd9091bb3070741e84612c248a70a341be706a6479d"
     },
     {
       "path": "traceability.md",

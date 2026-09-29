@@ -17,10 +17,12 @@ The R2 references were recorded as checked on 2026-09-27. Selected primary pages
 | S11 | https://www.apple.com/legal/sla/docs/macOSSequoia.pdf and https://developer.apple.com/documentation/virtualization/vzerror/code/virtualmachinelimitexceeded | The macOS license (§2B(iii), checked in the macOS Sequoia license; re-check the installed release's license) permits up to two additional macOS instances in virtual machines per Mac for development and testing. The Virtualization framework defines a `virtualMachineLimitExceeded` error. |
 | S12 | https://keith.github.io/xcode-man-pages/launchd.plist.5.html | launchd kills the remaining processes in a job's process group when the job exits, unless `AbandonProcessGroup` is true. `LimitLoadToSessionType` selects the session type, such as `Aqua`. |
 | S13 | https://sqlite.org/pragma.html | `PRAGMA fullfsync` and `checkpoint_fullfsync` default to off and use `F_FULLFSYNC` on macOS. |
+| S14 | https://go.dev/dl/ | Go 1.27.1 has an official macOS arm64 distribution. |
+| S15 | https://pkg.go.dev/modernc.org/sqlite@v1.59.0 | The pinned SQLite driver is pure Go, supports darwin/arm64, and lists BSD-3-Clause licensing. Its installed behavior still requires TASK-004 qualification. |
 
 ## User decisions
 
-The user selected the name Haepari, independent tool ownership, project-owned VM tests, the Aquarium-first adoption order, stable installation combinations, full skill/configuration coverage, migration/regression verification, and Sorage-based producer delegation. Go and the bounded v0.1.0 scope carry forward the agreed recommendation. No license, public repository URL, installed baseline version, or provider account is invented in this package.
+The user selected the name Haepari, independent tool ownership, project-owned VM tests, the Aquarium-first adoption order, stable installation combinations, full skill/configuration coverage, migration/regression verification, and Sorage-based producer delegation. Go and the bounded v0.1.0 scope carry forward the agreed recommendation. The initial package invented no license, public repository URL, installed baseline version, or provider account; the owner selected MIT in Design Revision 3.2.
 
 ## Design Revision 3 source and evidence classes
 
