@@ -11,7 +11,7 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-016`, `HP-REQ-017`.
 
 #### Implement
-- [ ] Add durable run claims, spawn-intent/start/exit receipts, explicit argv/env, process groups, streaming files, bounded termination/escalation and pipe cleanup.
+- [ ] Add the local transient `runner` entrypoint, durable run claims, spawn-intent/start/exit receipts, explicit argv/env, process groups, streaming files, bounded termination/escalation and pipe cleanup.
 
 #### Do not
 - [ ] Do not silently shell-expand arguments or assume CommandContext kills all descendants.

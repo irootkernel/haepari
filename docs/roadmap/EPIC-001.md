@@ -11,7 +11,7 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-001`, `HP-REQ-002`.
 
 #### Implement
-- [x] Create the Go module, native CLI/daemon/runner entrypoint structure, platform build matrix, private state-root resolver and machine-readable identity. Select and pin a supported Go toolchain and pure-Go SQLite dependency after primary-documentation and build verification.
+- [x] Create the Go module, native CLI and daemon entrypoint structure, platform build matrix, private state-root resolver and machine-readable identity. Select and pin a supported Go toolchain and pure-Go SQLite dependency after primary-documentation and build verification. The transient `runner` entrypoint belongs to TASK-009.
 - [x] Record the bootstrap decisions. The owner confirmed the repository choices on 2026-09-28 using sibling repositories; the host observation is dated separately:
   - Module path: `github.com/irootkernel/haepari`, as used by seongge, mulgae, gaori and sanho.
   - License: MIT, as used by gaebokchi, mulgae, podway and sorage.
