@@ -5,7 +5,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -53,8 +52,11 @@ func TestIsolatedControllerStartup(t *testing.T) {
 		t.Fatal(err)
 	}
 	var byteBuf [1]byte
-	if _, err := connection.Read(byteBuf[:]); err != io.EOF {
-		t.Fatalf("controller accepted an unexpected protocol: %v", err)
+	if _, err := connection.Write([]byte("GET /v1/hello HTTP/1.1\r\nHost: haepari\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := connection.Read(byteBuf[:]); err != nil {
+		t.Fatalf("controller did not answer handshake: %v", err)
 	}
 	_ = connection.Close()
 	if err := Run(context.Background(), root); err == nil {
@@ -94,10 +96,11 @@ func TestShutdownPreservesReplacedSocketPath(t *testing.T) {
 		if _, err := os.Lstat(root.SocketPath); err == nil {
 			if conn, err := net.Dial("unix", root.SocketPath); err == nil {
 				_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+				_, _ = conn.Write([]byte("GET /v1/hello HTTP/1.1\r\nHost: haepari\r\n\r\n"))
 				var byteBuf [1]byte
 				_, readErr := conn.Read(byteBuf[:])
 				_ = conn.Close()
-				if readErr == io.EOF {
+				if readErr == nil {
 					break
 				}
 			}

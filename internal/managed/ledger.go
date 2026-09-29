@@ -212,6 +212,11 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 		 job_id TEXT PRIMARY KEY, purged_through INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS managed_mutations (
 		 mutation_key TEXT PRIMARY KEY, digest TEXT NOT NULL, receipt_json BLOB NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS managed_job_inputs (
+		 job_id TEXT PRIMARY KEY REFERENCES managed_jobs(id), sealed_digest TEXT NOT NULL, object_id TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS managed_runs (
+		 job_id TEXT PRIMARY KEY REFERENCES managed_jobs(id), run_id TEXT NOT NULL UNIQUE,
+		 intent_json BLOB NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS managed_power_transitions (
 		 operation_generation INTEGER PRIMARY KEY, victim_resource_id TEXT NOT NULL,
 		 target_resource_id TEXT NOT NULL, identity_json BLOB NOT NULL, state TEXT NOT NULL,
@@ -231,7 +236,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 2 {
+	if version > 3 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
 	for _, statement := range statements {
@@ -261,6 +266,14 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 			return nil, err
 		}
 		if _, err := tx.Exec(`PRAGMA user_version=2`); err != nil {
+			return nil, err
+		}
+	}
+	if version < 3 {
+		if _, err := tx.Exec(`INSERT INTO schema_migrations(version,identity) VALUES(3,'sealed-job-input-v3')`); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`PRAGMA user_version=3`); err != nil {
 			return nil, err
 		}
 	}
@@ -368,11 +381,21 @@ func (l *Ledger) UpdateResource(data []byte, expectedConfigRevision, expectedAva
 }
 
 func (l *Ledger) Admit(data []byte, sealedDigest, requestKey, jobID string) (Receipt, error) {
+	return l.AdmitSealed(data, sealedDigest, "", requestKey, jobID)
+}
+
+// AdmitSealed binds a verified snapshot object to the immutable admission in
+// the same transaction. Empty object IDs are retained for legacy ledger-only
+// callers; the controller always supplies an object ID.
+func (l *Ledger) AdmitSealed(data []byte, sealedDigest, objectID, requestKey, jobID string) (Receipt, error) {
 	job, err := DecodeJob(data)
 	if err != nil {
 		return Receipt{}, err
 	}
 	if !identifier.MatchString(requestKey) || !identifier.MatchString(jobID) {
+		return Receipt{}, ErrInvalid
+	}
+	if job.Input.InventoryDigest != sealedDigest || (objectID != "" && (!strings.HasPrefix(objectID, "sha256:") || !validDigest(strings.TrimPrefix(objectID, "sha256:")))) {
 		return Receipt{}, ErrInvalid
 	}
 	digest, err := CanonicalDigest(job, sealedDigest)
@@ -392,6 +415,10 @@ func (l *Ledger) Admit(data []byte, sealedDigest, requestKey, jobID string) (Rec
 	err = tx.QueryRow(`SELECT id,submitted_digest FROM managed_jobs WHERE request_key=?`, requestKey).Scan(&priorID, &priorDigest)
 	if err == nil {
 		if priorDigest != digest {
+			return Receipt{}, ErrConflict
+		}
+		var priorObject string
+		if err := tx.QueryRow(`SELECT object_id FROM managed_job_inputs WHERE job_id=?`, priorID).Scan(&priorObject); err != nil || priorObject != objectID {
 			return Receipt{}, ErrConflict
 		}
 		return l.snapshotTx(tx, priorID)
@@ -414,6 +441,9 @@ func (l *Ledger) Admit(data []byte, sealedDigest, requestKey, jobID string) (Rec
 		return Receipt{}, fmt.Errorf("%w: admission: %v", ErrConflict, err)
 	}
 	if _, err := tx.Exec(`INSERT INTO managed_event_progress(job_id) VALUES(?)`, jobID); err != nil {
+		return Receipt{}, err
+	}
+	if _, err := tx.Exec(`INSERT INTO managed_job_inputs(job_id,sealed_digest,object_id) VALUES(?,?,?)`, jobID, sealedDigest, objectID); err != nil {
 		return Receipt{}, err
 	}
 	if _, err := addEvent(tx, jobID, "admitted", map[string]any{"resource_id": job.ResourceID, "submitted_digest": digest}); err != nil {
@@ -756,6 +786,10 @@ func (l *Ledger) CancelQueued(jobID string, expectedRevision int64, mutationKey 
 
 func (l *Ledger) ExpireQueued(jobID string, expectedRevision int64, mutationKey string) (Receipt, error) {
 	return l.finishQueued(jobID, expectedRevision, mutationKey, "queue_deadline", "inconclusive", "queue_expired")
+}
+
+func (l *Ledger) FailQueuedInput(jobID string, expectedRevision int64, mutationKey string) (Receipt, error) {
+	return l.finishQueued(jobID, expectedRevision, mutationKey, "input_unavailable", "inconclusive", "sealed_input_unavailable")
 }
 
 func (l *Ledger) finishQueued(jobID string, expectedRevision int64, mutationKey, kind string, outcome WorkloadOutcome, reason string) (Receipt, error) {

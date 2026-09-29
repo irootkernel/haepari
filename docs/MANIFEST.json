@@ -37,8 +37,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 8622,
-      "sha256": "8a50e973b05b1c5e4b63c720eddd1bd026039b4676527a7aa2db604764cfbf86"
+      "bytes": 8637,
+      "sha256": "a5b016684e9ad362e93b64d85e9b324474ab005ccdd30b0fdc0dd9d9f74c2dd7"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -147,8 +147,8 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 26573,
-      "sha256": "f4632cc27dd330845b9554e2028386f5717c1eddb5368c37f43ee657f64eab09"
+      "bytes": 27481,
+      "sha256": "7d2df03d266989f954ee475e69ac1b147cd2cf71038527d6f4e411cf72c568e8"
     },
     {
       "path": "checks.json",
@@ -157,13 +157,13 @@
     },
     {
       "path": "contracts/artifact-and-profile.md",
-      "bytes": 12517,
-      "sha256": "8c0e17e49ecb6c919fc7fffa276601da0a1693706d39602748195bdf92f93f04"
+      "bytes": 12706,
+      "sha256": "fb04ec04a17186ea8ba1c00efffb2589f1a63975952368aa91e93170ad353738"
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 21016,
-      "sha256": "d0f5dfaff348c29c366521b1570165d0623c59913f11a264d5ae8caa77981b96"
+      "bytes": 21706,
+      "sha256": "55d229ad3b7742180bcdb2730e80353b89a8fd59d86f673af2d191a15b190765"
     },
     {
       "path": "contracts/configuration.md",
@@ -212,8 +212,8 @@
     },
     {
       "path": "examples/job-local.template.json",
-      "bytes": 927,
-      "sha256": "7d5270014fd500ba8a56adf8320d270389442adcd852c03aff4d846e7c4235e4"
+      "bytes": 970,
+      "sha256": "ac6de5b3106c0cc7f6e8c30f49a5c5ee2e474c1cf4f65b33dd3df87178340348"
     },
     {
       "path": "examples/job-vm.template.json",
@@ -307,13 +307,13 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11159,
-      "sha256": "2210532d20e6dbf49f2492642dbc7097765ddf62e7eec39d8858be4c2812d816"
+      "bytes": 11170,
+      "sha256": "bb0bbbb4f73aff998c5199c0be7725163982a75bc077bf542e50a007d0fc8195"
     },
     {
       "path": "roadmap/EPIC-001.md",
       "bytes": 10929,
-      "sha256": "2a9b15c95392eb6137871d221837369ce6c9059e7bce98b2a83b8b98733ebafa"
+      "sha256": "a5297f1c77f7bc7d1d9e8173330a353d648adc337ed01275b65eef3bd33cdaec"
     },
     {
       "path": "roadmap/EPIC-002.md",

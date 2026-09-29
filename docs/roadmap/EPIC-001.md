@@ -89,20 +89,20 @@ Requirement coverage: `HP-REQ-004`, `HP-REQ-005`.
 Requirement coverage: `HP-REQ-007`, `HP-REQ-009`, `HP-REQ-010`, `HP-REQ-011`, `HP-REQ-012`, `HP-REQ-014`, `HP-REQ-015`, `HP-REQ-016` (initial slice; TASK-005–012 harden the same path).
 
 #### Implement
-- [ ] Start an isolated controller using the intended state store and client transport. Submit a harmless local argv command with sealed input and a persisted request key; commit admission before returning its identity. Wait through the intended blocking client path, read the truthful terminal result, then reconnect using the same key without another execution. Reuse the production admission, runner and result path; later tasks extend it.
-- [ ] Limit the slice to:
+- [x] Start an isolated controller using the intended state store and client transport. Submit a harmless local argv command with sealed input and a persisted request key; commit admission before returning its identity. Wait through the intended blocking client path, read the truthful terminal result, then reconnect using the same key without another execution. Reuse the production admission, runner and result path; later tasks extend it.
+- [x] Limit the slice to:
   - one local resource with capacity one and a global limit of one
   - the real scheduler code path that TASK-007 later extends
   - the managed transition rows for submit, reserve, prepare, start automatic run, exit, collection, cleanup and settlement
 
 #### Do not
-- [ ] Do not create a demo scheduler, bypass durable identity, hide failure as PASS, operate a VM, or treat the initial slice as full release qualification.
+- [x] Do not create a demo scheduler, bypass durable identity, hide failure as PASS, operate a VM, or treat the initial slice as full release qualification.
 
 #### Verify
-- [ ] Assert one admission and one observed execution after lost/repeated submission, terminal workload/evidence/cleanup fields, wait disconnect/reconnect and a changed-payload conflict in isolated state.
+- [x] Assert one admission and one observed execution after lost/repeated submission, terminal workload/evidence/cleanup fields, wait disconnect/reconnect and a changed-payload conflict in isolated state.
 
 #### Done when
-- [ ] The exact integrated slice and its failure case are reviewed; provisional schema changes are recorded for freeze gate F1 in TASK-012.
+- [x] The exact integrated slice and its failure case are reviewed; provisional schema changes are recorded for freeze gate F1 in TASK-012.
 
 ## TASK-004
 

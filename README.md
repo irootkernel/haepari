@@ -1,6 +1,6 @@
 # Haepari
 
-Haepari is an independent Go CLI and local controller for managed command jobs. The TASK-001 bootstrap can report its identity and start an isolated foreground controller. TASK-002 adds provisional internal managed schemas and a durable state ledger. TASK-003 adds an internal, private store for explicitly selected sealed inputs and separate Git-base provenance. The CLI cannot yet submit or run a Job; TASK-033 connects these internals to the production path. The [development package](docs/README.md) owns the planned contracts and roadmap.
+Haepari is an independent Go CLI and local controller for managed command jobs. TASK-033 connects the provisional managed ledger and selected-file store to a foreground local Job path. The [development package](docs/README.md) owns the planned contracts and roadmap.
 
 ## Build and check
 
@@ -22,6 +22,17 @@ Choose a short, private state root; macOS Unix socket paths have a 104-byte `sun
 HAEPARI_HOME=/tmp/hp-example ./bin/haepari daemon run --backend local
 ```
 
-The controller creates a private SQLite state file, `objects/` input store and Unix socket, then waits for a termination signal. It currently accepts no job protocol. The local backend executes commands on the host once later tasks implement submission; it is not a sandbox. Do not use a production state root for development tests. `HAEPARI_HOME` must be an absolute path on a local filesystem with an existing parent directory; the program creates only the final state-root directory. It refuses a non-private root, untrusted or shared writable ancestor, or symlinked ancestor. macOS system links `/tmp` and `/var` are resolved to their canonical paths. After an abnormal exit, confirm that no controller is using the state root before removing a stale `control.sock` and restarting.
+The controller creates a private SQLite state file, `objects/` input store, `jobs/` root, and Unix socket. It serves HTTP over that socket with a protocol handshake. The local backend executes commands on the host; it is not a sandbox. Use a disposable state root and harmless input for development. `HAEPARI_HOME` must be an absolute path on a local filesystem with an existing parent directory; the program creates only the final state-root directory. It refuses a non-private root, untrusted or shared writable ancestor, or symlinked ancestor. macOS system links `/tmp` and `/var` are resolved to their canonical paths. After an abnormal exit, confirm that no controller is using the state root before removing a stale `control.sock` and restarting.
 
-Haepari has no runtime dependency on Aquarium or its tools. UTM jobs, service installation, advisory locks, and public external leases are not available in this bootstrap. The [roadmap](docs/roadmap.md) names the owning tasks. Haepari is licensed under [MIT](LICENSE).
+In another shell, register one local resource with capacity one, then submit a validated `haepari.job/v1` auto Job. The Job's `input.selected_files` explicitly lists regular files under `input.root`; `input.inventory_digest` is the lowercase 64-character tree digest from the selected-file manifest. These commands do not install or start a service:
+
+```sh
+HAEPARI_HOME=/tmp/hp-example ./bin/haepari resource register --file local-resource.json --json
+HAEPARI_HOME=/tmp/hp-example ./bin/haepari submit --spec local-job.json --request-key saved-key --json
+HAEPARI_HOME=/tmp/hp-example ./bin/haepari wait job-id --timeout 5m --json
+HAEPARI_HOME=/tmp/hp-example ./bin/haepari inspect job-id --json
+```
+
+Persist the request key before submission. Reusing it with the same sealed input recovers the existing Job; any changed selected file still available conflicts, including when another selected file has been removed. `haepari run --spec local-job.json --request-key saved-key` submits and blocks through the same client path. `--json` emits admission and final NDJSON objects. The current walking skeleton accepts one local resource of capacity one and only auto Jobs with `development` evidence class. It retains and quarantines uncertain work and its slot for reconciliation after interruption. Missing required output is preserved in the owned workspace and quarantines the resource until recovery. Automated reattachment, cancellation, manual Jobs, service supervision, and UTM execution remain with later tasks. Host power-loss durability and macOS service survival are not qualified by this slice.
+
+Haepari has no runtime dependency on Aquarium or its tools. UTM jobs, service installation, advisory locks, and public external leases are not available in this slice. The [roadmap](docs/roadmap.md) names the owning tasks. Haepari is licensed under [MIT](LICENSE).

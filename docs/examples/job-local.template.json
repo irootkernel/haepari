@@ -5,7 +5,8 @@
   "suite": "build",
   "input": {
     "root": "<absolute-prepared-bundle>",
-    "inventory_digest": "<sha256>"
+    "inventory_digest": "<sha256>",
+    "selected_files": ["source/Makefile"]
   },
   "environment": {
     "profile_id": "<local-build-profile>",

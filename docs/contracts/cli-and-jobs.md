@@ -2,7 +2,7 @@
 
 Contract family: `haepari.* / v1`. Proposed public surface for v0.1.0. TASK-002 defines provisional schemas and examples; local and failure evidence refines them. Freeze gate F1 (TASK-012) freezes the managed core contract and machine-readable help, gate F2 (TASK-016) the VM fields, and gate F3 (TASK-020) the consumer integration contract. See the [roadmap freeze gates](../roadmap.md#contract-freeze-gates).
 
-This contract describes managed Jobs. External requests are a [deferred design](external-leases.md), not a v0.1.0 CLI family. Do not use `manual` Jobs to emulate external execution.
+This contract describes managed Jobs. TASK-033 implements `resource register`, `submit`, `run`, `inspect`, and `wait` for a single capacity-one local auto-Job resource. Queued input loss and queue expiry settle INCOMPLETE without a lease; incomplete output collection retains the owned workspace and quarantines the resource. The remaining command families below are planned and are not implied by that slice. External requests are a [deferred design](external-leases.md), not a v0.1.0 CLI family. Do not use `manual` Jobs to emulate external execution.
 
 ## CLI families
 
@@ -86,7 +86,7 @@ Each machine error code maps to one CLI exit:
 - `resource_id`: exactly one registered resource; no list in v0.1.0.
 - `mode`: `auto` or `manual`.
 - `suite`: a consumer label such as `install`, `migration`, or `regression`.
-- `input`: a contained bundle root and an inventory digest. TASK-003 provides the internal selected-file sealer; TASK-033 admission copies, verifies and binds the object before accepting the request.
+- `input`: a contained bundle root, an explicit `selected_files` list and an inventory digest. TASK-003 provides the internal selected-file sealer; TASK-033 local admission copies, verifies and binds the object before accepting the request. The submitted digest is the lowercase 64-character hex portion of the manifest's `tree_sha256` value.
 - `environment`: the consumer profile reference and its expected digest, recorded as evidence for VM jobs; an explicit local environment reference for local jobs.
 - `workload`: argv, bundle-relative working directory, non-secret environment, and required output declarations.
 - `setup`: optional bounded argv for manual-mode preparation; ordinary install recipes may be the workload for auto mode.
@@ -109,7 +109,7 @@ Use HTTP over the private Unix socket for request/response operations and a docu
 
 The provisional internal event page carries a Job-scoped `current_cursor` and a `next_cursor` for the returned page. A resynchronization response carries the Job snapshot and a retained Job-owned checkpoint cursor. Prefix retention preserves cursor ownership tombstones and the purge floor; a client resumes from the checkpoint after applying the snapshot. Cursor scope and the page are read from one SQLite snapshot. A cursor whose ownership was never recorded is rejected rather than attributed to a Job by guesswork.
 
-The implementation may perform bounded internal liveness checks. User-facing skills and wrappers must use blocking wait/events rather than a status polling loop. The daemon remains the owner when a CLI process exits. A heartbeat indicates only connection liveness, not test progress or renewed execution authority.
+The implementation may perform bounded internal liveness checks. TASK-033 uses a blocking HTTP wait over the private socket and in-process notification after durable terminal settlement; streamed events and cursor reconnect remain planned. User-facing skills and wrappers must use blocking wait/events rather than a status polling loop. The daemon remains the owner when a CLI process exits. A heartbeat indicates only connection liveness, not test progress or renewed execution authority.
 
 ## Manual completion
 

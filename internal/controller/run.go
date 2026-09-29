@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/snapshot"
@@ -23,23 +25,32 @@ func Run(ctx context.Context, root state.Root) error {
 	if err := root.Prepare(); err != nil {
 		return err
 	}
-	db, err := sqlite.Open(root.DBPath)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	if _, err := managed.NewLedger(db, 1); err != nil {
-		return fmt.Errorf("initialize managed state: %w", err)
-	}
-	if _, err := snapshot.OpenStore(root.Path); err != nil {
-		return fmt.Errorf("initialize sealed input store: %w", err)
-	}
 	if _, err := os.Lstat(root.SocketPath); err == nil {
 		return fmt.Errorf("%w: %s; see README stale-socket recovery", ErrSocketExists, root.SocketPath)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("inspect control socket: %w", err)
 	}
-
+	db, err := sqlite.Open(root.DBPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	ledger, err := managed.NewLedger(db, 1)
+	if err != nil {
+		return fmt.Errorf("initialize managed state: %w", err)
+	}
+	store, err := snapshot.OpenStore(root.Path)
+	if err != nil {
+		return fmt.Errorf("initialize sealed input store: %w", err)
+	}
+	jobsRoot := filepath.Join(root.Path, "jobs")
+	if err := os.Mkdir(jobsRoot, 0700); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("create jobs root: %w", err)
+	}
+	jobsInfo, err := os.Lstat(jobsRoot)
+	if err != nil || !jobsInfo.IsDir() || jobsInfo.Mode()&os.ModeSymlink != 0 || jobsInfo.Mode().Perm()&0077 != 0 {
+		return fmt.Errorf("jobs root is not a private real directory")
+	}
 	listener, cleanup, err := listenPrivate(root.SocketPath, os.Lstat, func(path string) error {
 		return os.Chmod(path, 0600)
 	})
@@ -47,25 +58,26 @@ func Run(ctx context.Context, root state.Root) error {
 		return err
 	}
 	defer cleanup()
+	if err := ledger.MarkInterrupted(); err != nil {
+		return fmt.Errorf("reconcile interrupted jobs: %w", err)
+	}
+	runtime := newRuntime(root, ledger, store)
+	server := &http.Server{Handler: runtime.routes(), ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		select {
 		case <-ctx.Done():
-			_ = listener.Close()
+			_ = server.Close()
 		case <-done:
 		}
 	}()
-	for {
-		connection, err := listener.Accept()
-		if err != nil {
-			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
-				return nil
-			}
-			return fmt.Errorf("accept control connection: %w", err)
-		}
-		_ = connection.Close()
+	go runtime.schedule(ctx)
+	err = server.Serve(listener)
+	if ctx.Err() != nil || errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
+		return nil
 	}
+	return fmt.Errorf("serve control socket: %w", err)
 }
 
 func listenPrivate(path string, inspect func(string) (os.FileInfo, error), protect func(string) error) (*net.UnixListener, func(), error) {

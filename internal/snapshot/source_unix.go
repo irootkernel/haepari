@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -212,6 +213,44 @@ func recheckSelected(ctx context.Context, source *sourceRoot, entry Entry, expec
 	after, err := sourceVersionOf(file)
 	if err != nil || before != after || size != entry.Size || "sha256:"+hex.EncodeToString(hash.Sum(nil)) != entry.SHA256 {
 		return ErrChanged
+	}
+	return nil
+}
+
+// CompareAvailable permits a same-key replay after source deletion only when
+// every selected file still present matches the sealed manifest. Missing
+// files retain the already admitted immutable identity; changed survivors
+// conflict instead of silently recovering an outdated receipt.
+func CompareAvailable(ctx context.Context, sourcePath string, sealed Snapshot) error {
+	if err := validateEntries(sealed.Manifest.Entries); err != nil {
+		return err
+	}
+	source, err := openSourceRoot(sourcePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	for _, entry := range sealed.Manifest.Entries {
+		file, before, err := source.openRegular(entry.Path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		h := sha256.New()
+		size, copyErr := io.Copy(h, contextReader{ctx: ctx, reader: file})
+		after, statErr := sourceVersionOf(file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if statErr != nil || closeErr != nil || before != after || size != entry.Size || before.executable != entry.Executable || "sha256:"+hex.EncodeToString(h.Sum(nil)) != entry.SHA256 {
+			return ErrChanged
+		}
 	}
 	return nil
 }

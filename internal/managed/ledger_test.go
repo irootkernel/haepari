@@ -104,6 +104,75 @@ func TestReservedNoEffectReplayAfterRestart(t *testing.T) {
 	}
 }
 
+func TestInterruptedLocalJobQuarantinesWithoutReleasingSlot(t *testing.T) {
+	db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 1)
+	defer db.Close()
+	resource := validResource()
+	resource.Capacity = 1
+	if err := l.RegisterResource(encode(t, resource)); err != nil {
+		t.Fatal(err)
+	}
+	job := validJob()
+	if _, err := l.Admit(encode(t, job), digest, "restart-key", "restart-job"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Reserve(ReserveRequest{JobID: "restart-job", ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "restart-reserve"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.MarkInterrupted(); err != nil {
+		t.Fatal(err)
+	}
+	seen, err := l.Snapshot("restart-job")
+	if err != nil || seen.JobState != "reconciling" || seen.ResourceAvailability != "quarantined" || seen.ResourceOccupancy != 1 || seen.GlobalOccupancy != 1 {
+		t.Fatalf("uncertain work released or advertised available: %+v %v", seen, err)
+	}
+	if err := l.MarkInterrupted(); err != nil {
+		t.Fatal(err)
+	}
+	again, err := l.Snapshot("restart-job")
+	if err != nil || again.JobRevision != seen.JobRevision || again.ResourceAvailabilityRevision != seen.ResourceAvailabilityRevision {
+		t.Fatalf("restart reconciliation changed settled uncertainty: %+v %v", again, err)
+	}
+}
+
+func TestUnprovenCollectorKeepsLeaseAndQuarantines(t *testing.T) {
+	db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 1)
+	defer db.Close()
+	resource := validResource()
+	resource.Capacity = 1
+	if err := l.RegisterResource(encode(t, resource)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Admit(encode(t, validJob()), digest, "collector-key", "collector-job"); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := l.Reserve(ReserveRequest{JobID: "collector-job", ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "collector-reserve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err = l.AdvanceLocal("collector-job", receipt.JobRevision, "preparing", "ready", "collector-ready")
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err = l.StartLocal("collector-job", receipt.JobRevision, "collector-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.AdvanceLocal("collector-job", receipt.JobRevision, "running", "collecting", "collector-exit"); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.ReconcileLocalFailure("collector-job"); err != nil {
+		t.Fatal(err)
+	}
+	seen, err := l.Snapshot("collector-job")
+	if err != nil || seen.JobState != "reconciling" || seen.ResourceAvailability != "quarantined" || seen.GlobalOccupancy != 1 || seen.ResourceOccupancy != 1 {
+		t.Fatalf("unproven collector released or finished: %+v %v", seen, err)
+	}
+	if _, err := l.Result("collector-job"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("unproven collector had a terminal result: %v", err)
+	}
+}
+
 func TestQueuedCancelAndCapacityFence(t *testing.T) {
 	db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 1)
 	defer db.Close()
@@ -338,7 +407,7 @@ func TestInitialSchemaRejectsNewerAndDuplicateVM(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.sqlite")
 	db, l := openLedger(t, path, 1)
 	var version int
-	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 2 {
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
 		t.Fatalf("schema version %d: %v", version, err)
 	}
 	r := validResource()
@@ -357,7 +426,7 @@ func TestInitialSchemaRejectsNewerAndDuplicateVM(t *testing.T) {
 	if err := l.RegisterResource(encode(t, r)); !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate VM identity: %v", err)
 	}
-	if _, err := db.Exec(`PRAGMA user_version=3`); err != nil {
+	if _, err := db.Exec(`PRAGMA user_version=4`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -395,7 +464,7 @@ func TestProvisionalV1PowerTableMigration(t *testing.T) {
 	db, l := openLedger(t, path, 1)
 	defer db.Close()
 	var version int
-	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 2 {
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
 		t.Fatalf("migrated version %d: %v", version, err)
 	}
 	var value int64

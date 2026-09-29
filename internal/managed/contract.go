@@ -46,8 +46,9 @@ type JobSpec struct {
 }
 
 type Input struct {
-	Root            string `json:"root"`
-	InventoryDigest string `json:"inventory_digest"`
+	Root            string   `json:"root"`
+	InventoryDigest string   `json:"inventory_digest"`
+	SelectedFiles   []string `json:"selected_files"`
 }
 type Environment struct {
 	ProfileID     string `json:"profile_id"`
@@ -160,7 +161,8 @@ func DecodeJob(data []byte) (JobSpec, error) {
 		!oneOf(job.Effects.Mode, "offline", "live") || job.Effects.AuthorizationReference == "" {
 		return job, ErrInvalid
 	}
-	if len(job.Workload.Argv) == 0 || len(job.Workload.Argv) > 128 || len(job.Workload.RequiredOutputs) == 0 || len(job.Workload.RequiredOutputs) > 1000 ||
+	if len(job.Input.SelectedFiles) > 1000 || (len(job.Input.SelectedFiles) > 0 && !uniquePaths(job.Input.SelectedFiles)) ||
+		len(job.Workload.Argv) == 0 || len(job.Workload.Argv) > 128 || len(job.Workload.RequiredOutputs) == 0 || len(job.Workload.RequiredOutputs) > 1000 ||
 		!relativePath(job.Workload.CWD) || !uniquePaths(job.Workload.RequiredOutputs) {
 		return job, ErrInvalid
 	}
