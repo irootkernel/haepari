@@ -47,6 +47,21 @@ Implementation/test baseline: commit `2a3894f99f51436d3cd2eda843f4fc6c79d2f683`;
 | `internal/state/ownership.go` | `3c9fe91b9ef6c8fa343691bb9e955f57ae2c7577` |
 | `internal/state/ownership_test.go` | `ae5d2a7eb3672f9d5f75f2dcb98a6a1e0f2ce8f4` |
 
+### Storage integrity follow-up
+
+Reopened during the EPIC-002 audit to preserve permanent mutation keys when an existing store loses required schema. Startup checks the core tables and columns for the recorded version before creation or migration; lost receipt history cannot become an empty table. The schema version remains 7. Recovery preserves the damaged database and requires a verified consistent backup, rather than resetting its version or request keys.
+
+Observed on 2026-10-01 on the same macOS arm64 host and Go 1.27.1 baseline. A real schema-7 cancellation loss fixture reproduced reuse of one permanent key to finish a second queued Job before the correction; the corrected store refuses reopening and preserves that Job. The focused `go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --focus='RequiredBaseSchemaIntegrity|ProvisionalV1PowerTableMigration|Task008CancellationLedger|InitialSchemaRejectsNewerAndDuplicateVM' ./internal/managed` passed 58 specs and exited 0. It covers loss of each of 12 required core tables or a required column, rejection without surviving-schema/version mutation, receipt-table loss before migration from versions 1–6, required power reconciliation column loss from versions 2–7, and run/input table loss from version 3. Run and input tables are required from version 3; the reconciliation column is required from version 2.
+
+Healthy version-1 and version-2 fixtures follow the historical layouts and preserve Jobs, permanent keys, mutation receipts and occupied slots across upgrade and restart. These are controlled fixtures, not migration qualification from a prior public release. Those layouts did not retain sealed input references: replay keeps the existing storage-uncertainty boundary and cannot create another Job; it does not fabricate an input object. `make test` exited 0 with 69 unit and 307 integration race specs plus two actual local CLI scenarios. The existing installed-service, UTM, hardware-wake and power-loss qualification limits remain.
+
+Source baseline: `de31633e9b3614d068ad4e5c62e8b6dd08ee2d4b`. All other production, test and runner inputs are unchanged; the correction inputs are:
+
+| Input | Git blob |
+| --- | --- |
+| `internal/managed/ledger.go` | `67aec7075daf090ef1978a129643ec93217c53d5` |
+| `internal/managed/ledger_test.go` | `b488cf07c30a6f42f51e760d18dca80a5218cf7d` |
+
 ## TASK-006
 
 ### Implement admission and durable deduplication

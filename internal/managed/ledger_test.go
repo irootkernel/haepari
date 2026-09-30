@@ -5,6 +5,7 @@ package managed
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/irootkernel/haepari/internal/store/sqlite"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -452,6 +453,216 @@ var _ = ginkgo.Describe("QuarantinePreservedAndCursorScoped", ginkgo.Label("inte
 	})
 })
 
+// These supplementary layouts follow the schema-2 tables in c371408 and the
+// schema-3 additions in eb9df35. They are not prior public-release fixtures.
+func legacyCoreLayout(t ginkgo.GinkgoTInterface, db *sql.DB, version int) {
+	t.Helper()
+	for _, statement := range []string{
+		`DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities`,
+		`DROP TABLE managed_installation; DROP TABLE managed_cancellations; DROP TABLE managed_cancel_edges; DROP TABLE managed_local_outcomes`,
+		`DROP TABLE managed_parent_context; DROP TABLE managed_parent_nonces; DROP TABLE managed_queue_blockers; DROP TABLE managed_vm_observations; DROP TABLE managed_power_progress; DROP TABLE managed_availability_receipts`,
+		`DROP TABLE managed_admissions; DROP TABLE managed_job_inputs; DROP TABLE managed_runs`,
+		`ALTER TABLE managed_resources DROP COLUMN idle_since_ns`,
+		"DELETE FROM schema_migrations WHERE version>" + fmt.Sprint(version),
+		`INSERT OR IGNORE INTO schema_migrations(version,identity) VALUES(1,'managed-initial-v1')`,
+		"PRAGMA user_version=" + fmt.Sprint(version),
+	} {
+		_, err := db.Exec(statement)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	}
+	if version == 1 {
+		_, err := db.Exec(`DROP TABLE managed_no_effect_observations; ALTER TABLE managed_power_transitions DROP COLUMN reconciled_at_ns`)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	}
+}
+
+var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration"), func() {
+	for _, version := range []int{1, 2} {
+		ginkgo.It("migrates the actual legacy layout with keys and ownership preserved from version "+fmt.Sprint(version), func() {
+			t := ginkgo.GinkgoT()
+			path := filepath.Join(t.TempDir(), "state.sqlite")
+			db, l := openLedger(t, path, 2)
+			gomega.Expect(l.RegisterResource(encode(t, validResource()))).To(gomega.Succeed())
+			job := validJob()
+			admitted, err := l.Admit(encode(t, job), digest, "legacy-admission", "legacy-job")
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			q := ReserveRequest{JobID: admitted.JobID, ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "legacy-reserve"}
+			reserved, err := l.Reserve(q)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			var original []byte
+			gomega.Expect(db.QueryRow(`SELECT receipt_json FROM managed_mutations WHERE mutation_key='legacy-reserve'`).Scan(&original)).To(gomega.Succeed())
+			legacyCoreLayout(t, db, version)
+			gomega.Expect(db.Close()).To(gomega.Succeed())
+			db, err = sqlite.Open(path)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			defer db.Close()
+			l, err = NewLedger(db, 2)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			var current int
+			gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&current)).To(gomega.Succeed())
+			gomega.Expect(current).To(gomega.Equal(7))
+			var retained []byte
+			gomega.Expect(db.QueryRow(`SELECT receipt_json FROM managed_mutations WHERE mutation_key='legacy-reserve'`).Scan(&retained)).To(gomega.Succeed())
+			gomega.Expect(retained).To(gomega.Equal(original))
+			replay, err := l.Reserve(q)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(replay).To(gomega.Equal(reserved))
+			q.ExpectedJobRevision++
+			_, err = l.Reserve(q)
+			gomega.Expect(errors.Is(err, ErrConflict)).To(gomega.BeTrue())
+			// Versions 1/2 did not retain input objects/references. Preserve the
+			// existing storage-uncertainty boundary, never fabricate sealed input
+			// or turn a known admission key into a new executable Job.
+			_, err = l.Admit(encode(t, job), digest, "legacy-admission", "unused-new-job")
+			gomega.Expect(err).To(gomega.HaveOccurred())
+			gomega.Expect(errors.Is(err, ErrConflict)).To(gomega.BeFalse())
+			gomega.Expect(err.Error()).To(gomega.ContainSubstring("input reference"))
+			job.Suite = "changed-legacy-request"
+			_, err = l.Admit(encode(t, job), digest, "legacy-admission", "unused-new-job")
+			gomega.Expect(errors.Is(err, ErrConflict)).To(gomega.BeTrue())
+			var state, key string
+			var slot, occupancy int
+			var lease, revision int64
+			gomega.Expect(db.QueryRow(`SELECT j.state,j.request_key,j.slot,j.lease_generation,j.pinned_config_revision,r.occupancy FROM managed_jobs j JOIN managed_resources r ON r.id=j.resource_id WHERE j.id=?`, admitted.JobID).Scan(&state, &key, &slot, &lease, &revision, &occupancy)).To(gomega.Succeed())
+			gomega.Expect(state).To(gomega.Equal("preparing"))
+			gomega.Expect(key).To(gomega.Equal("legacy-admission"))
+			gomega.Expect(slot).To(gomega.Equal(reserved.Slot))
+			gomega.Expect(lease).To(gomega.Equal(reserved.LeaseGeneration))
+			gomega.Expect(revision).To(gomega.Equal(reserved.ResourceConfigRevision))
+			gomega.Expect(occupancy).To(gomega.Equal(1))
+			gomega.Expect(l.MarkInterrupted()).To(gomega.Succeed())
+			gomega.Expect(db.QueryRow(`SELECT state FROM managed_jobs WHERE id=?`, admitted.JobID).Scan(&state)).To(gomega.Succeed())
+			gomega.Expect(state).To(gomega.Equal("reconciling"))
+			gomega.Expect(db.QueryRow(`SELECT occupancy FROM managed_resources WHERE id=?`, job.ResourceID).Scan(&occupancy)).To(gomega.Succeed())
+			gomega.Expect(occupancy).To(gomega.Equal(1))
+			var count int
+			gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_jobs`).Scan(&count)).To(gomega.Succeed())
+			gomega.Expect(count).To(gomega.Equal(1))
+		})
+	}
+	for _, version := range []int{2, 3, 4, 5, 6, 7} {
+		ginkgo.It("refuses a lost reconciliation column in version "+fmt.Sprint(version), func() {
+			t := ginkgo.GinkgoT()
+			path := filepath.Join(t.TempDir(), "state.sqlite")
+			db, _ := openLedger(t, path, 2)
+			if version == 2 {
+				legacyCoreLayout(t, db, version)
+			}
+			_, err := db.Exec("ALTER TABLE managed_power_transitions DROP COLUMN reconciled_at_ns; PRAGMA user_version=" + fmt.Sprint(version))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(db.Close()).To(gomega.Succeed())
+			db, err = sqlite.Open(path)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			defer db.Close()
+			_, err = NewLedger(db, 2)
+			gomega.Expect(err).To(gomega.HaveOccurred())
+			gomega.Expect(err.Error()).To(gomega.ContainSubstring("reconciled_at_ns"))
+			var current, count int
+			gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&current)).To(gomega.Succeed())
+			gomega.Expect(current).To(gomega.Equal(version))
+			gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('managed_power_transitions') WHERE name='reconciled_at_ns'`).Scan(&count)).To(gomega.Succeed())
+			gomega.Expect(count).To(gomega.BeZero())
+		})
+	}
+	for _, table := range []string{"managed_runs", "managed_job_inputs"} {
+		ginkgo.It("refuses a lost schema-3 "+table+" table", func() {
+			db, _ := openLedger(ginkgo.GinkgoT(), filepath.Join(ginkgo.GinkgoT().TempDir(), "state.sqlite"), 2)
+			defer db.Close()
+			_, err := db.Exec("DROP TABLE " + table + "; PRAGMA user_version=3")
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			_, err = NewLedger(db, 2)
+			gomega.Expect(err).To(gomega.HaveOccurred())
+			gomega.Expect(err.Error()).To(gomega.ContainSubstring(table))
+		})
+	}
+	for _, table := range []string{"schema_migrations", "managed_resources", "managed_jobs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_mutations", "managed_runs", "managed_power_transitions", "managed_no_effect_observations", "managed_job_inputs", "managed_admissions"} {
+		for _, loss := range []string{"table", "column"} {
+			ginkgo.It("refuses a lost "+table+" "+loss+" without changing the surviving schema", func() {
+				t := ginkgo.GinkgoT()
+				path := filepath.Join(t.TempDir(), "state.sqlite")
+				db, l := openLedger(t, path, 2)
+				gomega.Expect(l.RegisterResource(encode(t, validResource()))).To(gomega.Succeed())
+				job := admitScheduling(t, l, "local-a", "retained-schema-job")
+				_, err := l.Cancel(CancelRequest{job.JobID, job.JobRevision, "retained-schema-key"})
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(db.Close()).To(gomega.Succeed())
+				db, err = sqlite.Open(path)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				defer db.Close()
+				_, err = db.Exec(`PRAGMA foreign_keys=OFF`)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				if loss == "table" {
+					_, err = db.Exec("DROP TABLE " + table)
+				} else {
+					var column string
+					gomega.Expect(db.QueryRow("SELECT name FROM pragma_table_info(?) ORDER BY cid LIMIT 1", table).Scan(&column)).To(gomega.Succeed())
+					_, err = db.Exec("ALTER TABLE " + table + " RENAME COLUMN " + column + " TO lost_column")
+				}
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				const schemaQuery = `SELECT COALESCE(group_concat(sql, ';'),'') FROM (SELECT sql FROM sqlite_schema ORDER BY type,name)`
+				var before, after string
+				gomega.Expect(db.QueryRow(schemaQuery).Scan(&before)).To(gomega.Succeed())
+				_, err = NewLedger(db, 2)
+				gomega.Expect(err).To(gomega.HaveOccurred())
+				gomega.Expect(err.Error()).To(gomega.ContainSubstring(table))
+				gomega.Expect(db.QueryRow(schemaQuery).Scan(&after)).To(gomega.Succeed())
+				gomega.Expect(after).To(gomega.Equal(before))
+				var version int
+				gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
+				gomega.Expect(version).To(gomega.Equal(7))
+			})
+		}
+	}
+	for _, version := range []int{1, 2, 3, 4, 5, 6} {
+		ginkgo.It("rejects a lost receipt table before migrating version "+fmt.Sprint(version), func() {
+			t := ginkgo.GinkgoT()
+			db, l, job := cancellationFixture(t)
+			_, err := l.Cancel(CancelRequest{job.JobID, job.JobRevision, "migration-key"})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			_, err = db.Exec("DROP TABLE managed_mutations; PRAGMA user_version=" + fmt.Sprint(version))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			_, err = NewLedger(db, 2)
+			gomega.Expect(err).To(gomega.HaveOccurred())
+			gomega.Expect(err.Error()).To(gomega.ContainSubstring("managed_mutations"))
+			var current, count int
+			gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&current)).To(gomega.Succeed())
+			gomega.Expect(current).To(gomega.Equal(version))
+			gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE name='managed_mutations'`).Scan(&count)).To(gomega.Succeed())
+			gomega.Expect(count).To(gomega.BeZero())
+		})
+	}
+	ginkgo.It("refuses reopening after permanent cancellation receipts are lost", func() {
+		t := ginkgo.GinkgoT()
+		db, l, first := cancellationFixture(t)
+		second := admitScheduling(t, l, "local-a", "second-cancel-job")
+		_, err := l.Cancel(CancelRequest{first.JobID, first.JobRevision, "permanent-key"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = l.Cancel(CancelRequest{second.JobID, second.JobRevision, "permanent-key"})
+		gomega.Expect(errors.Is(err, ErrConflict)).To(gomega.BeTrue())
+		var path, name string
+		var sequence int
+		gomega.Expect(db.QueryRow(`PRAGMA database_list`).Scan(&sequence, &name, &path)).To(gomega.Succeed())
+		_, err = db.Exec(`DROP TABLE managed_mutations`)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(db.Close()).To(gomega.Succeed())
+		db, err = sqlite.Open(path)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer db.Close()
+		opened, err := NewLedger(db, 2)
+		if err == nil {
+			cancelled, replayErr := opened.Cancel(CancelRequest{second.JobID, second.JobRevision, "permanent-key"})
+			t.Logf("lost receipt key reused on second Job: state=%s error=%v", cancelled.Receipt.JobState, replayErr)
+		}
+		gomega.Expect(err).To(gomega.HaveOccurred())
+		var count int
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE name='managed_mutations'`).Scan(&count)).To(gomega.Succeed())
+		gomega.Expect(count).To(gomega.BeZero())
+		var state string
+		gomega.Expect(db.QueryRow(`SELECT state FROM managed_jobs WHERE id=?`, second.JobID).Scan(&state)).To(gomega.Succeed())
+		gomega.Expect(state).To(gomega.Equal("queued"))
+	})
+})
+
 var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label("integration"), func() {
 	ginkgo.It("InitialSchemaRejectsNewerAndDuplicateVM", func() {
 		t := ginkgo.GinkgoT()
@@ -499,20 +710,8 @@ var _ = ginkgo.Describe("ProvisionalV1PowerTableMigration", ginkgo.Label("integr
 	ginkgo.It("ProvisionalV1PowerTableMigration", func() {
 		t := ginkgo.GinkgoT()
 		path := filepath.Join(t.TempDir(), "state.sqlite")
-		db, err := sqlite.Open(path)
-		if err != nil {
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		for _, statement := range []string{
-			`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, identity TEXT NOT NULL)`,
-			`INSERT INTO schema_migrations(version,identity) VALUES(1,'managed-initial-v1')`,
-			`CREATE TABLE managed_power_transitions(operation_generation INTEGER PRIMARY KEY, victim_resource_id TEXT NOT NULL, target_resource_id TEXT NOT NULL, identity_json BLOB NOT NULL, state TEXT NOT NULL)`,
-			`PRAGMA user_version=1`,
-		} {
-			if _, err := db.Exec(statement); err != nil {
-				gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			}
-		}
+		db, _ := openLedger(t, path, 1)
+		legacyCoreLayout(t, db, 1)
 		if err := db.Close(); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}

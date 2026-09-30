@@ -152,8 +152,8 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 33230,
-      "sha256": "28c733054865012ffb2c9aaa8fc640003fba13f60211577ac85ea592910f4adc"
+      "bytes": 33721,
+      "sha256": "828a6251d5c7181c2b57af6e3d8036ed29660a96f844e1000134215590f653ff"
     },
     {
       "path": "checks.json",
@@ -287,8 +287,8 @@
     },
     {
       "path": "operations.md",
-      "bytes": 17139,
-      "sha256": "a4b7fdb2236850a7c80f36476bcd8d61355be2e13fb7dacbb7a8628d80ec009f"
+      "bytes": 17429,
+      "sha256": "ba8b4bfee62cc470588f0161af4b5c6758adf43ec86b986ac5f559f311656fbc"
     },
     {
       "path": "package-validation.md",
@@ -327,8 +327,8 @@
     },
     {
       "path": "roadmap/EPIC-002.md",
-      "bytes": 39036,
-      "sha256": "fcdfdb01453370766f1e546c7bbc3655b4ea442851fa52d5f7c53250466e8a28"
+      "bytes": 41444,
+      "sha256": "d57bb6ddf56a3e8e2234f0a214c907ecdd9cf9ba1fa00089c8e6ca9ac89bead4"
     },
     {
       "path": "roadmap/EPIC-003.md",

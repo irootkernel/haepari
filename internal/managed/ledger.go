@@ -229,6 +229,48 @@ func (p NoEffectProof) valid() bool {
 		p.NoUnprovenProcess && p.NoProtectedPath && p.PowerReconciled
 }
 
+// Existing stores must retain their original authority before creation or
+// migration statements run. An absent receipt table is not an empty history.
+func checkBaseSchemaTx(tx *sql.Tx, version int) error {
+	for _, table := range []struct {
+		name, columns string
+		since         int
+	}{
+		{"schema_migrations", "version,identity", 1},
+		{"managed_resources", "id,kind,config_revision,availability_revision,availability,availability_reason,capacity,occupancy,lease_generation,vm_uuid,vm_mac,spec_json", 1},
+		{"managed_jobs", "id,request_key,submitted_digest,resource_id,revision,state,pinned_config_revision,admitted_at_ns,queue_deadline_ns,slot,lease_generation,pause_availability_revision,no_effect_proof_json,failure_kind,result_json,spec_json", 1},
+		{"managed_events", "cursor,job_id,kind,payload_json", 1},
+		{"managed_event_owners", "cursor,job_id", 1},
+		{"managed_event_progress", "job_id,purged_through", 1},
+		{"managed_mutations", "mutation_key,digest,receipt_json", 1},
+		{"managed_runs", "job_id,run_id,intent_json", 3},
+		{"managed_power_transitions", "operation_generation,victim_resource_id,target_resource_id,identity_json,state", 1},
+		{"managed_no_effect_observations", "reference,job_id,resource_id,config_revision,slot,lease_generation,source,mechanism,evidence_digest,recorded_at_ns,proof_json", 2},
+		{"managed_job_inputs", "job_id,sealed_digest,object_id", 3},
+		{"managed_admissions", "sequence,request_key,job_id,submitted_digest,spec_json,sealed_digest,object_id,inventory_json,identity_json,retention_state,tombstone_receipt", 4},
+	} {
+		if version < table.since {
+			continue
+		}
+		var count int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name=?`, table.name).Scan(&count); err != nil {
+			return err
+		}
+		if count != 1 {
+			return fmt.Errorf("managed schema%d lost required table %s", version, table.name)
+		}
+		if _, err := tx.Exec("SELECT " + table.columns + " FROM " + table.name + " LIMIT 0"); err != nil {
+			return fmt.Errorf("managed schema%d required columns in %s: %w", version, table.name, err)
+		}
+	}
+	if version >= 2 {
+		if _, err := tx.Exec(`SELECT reconciled_at_ns FROM managed_power_transitions LIMIT 0`); err != nil {
+			return fmt.Errorf("managed schema%d required power reconciliation column: %w", version, err)
+		}
+	}
+	return nil
+}
+
 func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if db == nil || globalLimit <= 0 {
 		return nil, ErrInvalid
@@ -292,14 +334,8 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if version > 7 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
-	if version >= 4 {
-		var exists int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='managed_admissions'`).Scan(&exists); err != nil {
-			return nil, err
-		}
-		if exists != 1 {
-			return nil, fmt.Errorf("managed schema4 lost its required admission table")
-		}
+	if err := checkBaseSchemaTx(tx, version); err != nil {
+		return nil, err
 	}
 	if version >= 5 {
 		if err := checkSchedulingSchemaTx(tx); err != nil {

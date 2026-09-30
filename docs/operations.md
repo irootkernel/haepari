@@ -55,6 +55,7 @@ For hands-on, wait for awaiting_manual, open the exact owned UTM guest, and foll
 | Resource quarantined for another reason | Inspect the exact failed phase and request a current recovery plan. |
 | A forced stop or disposal would discard uncollected evidence | Disclose the specific loss and obtain the applicable recovery authority before applying the plan. |
 | State database is newer than executable | Install a compatible stable controller; never downgrade the schema blindly. |
+| Startup reports a missing required table or column | Keep the controller stopped and preserve the database and WAL evidence. Restore a verified consistent backup through the authorized recovery procedure; do not create an empty receipt table or reset the schema version to reuse a key. |
 
 Use `job recover --plan` and `resource recover --plan` to inspect exact job/run, resource revision, generation, observations, uncertainty and proposed effects. Apply with a still-current token and provenance-bearing evidence only after authorized operator review. An attestation stays labeled attested; unsupported or unknown execution remains unresolved. A mutation receipt records the exact outcome. Confirm identity and reusable state afterward. A successful recovery changes resource readiness, not the failed/inconclusive workload verdict.
 
