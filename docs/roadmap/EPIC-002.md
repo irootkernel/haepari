@@ -320,7 +320,7 @@ These checks qualify the bounded local implementation. Real UTM execution, insta
 
 ## Epic acceptance
 
-- [ ] TASK-005 through TASK-008 and TASK-035 meet their individual acceptance criteria.
-- [ ] The epic goal is demonstrated through a bounded integrated scenario, including a relevant failure and recovery path.
-- [ ] Every changed public contract is documented and no downstream task relies on an unstated capability.
-- [ ] An explicit epic acceptance updates only the canonical roadmap; task checkboxes alone do not complete the epic.
+- [x] TASK-005 through TASK-008 and TASK-035 meet their individual acceptance criteria.
+- [x] The epic goal is demonstrated through a bounded integrated scenario, including a relevant failure and recovery path.
+- [x] Every changed public contract is documented and no downstream task relies on an unstated capability.
+- [x] An explicit epic acceptance updates only the canonical roadmap; task checkboxes alone do not complete the epic.
