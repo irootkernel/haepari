@@ -21,6 +21,7 @@ type Ledger struct {
 	transactionBoundary func(string) // nil in production; crash probes surround the real commit
 	changesMu           sync.Mutex
 	changes             chan struct{}
+	lockClock           func() (time.Time, string, error)
 }
 
 // Changes returns the current commit generation. Subscribe before reading the
@@ -288,7 +289,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 6 {
+	if version > 7 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
 	if version >= 4 {
@@ -307,6 +308,11 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	}
 	if version >= 6 {
 		if err := checkClientSchemaTx(tx); err != nil {
+			return nil, err
+		}
+	}
+	if version >= 7 {
+		if err := checkLockSchemaTx(tx); err != nil {
 			return nil, err
 		}
 	}
@@ -365,6 +371,9 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := initClientSchemaTx(tx, version); err != nil {
 		return nil, err
 	}
+	if err := initLockSchemaTx(tx, version); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -395,6 +404,9 @@ func (l *Ledger) RegisterResource(data []byte) error {
 	r, err := DecodeResource(data)
 	if err != nil {
 		return err
+	}
+	if r.Kind == "lock" {
+		return l.registerLockResource(r)
 	}
 	canonical, err := json.Marshal(r)
 	if err != nil {
@@ -437,6 +449,9 @@ func (l *Ledger) UpdateResource(data []byte, expectedConfigRevision, expectedAva
 	if r.Revision != expectedConfigRevision+1 {
 		return ErrStale
 	}
+	if r.Kind == "lock" {
+		return l.updateLockResource(r, expectedConfigRevision, expectedAvailabilityRevision)
+	}
 	canonical, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -448,12 +463,16 @@ func (l *Ledger) UpdateResource(data []byte, expectedConfigRevision, expectedAva
 	defer tx.Rollback()
 	var configRev, availabilityRev int64
 	var occupancy int
-	err = tx.QueryRow(`SELECT config_revision,availability_revision,occupancy FROM managed_resources WHERE id=?`, r.ID).Scan(&configRev, &availabilityRev, &occupancy)
+	var currentKind string
+	err = tx.QueryRow(`SELECT config_revision,availability_revision,occupancy,kind FROM managed_resources WHERE id=?`, r.ID).Scan(&configRev, &availabilityRev, &occupancy, &currentKind)
 	if err != nil {
 		return mapNoRows(err)
 	}
 	if configRev != expectedConfigRevision || availabilityRev != expectedAvailabilityRevision {
 		return ErrStale
+	}
+	if currentKind == "lock" {
+		return ErrConflict
 	}
 	if occupancy != 0 {
 		return ErrBusy
@@ -552,6 +571,9 @@ func (l *Ledger) AdmitWithParent(data []byte, sealedDigest, objectID string, inv
 	if err != nil {
 		return Receipt{}, err
 	}
+	if kind == "lock" {
+		return Receipt{}, ErrUnsupported
+	}
 	now := time.Now().UTC()
 	if _, err := tx.Exec(`INSERT INTO managed_jobs(id,request_key,submitted_digest,resource_id,pinned_config_revision,admitted_at_ns,queue_deadline_ns,spec_json) VALUES(?,?,?,?,?,?,?,?)`,
 		jobID, requestKey, digest, job.ResourceID, configRevision, now.UnixNano(), now.Add(time.Duration(job.Deadlines.QueueSeconds)*time.Second).UnixNano(), canonical); err != nil {
@@ -636,12 +658,15 @@ func (l *Ledger) Reserve(q ReserveRequest) (Receipt, error) {
 			return Receipt{}, ErrBusy
 		}
 		var configRev, availabilityRev, generation int64
-		var availability string
+		var availability, kind string
 		var capacity, occupancy int
-		err = tx.QueryRow(`SELECT config_revision,availability_revision,availability,capacity,occupancy,lease_generation FROM managed_resources WHERE id=?`, resourceID).
-			Scan(&configRev, &availabilityRev, &availability, &capacity, &occupancy, &generation)
+		err = tx.QueryRow(`SELECT config_revision,availability_revision,availability,capacity,occupancy,lease_generation,kind FROM managed_resources WHERE id=?`, resourceID).
+			Scan(&configRev, &availabilityRev, &availability, &capacity, &occupancy, &generation, &kind)
 		if err != nil {
 			return Receipt{}, mapNoRows(err)
+		}
+		if kind == "lock" {
+			return Receipt{}, ErrUnsupported
 		}
 		if configRev != q.ExpectedConfigRevision || availabilityRev != q.ExpectedAvailabilityRevision {
 			return Receipt{}, ErrStale

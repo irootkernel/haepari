@@ -101,6 +101,12 @@ func (c *Client) newRequest(ctx context.Context, method, path string, input any)
 		}
 		req.Header.Set(managed.ParentContextHeader, raw)
 	}
+	if raw := os.Getenv(managed.LockGrantEnvironment); raw != "" {
+		if _, err := managed.DecodeLockGrant(raw); err != nil {
+			return nil, fmt.Errorf("%s: %w: %w", managed.LockGrantEnvironment, ErrLockGrantContext, managed.ErrInvalid)
+		}
+		req.Header.Set(managed.LockGrantHeader, raw)
+	}
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -144,6 +150,11 @@ func (c *Client) call(ctx context.Context, method, path string, input any, targe
 	return envelope, nil
 }
 func (c *Client) Register(ctx context.Context, spec []byte) (Envelope, error) {
+	if resource, err := managed.DecodeResource(spec); err == nil && resource.Kind == "lock" {
+		if err := c.requireAdvisoryLock(); err != nil {
+			return Envelope{}, err
+		}
+	}
 	return c.call(ctx, "POST", "/v1/resources", map[string]any{"spec": json.RawMessage(spec)}, nil)
 }
 func (c *Client) Submit(ctx context.Context, spec []byte, key string) (managed.Receipt, Envelope, error) {

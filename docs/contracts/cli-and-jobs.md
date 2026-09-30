@@ -9,7 +9,7 @@ This contract describes managed Jobs. TASK-033 implements `resource register`, `
 | Command | Contract |
 | --- | --- |
 | `haepari version --json` | Report product version, source identity, and executable identity without starting a daemon. |
-| `haepari capabilities --json` | Report protocol versions and compiled/backend-qualified capabilities separately, including implemented `managed-execution/v1` and `durable-observation/v1`; `advisory-lock/v1` remains planned for TASK-035. |
+| `haepari capabilities --json` | Report protocol versions and compiled/backend-qualified capabilities separately, including implemented `managed-execution/v1`, `durable-observation/v1` and `advisory-lock/v1`. |
 | `haepari doctor --json` | Read-only configuration/service/prerequisite inspection; never boot or repair a VM. |
 | `haepari daemon run` | Run the exclusive local controller in the foreground. |
 | `haepari service install`, `status`, `stop`, `uninstall` | Explicit per-user service lifecycle. No implicit installation during submit. |
@@ -118,7 +118,7 @@ The implementation may perform bounded internal liveness checks. TASK-008 uses b
 
 ### Implemented local observer wire format
 
-The standalone `capabilities --json` response lists compiled feature identifiers in `capabilities`, separately from `protocol_versions`, `compiled_backends` and `qualified_backends`. The current local slice reports `managed-execution/v1` and `durable-observation/v1`; this feature report does not claim live backend qualification.
+The standalone `capabilities --json` response lists compiled feature identifiers in `capabilities`, separately from `protocol_versions`, `compiled_backends` and `qualified_backends`. The current local slice reports `managed-execution/v1`, `durable-observation/v1` and `advisory-lock/v1`; this feature report does not claim live backend qualification.
 
 Closed operation envelopes are bounded to 4 MiB, allowing result inventories and bounded observation pages above the 1 MiB input-document limit. Response payloads may contain literal angle brackets; illustrative input placeholders are not a response-validation rule. Known unavailable-result errors retain `RESULT_UNAVAILABLE` and exit 2.
 

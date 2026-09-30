@@ -87,16 +87,18 @@ type Provenance struct {
 }
 
 type ResourceSpec struct {
-	Schema        string         `json:"schema"`
-	ID            string         `json:"id"`
-	Kind          string         `json:"kind"`
-	ExecutionMode string         `json:"execution_mode"`
-	Capacity      int            `json:"capacity"`
-	Revision      int64          `json:"revision"`
-	Adapter       Adapter        `json:"adapter"`
-	Cleanup       *CleanupPolicy `json:"cleanup,omitempty"`
-	VM            *VM            `json:"vm,omitempty"`
-	Guest         *Guest         `json:"guest,omitempty"`
+	Schema          string         `json:"schema"`
+	ID              string         `json:"id"`
+	Kind            string         `json:"kind"`
+	ExecutionMode   string         `json:"execution_mode"`
+	Capacity        int            `json:"capacity"`
+	Revision        int64          `json:"revision"`
+	Adapter         Adapter        `json:"adapter"`
+	Cleanup         *CleanupPolicy `json:"cleanup,omitempty"`
+	VM              *VM            `json:"vm,omitempty"`
+	Guest           *Guest         `json:"guest,omitempty"`
+	LivenessSeconds int64          `json:"liveness_seconds,omitempty"`
+	MaxHoldSeconds  int64          `json:"max_hold_seconds,omitempty"`
 }
 type Adapter struct {
 	QualificationReference string `json:"qualification_reference"`
@@ -204,6 +206,48 @@ func DecodeResource(data []byte) (ResourceSpec, error) {
 	var r ResourceSpec
 	if err := decodeClosed(data, &r); err != nil {
 		return r, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return r, ErrInvalid
+	}
+	if r.Kind == "lock" {
+		if r.Schema != "haepari.resource/v1" {
+			return r, ErrUnsupported
+		}
+		for _, name := range []string{"execution_mode", "adapter", "cleanup", "vm", "guest"} {
+			if _, present := fields[name]; present {
+				return r, ErrInvalid
+			}
+		}
+		for name, fallback := range map[string]int64{"capacity": 1, "revision": 1, "liveness_seconds": 120, "max_hold_seconds": 21600} {
+			if value, present := fields[name]; present {
+				var n int64
+				if string(value) == "null" || json.Unmarshal(value, &n) != nil || n <= 0 {
+					return r, ErrInvalid
+				}
+			} else {
+				switch name {
+				case "capacity":
+					r.Capacity = int(fallback)
+				case "revision":
+					r.Revision = fallback
+				case "liveness_seconds":
+					r.LivenessSeconds = fallback
+				case "max_hold_seconds":
+					r.MaxHoldSeconds = fallback
+				}
+			}
+		}
+		if !identifier.MatchString(r.ID) || !validLockSeconds(r.LivenessSeconds) || !validLockSeconds(r.MaxHoldSeconds) {
+			return r, ErrInvalid
+		}
+		return r, nil
+	}
+	for _, name := range []string{"liveness_seconds", "max_hold_seconds"} {
+		if _, present := fields[name]; present {
+			return r, ErrInvalid
+		}
 	}
 	if r.Schema != "haepari.resource/v1" || (r.ExecutionMode != "managed" && r.ExecutionMode != "external") || r.Kind == "external" {
 		return r, fmt.Errorf("%w: resource schema or execution mode", ErrUnsupported)
@@ -474,4 +518,21 @@ func hasPlaceholder(data []byte) bool {
 		return false
 	}
 	return walk(value)
+}
+
+// MarshalJSON preserves the resource kind union on storage and transport.
+func (r ResourceSpec) MarshalJSON() ([]byte, error) {
+	if r.Kind == "lock" {
+		return json.Marshal(struct {
+			Schema          string `json:"schema"`
+			ID              string `json:"id"`
+			Kind            string `json:"kind"`
+			Capacity        int    `json:"capacity"`
+			Revision        int64  `json:"revision"`
+			LivenessSeconds int64  `json:"liveness_seconds"`
+			MaxHoldSeconds  int64  `json:"max_hold_seconds"`
+		}{r.Schema, r.ID, r.Kind, r.Capacity, r.Revision, r.LivenessSeconds, r.MaxHoldSeconds})
+	}
+	type plain ResourceSpec
+	return json.Marshal(plain(r))
 }

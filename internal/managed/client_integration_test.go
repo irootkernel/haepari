@@ -203,7 +203,7 @@ var _ = ginkgo.Describe("Task008DurablePages", ginkgo.Label("integration"), func
 		gomega.Expect(l.RegisterResource(encode(t, validResource()))).To(gomega.Succeed())
 		r, e := l.Admit(encode(t, validJob()), digest, "key", "job-1")
 		gomega.Expect(e).NotTo(gomega.HaveOccurred())
-		_, e = db.Exec(`DROP TABLE managed_installation; DROP TABLE managed_cancellations; DROP TABLE managed_cancel_edges; DROP TABLE managed_local_outcomes; DELETE FROM schema_migrations WHERE version=6; PRAGMA user_version=5`)
+		_, e = db.Exec(`DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities; DELETE FROM schema_migrations WHERE version=7; DROP TABLE managed_installation; DROP TABLE managed_cancellations; DROP TABLE managed_cancel_edges; DROP TABLE managed_local_outcomes; DELETE FROM schema_migrations WHERE version=6; PRAGMA user_version=5`)
 		gomega.Expect(e).NotTo(gomega.HaveOccurred())
 		l, e = NewLedger(db, 1)
 		gomega.Expect(e).NotTo(gomega.HaveOccurred())

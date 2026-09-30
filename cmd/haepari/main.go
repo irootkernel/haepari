@@ -37,7 +37,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | resource register/inspect/pause/resume | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
+		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | resource register/inspect/pause/resume/update/remove/recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
 		return 2
 	}
 	switch args[0] {
@@ -62,7 +62,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			QualifiedBackends []string `json:"qualified_backends"`
 			Protocols         []string `json:"protocol_versions"`
 			Capabilities      []string `json:"capabilities"`
-		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, []string{"managed-execution/v1", "durable-observation/v1"}})
+		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1"}})
 	case "daemon":
 		if len(args) < 2 || args[1] != "run" {
 			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local]")
@@ -100,7 +100,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 6
 		}
 		return 0
+	case "lock":
+		return lockCommand(args[1:], stdout, stderr)
+	case "locks":
+		return locksList(args[1:], stdout, stderr)
 	case "resource":
+		if len(args) > 1 && (args[1] == "update" || args[1] == "remove" || args[1] == "recover") {
+			return lockResourceCommand(args[1], args[2:], stdout, stderr)
+		}
 		if len(args) > 1 && args[1] == "inspect" {
 			return resourceInspect(args[2:], stdout, stderr)
 		}
@@ -140,6 +147,10 @@ func connect(stderr io.Writer) (*client.Client, int) {
 	}
 	c, err := client.Connect(context.Background(), root)
 	if err != nil {
+		if errors.Is(err, client.ErrLockGrantContext) {
+			fmt.Fprintf(stderr, "invalid advisory grant: %v (check HAEPARI_LOCK_GRANT)\n", err)
+			return nil, 2
+		}
 		if errors.Is(err, client.ErrParentContext) {
 			fmt.Fprintf(stderr, "invalid parent context: %v (check HAEPARI_PARENT_CONTEXT)\n", err)
 			return nil, 2

@@ -76,6 +76,8 @@ func reject(w http.ResponseWriter, op string, err error) {
 	case errors.Is(err, managed.ErrNotFound):
 		code = "NOT_FOUND"
 		status = http.StatusNotFound
+	case errors.Is(err, managed.ErrLockExpired):
+		code = "LOCK_EXPIRED"
 	case errors.Is(err, managed.ErrBusy):
 		code = "RESOURCE_BUSY"
 		status = http.StatusConflict
@@ -106,6 +108,7 @@ func reject(w http.ResponseWriter, op string, err error) {
 		"PREREQUISITE_UNAVAILABLE":    "The selected input source is unavailable; correct it before submitting again.",
 		"CONFLICT":                    "The request conflicts with existing or changed input.",
 		"NOT_FOUND":                   "The requested job or resource was not found.",
+		"LOCK_EXPIRED":                "The advisory grant has ended or its generation is stale.",
 		"RESOURCE_BUSY":               "The resource is occupied or already registered.",
 		"UNSUPPORTED":                 "This mode or resource is not supported.",
 		"STALE_REVISION":              "The expected revision is no longer current.",
@@ -127,7 +130,7 @@ func reject(w http.ResponseWriter, op string, err error) {
 func (s *runtimeServer) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/hello", func(w http.ResponseWriter, r *http.Request) {
-		send(w, 200, "hello", map[string]any{"protocol": protocol, "protocol_version": 1, "capabilities": []string{"managed-execution/v1", "durable-observation/v1"}, "installation_id": s.installationID()}, nil)
+		send(w, 200, "hello", map[string]any{"protocol": protocol, "protocol_version": 1, "capabilities": []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1"}, "installation_id": s.installationID()}, nil)
 	})
 	mux.HandleFunc("POST /v1/resources", s.register)
 	mux.HandleFunc("GET /v1/resources", s.resourcesList)
@@ -140,6 +143,11 @@ func (s *runtimeServer) routes() http.Handler {
 	mux.HandleFunc("POST /v1/jobs", s.submit)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.inspect)
 	mux.HandleFunc("GET /v1/jobs/{id}/wait", s.wait)
+	mux.HandleFunc("POST /v1/locks/acquire", s.lockAcquire)
+	mux.HandleFunc("GET /v1/locks", s.locksList)
+	mux.HandleFunc("GET /v1/locks/requests/{id}/wait", s.lockWait)
+	mux.HandleFunc("POST /v1/locks/requests/{id}/cancel", s.lockCancel)
+	mux.HandleFunc("POST /v1/locks/grants/{id}/{action}", s.lockGrantAction)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		minimum, minErr := strconv.Atoi(r.Header.Get("X-Haepari-Protocol-Min"))
 		maximum, maxErr := strconv.Atoi(r.Header.Get("X-Haepari-Protocol-Max"))
@@ -174,6 +182,15 @@ func decodeBody(r *http.Request, target any) error {
 	return nil
 }
 func (s *runtimeServer) register(w http.ResponseWriter, r *http.Request) {
+	// Preserve managed decoding while retaining the bytes for exact advisory fields.
+	defer r.Body.Close()
+	const limit = 1<<20 + 4096
+	raw, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+	if err != nil || len(raw) > limit {
+		reject(w, "resource.register", managed.ErrInvalid)
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(raw))
 	var input struct {
 		Spec json.RawMessage `json:"spec"`
 	}
@@ -186,9 +203,15 @@ func (s *runtimeServer) register(w http.ResponseWriter, r *http.Request) {
 		reject(w, "resource.register", err)
 		return
 	}
-	if spec.Kind != "local" {
+	if spec.Kind != "local" && spec.Kind != "lock" {
 		reject(w, "resource.register", managed.ErrUnsupported)
 		return
+	}
+	if spec.Kind == "lock" {
+		if err := decodeLockJSON(raw, &input); err != nil {
+			reject(w, "resource.register", err)
+			return
+		}
 	}
 	if err := s.ledger.RegisterOnlyLocal(input.Spec); err != nil {
 		reject(w, "resource.register", err)
@@ -220,6 +243,14 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 	}
 	job, err := managed.DecodeJob(input.Spec)
 	if err != nil {
+		reject(w, "submit", err)
+		return
+	}
+	resource, err := s.ledger.ResourceStatus(job.ResourceID)
+	if err != nil || resource.Kind == "lock" {
+		if err == nil {
+			err = managed.ErrUnsupported
+		}
 		reject(w, "submit", err)
 		return
 	}

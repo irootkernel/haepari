@@ -1,6 +1,6 @@
 # Haepari
 
-Haepari is an independent Go CLI and local controller for managed command jobs. TASK-033 connects the provisional managed ledger and selected-file store to a foreground local Job path. The [development package](docs/README.md) owns the planned contracts and roadmap.
+Haepari is an independent Go CLI and local controller for managed command jobs and advisory named locks. TASK-033 connects the provisional managed ledger and selected-file store to a foreground local Job path. The [development package](docs/README.md) owns the planned contracts and roadmap.
 
 ## Build and check
 
@@ -53,4 +53,24 @@ Every Unix request carries a supported protocol range. The handshake returns sel
 
 Admission receipts include a separate immutable `admission` identity: request key, canonical submitted digest, sealed input/object identity, global sequence, original resource configuration revision, frozen environment profile identity and UTC admission time. Current resource fences remain separate. Same-key replay compares surviving selected source files without recreating sealed payloads. An explicitly retained tombstone returns the original admission with `result_status: unavailable`, without a verdict or current capacity/lease claims; `run` emits that admission and exits 2, and `wait` reports `RESULT_UNAVAILABLE` with exit 2. Neither creates another Job. Unexpected missing accepted rows or objects remain storage uncertainty, not ordinary retention. Production bulk retention and purge are owned by TASK-012 and are not exposed by this slice.
 
-Haepari has no runtime dependency on Aquarium or its tools. UTM jobs, service installation, advisory locks, and public external leases are not available in this slice. The [roadmap](docs/roadmap.md) names the owning tasks. Haepari is licensed under [MIT](LICENSE).
+## Advisory named locks
+
+Register a `kind: lock` document such as [the lock example](docs/examples/resource-lock.template.json). Omitted capacity, revision, liveness and maximum hold default to 1, 1, 120 s and 21600 s; explicit zero is invalid. A lock has no adapter or execution mode.
+
+```sh
+bin/haepari resource register --file lock-resource.json --json
+bin/haepari lock acquire mulgae-review --request-key saved-lock-key --holder review-run --wait --timeout 5m --json
+bin/haepari locks list --lock mulgae-review --limit 50 --json
+bin/haepari lock keepalive <grant-id>
+bin/haepari lock release <grant-id> --json
+```
+
+Save the key and payload before acquisition. A lost reply replays the same request and reports its current state; a granted replay claims it by renewal. A caller wait timeout exits 5 and leaves the request queued. Grants need renewal within their original liveness window and never extend beyond their original maximum hold. `keepalive` renews every third of that window; interruption stops renewal without releasing the grant. Its eventual `LOCK_EXPIRED` error exits 2. An ended acquire/wait exits 4. Exact own release replay exits 0; a differently ended grant returns its immutable terminal receipt and exits 4.
+
+Pause stops new grants and resume hands free slots to FIFO waiters. Existing grants remain renewable. Updates change future grants only; shrinking capacity does not revoke grants. Removal requires no queued or granted requests. Lock recovery returns `UNSUPPORTED`. `resource inspect` reports `advisory_grants` and `advisory_queued` separately from managed occupancy. Lock keys, terminal history and slot generations survive removal and re-registration. Follow `more`/`next_cursor` to inspect every bounded list page.
+
+An integration may pass `HAEPARI_LOCK_GRANT` containing installation ID, lock ID, grant ID and generation to a child. `internal/client.CheckLockGrant` validates it read-only on the selected installation and intended lock; the environment alone is not proof. A borrower must not renew, wait-claim, release, cancel or force-end the parent's grant. Managed parent contexts also reject literal lock acquisition. The owner retains renewal and release duties when a child succeeds, fails or is cancelled.
+
+Schema 7 persists lock deadlines, UTC highwater and discontinuities. Startup and observed macOS wake extend each still-live grant's liveness before expiry, capped by its original maximum hold. A backward clock jump cannot extend a window. Local injected restart/wake checks and native marker reading do not qualify hardware sleep or power-loss survival. Locks grant no execution permit, consume no managed or global capacity, and never observe holder work. Callers who skip the lock remain outside its guarantee. See the [lock contract](docs/contracts/locks.md).
+
+Haepari has no runtime dependency on Aquarium or its tools. UTM jobs, service installation and public external leases are not available in this slice. The [roadmap](docs/roadmap.md) names the owning tasks. Haepari is licensed under [MIT](LICENSE).

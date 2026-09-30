@@ -59,7 +59,7 @@ A lock resource has no adapter or execution mode. See the [lock resource example
 | `haepari lock keepalive <grant-id>` | Renew every `liveness_seconds / 3` until the grant ends, then exit. Stopping the process stops the renewals. |
 | `haepari lock release <grant-id> --json` | Release the grant. An exact replay of the caller's own release returns the original receipt and exits 0. Releasing a grant that ended some other way returns its terminal receipt and never touches a later grant. |
 | `haepari lock cancel <request-id> [--force --reason <text>] --json` | Remove a queued request. If the request is granted, release the grant in the same transaction. `--force` records an operator action and its reason. |
-| `haepari locks list [--lock <id>] --json` | Show the installation ID and each lock ID, request ID, grant ID/generation, holder label and state, with waiters in FIFO order and every deadline. This supplies read-only inherited-grant validation. |
+| `haepari locks list [--lock <id>] [--limit <n>] [--cursor <cursor>] --json` | Show the installation ID and each lock ID, request ID, grant ID/generation, holder label and state, with waiters in FIFO order and every deadline. This supplies read-only inherited-grant validation. |
 | `haepari lock release <grant-id> --force --reason <text> --json` | Operator release. The receipt records the reason. |
 
 **Queue deadline.** A lock has no default queue deadline. A request waits until it is granted or cancelled, unless `acquire` sets `--queue-seconds`.
@@ -138,3 +138,24 @@ Before skipping acquisition, the borrower performs a read-only lookup on its sel
   - a holder's renewals stop while its work keeps running, for example when its renewal thread hangs.
 
   The lock is advisory, so the worst case is the same as having no lock.
+
+## Current native implementation
+
+TASK-035 exposes the advisory commands through the existing version-1 Unix HTTP protocol. Both the foreground handshake and standalone capability output advertise `advisory-lock/v1`. Advisory mutation bodies require exact field spelling and reject null or unknown fields, including lock pause/resume. Advisory client methods refuse a selected controller lacking that capability before requests. The resource parser uses a closed kind union: lock fields cannot appear on managed resources, and adapter, execution mode, cleanup, VM and guest fields cannot appear on locks, even as empty values. Omitted lock policy fields use the defaults above; explicit zero or null fails. Positive durations must fit Go's duration conversion. Grant and queue deadlines are persisted as UTC JSON timestamps, which can extend beyond the signed-nanosecond range of the separately stored effective-clock highwater. Registration and update validate both policy deadlines in that actual timestamp representation before committing; later expiry, handoff, renewal and startup/wake calculations use the same representation. Holder labels and forced-action reasons are nonempty bounded descriptions, with at most 512 bytes.
+
+| Unix operation | Path and request |
+| --- | --- |
+| Acquire | `POST /v1/locks/acquire`, with `lock_id`, `request_key`, `holder` and optional positive `queue_seconds` |
+| Wait/claim | `GET /v1/locks/requests/<id>/wait?timeout=<duration>`; a caller deadline from greater than zero through 24 h, default 5 min |
+| Renew/release | `POST /v1/locks/grants/<id>/renew` or `/release`; action body contains `force` and optional `reason`; renew forbids force/reason |
+| Cancel | `POST /v1/locks/requests/<id>/cancel`, with the same force/reason action shape |
+| Read-only list | `GET /v1/locks?lock=<id>&limit=<n>&cursor=<cursor>`; lock/cursor optional, limit 1–100/default 50 |
+| Lock resource update/remove/recover | Existing `POST /v1/resources/<id>/<action>`; update has `spec` and `expected_revision`, remove has `expected_revision`, recover has `plan: true` and returns `UNSUPPORTED` |
+
+Lock replies contain `receipt` and `current`. Acquire replay preserves its original acquisition receipt; `current` records any subsequent grant, renewal or end. Release/cancel/expiry persist an immutable terminal receipt. A release replay exits 0 only for the same release action and force/reason; other ended releases exit 4. Cancellation that took effect or replays the same cancellation exits 0; a differently ended request exits 4. `keepalive` bounds its next timer by the returned liveness and maximum-hold deadlines, uses renew and stops with the mapped error when the grant ends (`LOCK_EXPIRED`, exit 2); deliberate interruption exits 6 and performs no release.
+
+List responses contain `installation_id`, effective `now`, FIFO-ordered `requests`, and explicit `more`/`next_cursor`. Cursors bind installation, lock filter and a fixed upper request sequence; a page reports current state in its own read view. Inherited validation walks bounded pages, validating the matching entry against that same page's effective time. It does not infer a grant from another page's clock. An unknown filter yields an empty list; an invalid or mismatched cursor fails rather than starting again. Replies remain within the native envelope bound.
+
+`HAEPARI_LOCK_GRANT` and `X-Haepari-Lock-Grant` carry a closed JSON reference with `installation_id`, `lock_id`, `grant_id` and positive `generation`. The read-only client helper returns the contract's Conflict/NotFound/LockExpired conditions and never reacquires. The controller validates borrower references before mutations and refuses parent renewal or disposition, including force. A borrowed wait cannot claim/renew the parent. Managed nonterminal blocking lock waits are rejected while the parent occupies capacity; immediate terminal inspection remains available.
+
+The foreground controller uses the read-only macOS `kern.wake_abs_time` marker, which the [Apple XNU source](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/Kernel/IOPMrootDomain.cpp) exposes separately from UTC. It records startup and a changed native wake marker before applying due lock deadlines. Logical injected clock/wake and restart checks cover the ordering and maximum-hold cap; reading the real marker is a bounded host check, not hardware sleep qualification. No service, real UTM execution, provider integration or power-loss qualification is claimed.

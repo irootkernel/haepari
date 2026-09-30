@@ -136,7 +136,7 @@ var _ = ginkgo.Describe("Task008CancellationLedger", ginkgo.Label("integration")
 			_, err := db.Exec("DROP TABLE " + name)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
-		_, err = db.Exec(`DELETE FROM schema_migrations WHERE version=6; PRAGMA user_version=5`)
+		_, err = db.Exec(`DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities; DELETE FROM schema_migrations WHERE version=7; DELETE FROM schema_migrations WHERE version=6; PRAGMA user_version=5`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		l, err = NewLedger(db, 2)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

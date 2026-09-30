@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -8,6 +10,20 @@ import (
 
 func (s *runtimeServer) resourceAvailability(w http.ResponseWriter, r *http.Request) {
 	op := "resource." + r.PathValue("action")
+	if r.PathValue("action") == "update" || r.PathValue("action") == "remove" || r.PathValue("action") == "recover" {
+		s.lockResourceAction(w, r)
+		return
+	}
+	// Keep the existing malformed-body/path/action order for managed calls.
+	// Retain bounded bytes to enforce the advisory shape once its kind is known.
+	defer r.Body.Close()
+	const limit = 1<<20 + 4096
+	raw, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+	if err != nil || len(raw) > limit {
+		reject(w, op, managed.ErrInvalid)
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(raw))
 	var q managed.AvailabilityRequest
 	if err := decodeBody(r, &q); err != nil {
 		reject(w, op, err)
@@ -20,6 +36,24 @@ func (s *runtimeServer) resourceAvailability(w http.ResponseWriter, r *http.Requ
 	resume := r.PathValue("action") == "resume"
 	if !resume && r.PathValue("action") != "pause" {
 		reject(w, op, managed.ErrInvalid)
+		return
+	}
+	status, err := s.ledger.ResourceStatus(q.ResourceID)
+	if err != nil {
+		reject(w, op, err)
+		return
+	}
+	if status.Kind == "lock" {
+		if err := decodeLockJSON(raw, &q); err != nil {
+			reject(w, op, err)
+			return
+		}
+		updated, err := s.ledger.SetAvailability(q, resume)
+		if err != nil {
+			reject(w, op, err)
+			return
+		}
+		sendLock(w, op, updated)
 		return
 	}
 	if prior, found, err := s.ledger.ReplayAvailability(q, resume); found || err != nil {
@@ -60,7 +94,7 @@ func (s *runtimeServer) resourceAvailability(w http.ResponseWriter, r *http.Requ
 		}
 
 	}
-	status, err := s.ledger.SetAvailability(q, resume)
+	status, err = s.ledger.SetAvailability(q, resume)
 	if err != nil {
 		reject(w, op, err)
 		return

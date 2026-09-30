@@ -219,7 +219,7 @@ These checks qualify the implemented local slice only. Real UTM execution, insta
 Requirement coverage: `HP-REQ-080`, `HP-REQ-081`.
 
 #### Implement
-- [ ] Implement `kind: lock` resources and the `haepari lock` family from the [lock contract](../contracts/locks.md):
+- [x] Implement `kind: lock` resources and the `haepari lock` family from the [lock contract](../contracts/locks.md):
   - atomic queue-or-grant, FIFO grants and a blocking wait on the existing event path
   - replay that reports the current state
   - liveness renewal and `keepalive`, bounded by the maximum hold
@@ -227,21 +227,81 @@ Requirement coverage: `HP-REQ-080`, `HP-REQ-081`.
   - release and cancellation that hand the slot to the next waiter atomically
   - operator force actions and `locks list` with request and grant IDs
   - the effect of pause, resume, remove and update on lock resources
-- [ ] Keep locks out of managed and global capacity accounting, and reject acquisition from nested managed callers.
-- [ ] Expose the stable installation identity in handshake/lock inspection for read-only inherited-grant validation. Distinguish the acquiring owner's renew/release/cancel from a nested borrower's check-only use; reject wrong-installation, wrong-lock and stale grants without reacquisition.
+- [x] Keep locks out of managed and global capacity accounting, and reject acquisition from nested managed callers.
+- [x] Expose the stable installation identity in handshake/lock inspection for read-only inherited-grant validation. Distinguish the acquiring owner's renew/release/cancel from a nested borrower's check-only use; reject wrong-installation, wrong-lock and stale grants without reacquisition.
 
 #### Do not
-- [ ] Do not add execution permits, continuation, provider routing or any observation of the holder's work, and do not let a stale grant release a later one.
+- [x] Do not add execution permits, continuation, provider routing or any observation of the holder's work, and do not let a stale grant release a later one.
 
 #### Verify
-- [ ] Run V59–V64: FIFO exclusivity and atomic hand-off; replay, key conflicts and ended requests; liveness expiry, unclaimed grants and force actions; independence from managed capacity, nested rejection and resource commands; restart and sleep/wake; stale IDs and every exit code. Prove that child success, failure and cancellation never end the parent's grant, while the direct owner renews and releases it.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Run V59–V64: FIFO exclusivity and atomic hand-off; replay, key conflicts and ended requests; liveness expiry, unclaimed grants and force actions; independence from managed capacity, nested rejection and resource commands; restart and sleep/wake; stale IDs and every exit code. Prove that child success, failure and cancellation never end the parent's grant, while the direct owner renews and releases it.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+
+### Implementation
+
+Schema 7 persists advisory request keys, FIFO sequence, random grant IDs, per-slot generations, original acquisition receipts and immutable terminal receipts separately from managed Jobs. Resource deletion and re-registration leave that history intact. The closed `kind: lock` parser supplies omitted defaults and rejects explicit invalid values and managed-only fields. Lock grants count separately from managed occupancy and cannot become execution targets.
+
+Every valid lock mutation samples effective UTC and the observed wake marker in its SQLite transaction. Startup/wake liveness extension precedes due expiry, stays within each grant's original maximum hold and records the discontinuity. Persisted highwater prevents backward-clock extension. Expired renew commits its expiry and FIFO handoff while returning LOCK_EXPIRED. Clock-only progress and queued claims do not broadcast, so subscribe-before-read waits do not wake themselves. A separate worker applies the nearest deadline, commit notifications and bounded native wake-marker checks.
+
+The Unix API and CLI expose acquisition, wait/claim, renewal, keepalive, release, cancellation, force reasons and bounded lock pages. Resource pause/resume/update/remove obey advisory policy, and recover reports UNSUPPORTED. Actual managed parents reject nested acquisition before effects. Borrower inspection uses the selected installation and the matching page's effective time to validate intended lock, ID/generation and live deadlines read-only. Parent mutation, including force and wait-claim, is refused. Child outcomes never operate the owner's grant.
+
+### Verification
+
+Observed on 2026-10-01, macOS 27.0 build 26A428 arm64 and Go 1.27.1. `make test` exited 0: prepare formatting, default/integration/supervision vet, build, locked Python preparation and documentation validation; 69 Go unit and 266 integration specs under the race detector; and two actual compiled CLI E2E scenarios. Focused managed race coverage passed 18 advisory specs, including long-policy registration and accepted-policy UTC-advancement regressions for both policy fields; the common gate covers all 150 managed unit/integration specs. Separate focused Unix/availability coverage passed 13 specs, including rejection of case-variant and competing outer registration fields without resource, persisted clock, history or notification effects. The new registration regression failed before the correction and passed afterwards. The common gate also includes the negotiated-capability/native-clock checks and actual Unix lost-reply probe. Final checks supersede earlier capability, formatting, documentation-generation and error-precedence failures. The corrected deadline regressions failed before removing the unnecessary absolute nanosecond bound and passed afterwards.
+
+| Case | Production-path evidence |
+| --- | --- |
+| V59 | Concurrent durable FIFO and atomic successor grants; real Unix wait/handoff; actual borrower subprocesses perform typed Unix read-only validation and rejected wait/renew/normal/forced disposition/acquire calls before success, failure or cancellation, with unchanged parent deadlines and highwater. |
+| V60 | Same/different-key concurrency, immutable original receipt plus current state, actual Unix acquire reply dropped after commit, current-key recovery with one stored request, wrong installation/lock and ended replay exits. |
+| V61 | Liveness and unclaimed expiry, original policy renewal and maximum-hold cap, compiled keepalive ending when a one-second maximum hold is shorter than its renewal interval; interrupt stops renewal without ending the owner grant; queued/granted cancellation and recorded force reasons. |
+| V62 | Independent local managed occupancy and VM host claims in ledger fixtures; an actual managed workload invokes the compiled child CLI with its runner-exported chain, rejecting fresh and replay acquisition despite spare lock capacity; closed Unix registration/pause/resume/update/remove/recover, capacity shrink without revocation and policy freeze. |
+| V63 | Actual SQLite close/reopen preserves FIFO/grants/deadlines; injected startup/wake extension precedes expiry and never exceeds the original maximum hold; backward UTC highwater; native macOS marker reading; accepted long policies remain usable after UTC advancement during renewal, observed wake and actual reopen/startup. |
+| V64 | Stale grant/generation and borrowed validation, immutable ended receipts, worker deadline sweep, exact release replay, queue expiry and compiled exits 0/2/4/5/6. |
+
+The combined CLI scenario holds one advisory grant through managed Job success, failure, observer reconnect, queued cancellation and the actual nested-caller probe, then verifies unchanged grant identity/deadline and zero managed occupancy before explicit owner release. Its lock and Job use the same public key without sharing identity. Other negative checks cover malformed/null/case-variant wire fields, exact outer lock registration fields, unsupported negotiated capability before requests, stable bounded history pages, schema migration/loss, injected clock failure, duration-conversion overflow rejection, long UTC JSON deadline persistence, and accepted policy use after UTC advances through expiry/handoff, renewal, observed wake and actual reopen/startup, and rollback of expiry/handoff/generation/highwater on storage failure.
+
+These checks qualify the bounded local implementation. Real UTM execution, installed-service recovery, hardware sleep/wake, sudden power loss, native consumer/provider integration and release qualification were not run. The implementation/test baseline is commit `c3613f8d66e6fdaa4bd1fc6ecc18b3a27cd396e4`; prior TASK-008 inputs above remain its historical observation. All other product/test/runner inputs are unchanged from this baseline. Changed inputs for TASK-035 are these Git blobs; later documentation-only lifecycle changes need focused validation.
+
+| Input | Git blob |
+| --- | --- |
+| `cmd/haepari/lock_resources.go` | `8e82e49fcfb1fcca19c19c84d1ab2db7810b8ce3` |
+| `cmd/haepari/locks.go` | `d2246783f6dc204e4c30c75a3615ba30018b04c6` |
+| `cmd/haepari/main.go` | `2bb9096db2219c3f76800fc3f669e70a468cda38` |
+| `cmd/haepari/main_test.go` | `87daf642bbefe449de6fea95d55cff3b2dfa0730` |
+| `internal/client/client.go` | `50191be51842679c990f6581e54f12c573fa0863` |
+| `internal/client/locks.go` | `ab4abcb2291e7588d063c7f351fd4f543830ce92` |
+| `internal/client/locks_test.go` | `2bd9040e3b06c8fd4b38e7536496fe6d3ee100ae` |
+| `internal/controller/admission_integration_test.go` | `1dc6bb3514e56c12fef8a7a24e6fdec15d059ed6` |
+| `internal/controller/lock_body.go` | `5136be4721c6b734a82542a9a5570d32b52d16a1` |
+| `internal/controller/lock_resources.go` | `a881e520660f4fb5d94ed55383f5b9c1e66a867d` |
+| `internal/controller/lock_schedule.go` | `3f332de84ae2728204783861333d3518bd205c8d` |
+| `internal/controller/locks.go` | `914372fb2b7bd95951813124a291a611c0054c7d` |
+| `internal/controller/locks_integration_test.go` | `e216f56286f3aaeb6dd09651a74d77290701bab3` |
+| `internal/controller/resources.go` | `919f60aae39a934ab351825e8b52381355a46a03` |
+| `internal/controller/run.go` | `e6412fc21c1f3f07754e4d1bc60ff7b211790d72` |
+| `internal/controller/server.go` | `43b3d3219f426ee40e8021c14b61adc6ce27fb91` |
+| `internal/managed/admission_integration_test.go` | `1874c4d029f67898715eabbe7c4149db073c4539` |
+| `internal/managed/cancellation_integration_test.go` | `6e7a5384182045bfa8fa991c649c5da9c4880a6f` |
+| `internal/managed/client_integration_test.go` | `2567afe2fe5c7e0100be3d860f231502c2f82e21` |
+| `internal/managed/contract.go` | `12aa9554c46949794e6c16ff2c6d52d6b47b56a6` |
+| `internal/managed/ledger.go` | `6c04589caf77e4fdf521dfc9a309889d775624a5` |
+| `internal/managed/ledger_test.go` | `d50b3537dfb5fadd01afc7061858d84654b706f9` |
+| `internal/managed/local.go` | `98e03b910f2e921442ac826ca18981bdce078395` |
+| `internal/managed/lock_resources.go` | `1c7660b4d0ac2f2e91b19799a8158bec65ea995b` |
+| `internal/managed/locks.go` | `b6d5ad9d968b9559c7a188b9972566caa02b347b` |
+| `internal/managed/locks_integration_test.go` | `fa29800d0a053aadefc5b5b1b19c528d827cee78` |
+| `internal/managed/scheduling.go` | `53d6a5335507b0cf17d0309f3767663629080da2` |
+| `internal/managed/scheduling_integration_test.go` | `a368e68cc6bbe37d370aee3359cf900739024095` |
+| `internal/platform/lock_clock_darwin.go` | `5fb2f8d9ce50b18df993f5e722b6f736cd538e4a` |
+| `internal/platform/lock_clock_darwin_test.go` | `a6042f8534e0d501b94d58c2c050eda7193eee05` |
+| `internal/platform/lock_clock_other.go` | `d08253d4bbca45d82f2d5b1db4e00258333005b8` |
+| `tests/e2e/test_local_cli.py` | `b3ebbc06b159aa1cbe002e355dc5c5bd30b1d339` |
 
 ## Epic acceptance
 

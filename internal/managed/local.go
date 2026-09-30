@@ -100,7 +100,7 @@ func (l *Ledger) RegisterOnlyLocal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if r.Kind != "local" {
+	if r.Kind != "local" && r.Kind != "lock" {
 		return ErrUnsupported
 	}
 	return l.RegisterResource(data)

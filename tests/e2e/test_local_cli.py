@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import select
+import signal
 import stat
 import struct
 import subprocess
@@ -219,6 +221,13 @@ def test_local_admission_result_replay_and_conflict():
         job_path = parent / "job.json"
         job_path.write_text(json.dumps(job))
         submit = lambda: _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "same-key", "--json"))
+        lock_path = parent / "cooperating-lock.json"
+        lock_path.write_text(json.dumps({"schema": "haepari.resource/v1", "kind": "lock",
+                                         "id": "zz-cooperating", "liveness_seconds": 60,
+                                         "max_hold_seconds": 120}))
+        _response(_run(BINARY, env, "resource", "register", "--file", str(lock_path), "--json"))
+        advisory = _response(_run(BINARY, env, "lock", "acquire", "zz-cooperating",
+                                  "--request-key", "same-key", "--holder", "local job caller", "--json"))["data"]["current"]
         first = submit()["data"]["job_id"]
         assert first
         owned_jobs.append(first)
@@ -300,3 +309,175 @@ def test_local_admission_result_replay_and_conflict():
         assert cancelled["receipt"]["lease_generation"] == 0 and cancelled["receipt"]["global_occupancy"] == 0
         final_cancel = _response(_run(BINARY, env, "wait", queued_id, "--json"), 4)["data"]
         assert final_cancel["final_verdict"] == "CANCELLED" and final_cancel["cleanup_outcome"] == "not_needed"
+
+        # The actual managed runner exports its chain to the compiled child
+        # CLI. Both a fresh key and an existing owner's exact key must reject
+        # before acquisition, even though this lock has a spare slot.
+        nested_path = parent / "nested-lock.json"
+        nested_path.write_text(json.dumps({"schema": "haepari.resource/v1", "kind": "lock",
+                                           "id": "zz-nested", "capacity": 2}))
+        _response(_run(BINARY, env, "resource", "register", "--file", str(nested_path), "--json"))
+        nested_owner = _response(_run(BINARY, env, "lock", "acquire", "zz-nested", "--request-key", "owner",
+                                      "--holder", "owner", "--json"))["data"]["current"]
+        _response(_run(BINARY, env, "resource", "resume", "e2e-local", "--expected-revision", "4",
+                       "--request-key", "nested-resume", "--json"))
+        job["suite"] = "actual-nested-lock-caller"
+        job["workload"]["argv"] = ["/bin/sh", "-c", """
+mkdir -p ../results
+"$H" lock acquire zz-nested --request-key fresh --holder child --json
+test "$?" -eq 2 || exit 90
+"$H" lock acquire zz-nested --request-key owner --holder owner --json
+test "$?" -eq 2 || exit 91
+printf proved > ../results/out.txt
+"""]
+        job["workload"]["environment"] = {"H": str(BINARY), "HAEPARI_HOME": env["HAEPARI_HOME"]}
+        job_path.write_text(json.dumps(job))
+        nested_admission = _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "actual-nested-lock", "--json"))["data"]
+        owned_jobs.append(nested_admission["job_id"])
+        nested_run = _run(BINARY, env, "run", "--spec", str(job_path), "--request-key", "actual-nested-lock", "--json", timeout=40)
+        assert nested_run.returncode == 0, (nested_run.stdout, nested_run.stderr)
+        nested_records = [json.loads(line) for line in nested_run.stdout.splitlines()]
+        nested_job = nested_records[0]["data"]["job_id"]
+        assert nested_job == nested_admission["job_id"]
+        assert nested_records[-1]["data"]["final_verdict"] == "PASS"
+        nested_logs = _run(BINARY, env, "logs", nested_job)
+        assert nested_logs.returncode == 0, nested_logs.stderr
+        rejected = [json.loads(line) for line in nested_logs.stdout.splitlines() if line.startswith("{")]
+        assert len(rejected) == 2 and all(r["error"]["code"] == "NESTED_ACQUISITION_REJECTED" for r in rejected)
+        nested_history = _response(_run(BINARY, env, "locks", "list", "--lock", "zz-nested", "--json"))["data"]["requests"]
+        assert nested_history == [nested_owner]
+        _response(_run(BINARY, env, "lock", "renew", nested_owner["grant_id"], "--json"))
+        _response(_run(BINARY, env, "lock", "release", nested_owner["grant_id"], "--json"))
+        held = _response(_run(BINARY, env, "locks", "list", "--lock", "zz-cooperating", "--json"))["data"]["requests"]
+        assert len(held) == 1 and held[0]["state"] == "granted" and held[0]["grant_id"] == advisory["grant_id"]
+        assert held[0]["liveness_deadline"] == advisory["liveness_deadline"]
+        status = _response(_run(BINARY, env, "resource", "inspect", "zz-cooperating", "--json"))["data"]
+        assert status["occupancy"] == 0 and status["advisory_grants"] == 1
+        _response(_run(BINARY, env, "lock", "release", advisory["grant_id"], "--json"))
+
+
+
+def test_advisory_lock_cli_lifecycle() -> None:
+    with _controller() as (parent, env, _):
+        spec = {"schema": "haepari.resource/v1", "kind": "lock", "id": "advisory",
+                "liveness_seconds": 1, "max_hold_seconds": 2}
+        path = parent / "lock.json"
+        path.write_text(json.dumps(spec))
+        _response(_run(BINARY, env, "resource", "register", "--file", str(path), "--json"))
+        caps = _response(_run(BINARY, env, "capabilities", "--json"))["data"]
+        assert "advisory-lock/v1" in caps["capabilities"]
+
+        def acquire(key: str, holder: str = "owner", *options: str, expected: int = 0) -> dict:
+            return _response(_run(BINARY, env, "lock", "acquire", "advisory", "--request-key", key,
+                                  "--holder", holder, *options, "--json"), expected)
+
+        owner = acquire("first")["data"]["current"]
+        assert owner["state"] == "granted"
+        grant = owner["grant_id"]
+        second = acquire("second")["data"]["current"]
+        assert second["state"] == "queued"
+        timed = _response(_run(BINARY, env, "lock", "wait", second["request_id"],
+                              "--timeout", "20ms", "--json"), 5)
+        assert timed["error"]["code"] == "WAIT_TIMEOUT"
+        conflict = acquire("first", "changed", expected=2)
+        assert conflict["error"]["code"] == "CONFLICT"
+        cancelled = _response(_run(BINARY, env, "lock", "cancel", second["request_id"],
+                                   "--force", "--reason", "withdraw waiter", "--json"))["data"]
+        assert cancelled["receipt"]["force"] and cancelled["receipt"]["reason"] == "withdraw waiter"
+        assert _run(BINARY, env, "lock", "release", grant, "--force", "--json").returncode == 2
+        unsupported = _response(_run(BINARY, env, "resource", "recover", "advisory", "--plan", "--json"), 2)
+        assert unsupported["error"]["code"] == "UNSUPPORTED"
+        _response(_run(BINARY, env, "resource", "pause", "advisory", "--expected-revision", "1", "--json"))
+        _response(_run(BINARY, env, "lock", "renew", grant, "--json"))
+        third = acquire("third")["data"]["current"]
+        assert third["state"] == "queued"
+        busy = _response(_run(BINARY, env, "resource", "remove", "advisory", "--expected-revision", "1", "--json"), 2)
+        assert busy["error"]["code"] == "RESOURCE_BUSY"
+        released = _response(_run(BINARY, env, "lock", "release", grant, "--json"))["data"]
+        replay = _response(_run(BINARY, env, "lock", "release", grant, "--json"))["data"]
+        assert replay["receipt"] == released["receipt"]
+        assert acquire("first", expected=4)["data"]["current"]["state"] == "released"
+        _response(_run(BINARY, env, "resource", "resume", "advisory", "--expected-revision", "2", "--json"))
+        claimed = _response(_run(BINARY, env, "lock", "wait", third["request_id"], "--json"))["data"]["current"]
+        assert claimed["generation"] > owner["generation"]
+        expired = _response(_run(BINARY, env, "lock", "renew", grant, "--json"), 2)
+        assert expired["error"]["code"] == "LOCK_EXPIRED"
+        different_release = _response(_run(BINARY, env, "lock", "release", grant,
+                                           "--force", "--reason", "different action", "--json"), 4)
+        assert different_release["data"]["receipt"] == released["receipt"]
+        forced = _response(_run(BINARY, env, "lock", "release", claimed["grant_id"],
+                                "--force", "--reason", "operator finish", "--json"))["data"]
+        assert forced["receipt"]["reason"] == "operator finish"
+        requests = []
+        cursor = ""
+        while True:
+            args = ["locks", "list", "--lock", "advisory", "--limit", "1", "--json"]
+            if cursor:
+                args += ["--cursor", cursor]
+            page = _response(_run(BINARY, env, *args))["data"]
+            requests.extend(page["requests"])
+            if not page.get("more", False):
+                break
+            cursor = page["next_cursor"]
+        assert len(requests) == 3 and len({r["request_id"] for r in requests}) == 3
+        _response(_run(BINARY, env, "resource", "remove", "advisory", "--expected-revision", "1", "--json"))
+        _response(_run(BINARY, env, "resource", "register", "--file", str(path), "--json"))
+        fourth = acquire("fourth")["data"]["current"]
+        assert fourth["generation"] > claimed["generation"]
+        inherited = dict(env, HAEPARI_LOCK_GRANT=json.dumps({
+            "installation_id": fourth["installation_id"], "lock_id": "advisory",
+            "grant_id": fourth["grant_id"], "generation": fourth["generation"]}))
+        borrowed = _response(_run(BINARY, inherited, "lock", "release", fourth["grant_id"],
+                                  "--force", "--reason", "child finished", "--json"), 2)
+        assert borrowed["error"]["code"] == "CONFLICT"
+        keepalive = _run(BINARY, env, "lock", "keepalive", fourth["grant_id"], timeout=6)
+        assert keepalive.returncode == 2 and "LOCK_EXPIRED" in keepalive.stderr
+
+        short_path = parent / "short-hold.json"
+        short_path.write_text(json.dumps({"schema": "haepari.resource/v1", "kind": "lock", "id": "short-hold",
+                                         "liveness_seconds": 120, "max_hold_seconds": 1}))
+        _response(_run(BINARY, env, "resource", "register", "--file", str(short_path), "--json"))
+        short = _response(_run(BINARY, env, "lock", "acquire", "short-hold", "--request-key", "short-owner",
+                               "--holder", "owner", "--json"))["data"]["current"]
+        started = time.monotonic()
+        short_keepalive = _run(BINARY, env, "lock", "keepalive", short["grant_id"], timeout=6)
+        assert short_keepalive.returncode == 2 and "LOCK_EXPIRED" in short_keepalive.stderr
+        assert time.monotonic() - started < 4, "keepalive outlived a one-second maximum hold"
+
+        interrupt_path = parent / "interrupt-lock.json"
+        interrupt_path.write_text(json.dumps({"schema": "haepari.resource/v1", "kind": "lock", "id": "interrupt-lock",
+                                             "liveness_seconds": 120, "max_hold_seconds": 30}))
+        _response(_run(BINARY, env, "resource", "register", "--file", str(interrupt_path), "--json"))
+        interrupt_owner = _response(_run(BINARY, env, "lock", "acquire", "interrupt-lock", "--request-key", "interrupt-owner",
+                                         "--holder", "owner", "--json"))["data"]["current"]
+        keeper = subprocess.Popen([str(BINARY), "lock", "keepalive", interrupt_owner["grant_id"], "--json"],
+                                  env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            assert select.select([keeper.stdout], [], [], 4)[0], "keepalive never renewed"
+            renewed = json.loads(keeper.stdout.readline())["data"]["current"]
+            keeper.send_signal(signal.SIGINT)
+            _, diagnostics = keeper.communicate(timeout=4)
+            assert keeper.returncode == 6 and "interrupted" in diagnostics
+        finally:
+            if keeper.poll() is None:
+                keeper.kill()
+                keeper.wait(timeout=4)
+        after_interrupt = _response(_run(BINARY, env, "locks", "list", "--lock", "interrupt-lock", "--json"))["data"]["requests"]
+        assert after_interrupt == [renewed] and renewed["state"] == "granted"
+        _response(_run(BINARY, env, "lock", "renew", interrupt_owner["grant_id"], "--json"))
+        _response(_run(BINARY, env, "lock", "release", interrupt_owner["grant_id"], "--json"))
+        ended = _response(_run(BINARY, env, "lock", "wait", fourth["request_id"], "--json"), 4)
+        assert ended["data"]["current"]["state"] == "hold_expired"
+        _response(_run(BINARY, env, "resource", "pause", "advisory", "--expected-revision", "1", "--json"))
+        queued = acquire("deadline", "queued", "--queue-seconds", "1")["data"]["current"]
+        ended = _response(_run(BINARY, env, "lock", "wait", queued["request_id"],
+                              "--timeout", "3s", "--json"), 4)
+        assert ended["data"]["current"]["state"] == "queue_expired"
+        missing = _response(_run(BINARY, env, "lock", "renew", "unknown", "--json"), 2)
+        assert missing["error"]["code"] == "NOT_FOUND"
+        assert _run(BINARY, env, "lock", "acquire", "advisory", "--request-key", "bad",
+                    "--holder", "invalid", "--queue-seconds", "0", "--json").returncode == 2
+        uncertain_env = dict(env, HAEPARI_HOME=str(parent / "absent-state"))
+        assert _run(BINARY, uncertain_env, "locks", "list", "--json").returncode == 6
+        malformed_env = dict(env, HAEPARI_LOCK_GRANT="not-json")
+        assert _run(BINARY, malformed_env, "locks", "list", "--json").returncode == 2

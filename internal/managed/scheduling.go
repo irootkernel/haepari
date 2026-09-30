@@ -87,6 +87,8 @@ type AvailabilityIdentity struct {
 }
 
 type ResourceStatus struct {
+	AdvisoryGrants       int                   `json:"advisory_grants,omitempty"`
+	AdvisoryQueued       int                   `json:"advisory_queued,omitempty"`
 	Mutation             *AvailabilityIdentity `json:"mutation,omitempty"`
 	ID                   string                `json:"resource_id"`
 	Kind                 string                `json:"kind"`
@@ -110,6 +112,9 @@ func resourceStatusTx(q rowQuerier, id string) (ResourceStatus, error) {
 		digest := sha256.Sum256(spec)
 		r.ConfigurationDigest = hex.EncodeToString(digest[:])
 	}
+	if err == nil && r.Kind == "lock" {
+		err = q.QueryRow(`SELECT COUNT(CASE WHEN state='granted' THEN 1 END),COUNT(CASE WHEN state='queued' THEN 1 END) FROM managed_lock_requests WHERE lock_id=?`, id).Scan(&r.AdvisoryGrants, &r.AdvisoryQueued)
+	}
 	if idle.Valid {
 		value := time.Unix(0, idle.Int64).UTC()
 		r.IdleSince = &value
@@ -117,7 +122,14 @@ func resourceStatusTx(q rowQuerier, id string) (ResourceStatus, error) {
 	return r, mapNoRows(err)
 }
 
-func (l *Ledger) ResourceStatus(id string) (ResourceStatus, error) { return resourceStatusTx(l.db, id) }
+func (l *Ledger) ResourceStatus(id string) (ResourceStatus, error) {
+	tx, err := l.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return ResourceStatus{}, err
+	}
+	defer tx.Rollback()
+	return resourceStatusTx(tx, id)
+}
 
 type AvailabilityRequest struct {
 	MutationKey                  string `json:"mutation_key"`
@@ -160,14 +172,29 @@ func (l *Ledger) SetAvailability(q AvailabilityRequest, resume bool) (ResourceSt
 		Request AvailabilityRequest
 	}{resume, q})
 	if replay, found, err := availabilityReplayTx(tx, q, resume); found || err != nil {
+		if err == nil && replay.Kind == "lock" {
+			_, changed, dueErr := l.clockAndDueTx(tx, false)
+			if dueErr != nil {
+				return ResourceStatus{}, dueErr
+			}
+			current, e := resourceStatusTx(tx, q.ResourceID)
+			if e != nil {
+				return current, e
+			}
+			current.Mutation = replay.Mutation
+			return current, l.commitLocks(tx, changed)
+		}
 		return replay, err
-	}
-	if resume && (!validDigest(q.ReadinessDigest) || q.ObservationReference == "" || len(q.ObservationReference) > 512) {
-		return ResourceStatus{}, ErrInvalid
 	}
 	r, err := resourceStatusTx(tx, q.ResourceID)
 	if err != nil {
 		return r, err
+	}
+	if r.Kind == "lock" {
+		return l.setLockAvailabilityTx(tx, q, resume, requestJSON, r)
+	}
+	if resume && (!validDigest(q.ReadinessDigest) || q.ObservationReference == "" || len(q.ObservationReference) > 512) {
+		return ResourceStatus{}, ErrInvalid
 	}
 	if r.ConfigRevision != q.ExpectedConfigRevision || r.AvailabilityRevision != q.ExpectedAvailabilityRevision || r.LeaseGeneration != q.ExpectedLeaseGeneration {
 		return r, ErrStale

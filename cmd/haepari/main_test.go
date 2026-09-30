@@ -60,7 +60,7 @@ var _ = ginkgo.Describe("Capabilities", ginkgo.Label("unit"), func() {
 		if result.Schema != "haepari.envelope/v1" || result.Operation != "capabilities" || !result.OK || len(result.Data.CompiledBackends) != 1 || result.Data.CompiledBackends[0] != "local" || len(result.Data.QualifiedBackends) != 0 || len(result.Data.Protocols) != 1 || result.Data.Protocols[0] != "managed-execution/v1" {
 			t.Fatalf("unexpected capabilities: %+v", result)
 		}
-		gomega.Expect(result.Data.Capabilities).To(gomega.ConsistOf("managed-execution/v1", "durable-observation/v1"))
+		gomega.Expect(result.Data.Capabilities).To(gomega.ConsistOf("managed-execution/v1", "durable-observation/v1", "advisory-lock/v1"))
 
 	})
 })

@@ -1,6 +1,6 @@
 # ADR-0017: Advisory named locks for cooperating tools
 
-Status: Accepted for v0.1.0 design (Design Revision 3.2); implementation pending.
+Status: Accepted for v0.1.0 design (Design Revision 3.2); implemented by TASK-035 with bounded local verification.
 
 ## Context
 

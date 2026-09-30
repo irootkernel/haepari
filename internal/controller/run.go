@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/snapshot"
 	"github.com/irootkernel/haepari/internal/state"
 	"github.com/irootkernel/haepari/internal/store/sqlite"
@@ -69,6 +70,10 @@ func Run(ctx context.Context, root state.Root) error {
 	if err != nil {
 		return fmt.Errorf("bind installation identity: %w", err)
 	}
+	ledger.SetLockClock(platform.AdvisoryLockClock)
+	if err := ledger.LockStartup(); err != nil {
+		return fmt.Errorf("reconcile advisory locks: %w", err)
+	}
 	server := &http.Server{Handler: runtime.routes(), ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan struct{})
 	defer close(done)
@@ -80,6 +85,7 @@ func Run(ctx context.Context, root state.Root) error {
 		}
 	}()
 	go runtime.schedule(ctx)
+	go runtime.scheduleLocks(ctx)
 	err = server.Serve(listener)
 	if ctx.Err() != nil || errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
 		return nil
