@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -35,7 +37,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | resource register | submit | run | inspect | wait")
+		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | resource register/inspect/pause/resume | submit | run | inspect | wait")
 		return 2
 	}
 	switch args[0] {
@@ -98,8 +100,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "resource":
+		if len(args) > 1 && args[1] == "inspect" {
+			return resourceInspect(args[2:], stdout, stderr)
+		}
+		if len(args) > 1 && (args[1] == "pause" || args[1] == "resume") {
+			return availability(args[1], args[2:], stdout, stderr)
+		}
 		if len(args) < 2 || args[1] != "register" {
-			fmt.Fprintln(stderr, "usage: haepari resource register --file <json> --json")
+			fmt.Fprintln(stderr, "usage: haepari resource register --file <json> --json | inspect <id> --json | pause/resume <id> --expected-revision <n> --json")
 			return 2
 		}
 		return register(args[2:], stdout, stderr)
@@ -125,6 +133,10 @@ func connect(stderr io.Writer) (*client.Client, int) {
 	}
 	c, err := client.Connect(context.Background(), root)
 	if err != nil {
+		if errors.Is(err, managed.ErrInvalid) {
+			fmt.Fprintf(stderr, "invalid parent context: %v (check HAEPARI_PARENT_CONTEXT)\n", err)
+			return nil, 2
+		}
 		fmt.Fprintf(stderr, "cannot connect to Haepari controller: %v (check the daemon and HAEPARI_HOME)\n", err)
 		return nil, 6
 	}
@@ -152,6 +164,9 @@ func clientFailure(w, stderr io.Writer, envelope client.Envelope, err error) int
 		}
 	}
 	fmt.Fprintln(stderr, err)
+	if errors.Is(err, managed.ErrInvalid) {
+		return 2
+	}
 	return 6
 }
 func readSpec(name string) ([]byte, error) {
@@ -326,4 +341,108 @@ func writeJSON(w, stderr io.Writer, operation string, data any) int {
 		return 6
 	}
 	return 0
+}
+
+func availability(action string, args []string, stdout, stderr io.Writer) int {
+	if len(args) < 1 {
+		fmt.Fprintln(stderr, "resource ID required")
+		return 2
+	}
+	id := args[0]
+	flags := flag.NewFlagSet("resource "+action, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	expected := flags.Int64("expected-revision", 0, "expected availability revision")
+	config := flags.Int64("expected-config-revision", 0, "pin configuration for exact replay")
+	lease := flags.Int64("expected-lease-generation", -1, "pin lease epoch for exact replay")
+	key := flags.String("request-key", "", "mutation key for exact replay")
+	reason := flags.String("reason", "operator_pause", "pause reason, 1 to 256 bytes (pause only)")
+	jsonFlag := flags.Bool("json", false, "JSON output")
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || *expected <= 0 || !*jsonFlag {
+		fmt.Fprintln(stderr, "resource pause/resume requires --expected-revision <availability revision> --json")
+		return 2
+	}
+	configSupplied, leaseSupplied, reasonSupplied := false, false, false
+	flags.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "expected-config-revision":
+			configSupplied = true
+		case "expected-lease-generation":
+			leaseSupplied = true
+		case "reason":
+			reasonSupplied = true
+		}
+	})
+	if configSupplied && *config < 1 {
+		fmt.Fprintln(stderr, "--expected-config-revision must be at least 1")
+		return 2
+	}
+	if leaseSupplied && *lease < 0 {
+		fmt.Fprintln(stderr, "--expected-lease-generation must be at least 0")
+		return 2
+	}
+	if configSupplied != leaseSupplied {
+		fmt.Fprintln(stderr, "--expected-config-revision and --expected-lease-generation must be supplied together")
+		return 2
+	}
+	if action == "resume" && reasonSupplied {
+		fmt.Fprintln(stderr, "--reason applies only to resource pause")
+		return 2
+	}
+	if action == "pause" && (len(*reason) == 0 || len(*reason) > 256) {
+		fmt.Fprintln(stderr, "--reason must contain 1 to 256 bytes for resource pause")
+		return 2
+	}
+	if *key == "" {
+		var nonce [16]byte
+		if _, err := rand.Read(nonce[:]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 6
+		}
+		*key = "availability-" + hex.EncodeToString(nonce[:])
+	}
+	if !managed.ValidRequestKey(*key) {
+		fmt.Fprintln(stderr, "invalid request key")
+		return 2
+	}
+	c, code := connect(stderr)
+	if code != 0 {
+		return code
+	}
+	defer c.Close()
+	current, envelope, err := c.InspectResource(context.Background(), id)
+	if err != nil {
+		return clientFailure(stdout, stderr, envelope, err)
+	}
+	if !configSupplied {
+		*config, *lease = current.ConfigRevision, current.LeaseGeneration
+	}
+	q := managed.AvailabilityRequest{MutationKey: *key, ResourceID: id, ExpectedConfigRevision: *config, ExpectedAvailabilityRevision: *expected, ExpectedLeaseGeneration: *lease}
+	if action == "pause" {
+		q.Reason = *reason
+	}
+	_, envelope, err = c.SetAvailability(context.Background(), q, action == "resume")
+	if err != nil {
+		return clientFailure(stdout, stderr, envelope, err)
+	}
+	return emit(stdout, stderr, envelope)
+}
+
+func resourceInspect(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 2 || args[1] != "--json" {
+		fmt.Fprintln(stderr, "usage: haepari resource inspect <id> --json")
+		return 2
+	}
+	c, code := connect(stderr)
+	if code != 0 {
+		return code
+	}
+	defer c.Close()
+	_, envelope, err := c.InspectResource(context.Background(), args[0])
+	if err != nil {
+		return clientFailure(stdout, stderr, envelope, err)
+	}
+	return emit(stdout, stderr, envelope)
 }

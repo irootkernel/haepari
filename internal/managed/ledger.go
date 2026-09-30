@@ -206,7 +206,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 		 id TEXT PRIMARY KEY, kind TEXT NOT NULL, config_revision INTEGER NOT NULL,
 		 availability_revision INTEGER NOT NULL DEFAULT 1, availability TEXT NOT NULL DEFAULT 'available',
 		 availability_reason TEXT NOT NULL DEFAULT '', capacity INTEGER NOT NULL, occupancy INTEGER NOT NULL DEFAULT 0,
-		 lease_generation INTEGER NOT NULL DEFAULT 0, vm_uuid TEXT NOT NULL DEFAULT '', vm_mac TEXT NOT NULL DEFAULT '', spec_json BLOB NOT NULL)`,
+		 idle_since_ns INTEGER, lease_generation INTEGER NOT NULL DEFAULT 0, vm_uuid TEXT NOT NULL DEFAULT '', vm_mac TEXT NOT NULL DEFAULT '', spec_json BLOB NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS managed_vm_uuid ON managed_resources(vm_uuid) WHERE vm_uuid != ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS managed_vm_mac ON managed_resources(vm_mac) WHERE vm_mac != ''`,
 		`CREATE TABLE IF NOT EXISTS managed_admissions (
@@ -256,16 +256,21 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 4 {
+	if version > 5 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
-	if version == 4 {
+	if version >= 4 {
 		var exists int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='managed_admissions'`).Scan(&exists); err != nil {
 			return nil, err
 		}
 		if exists != 1 {
 			return nil, fmt.Errorf("managed schema4 lost its required admission table")
+		}
+	}
+	if version == 5 {
+		if err := checkSchedulingSchemaTx(tx); err != nil {
+			return nil, err
 		}
 	}
 	for _, statement := range statements {
@@ -317,6 +322,9 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 			return nil, err
 		}
 	}
+	if err := initSchedulingTx(tx, version); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -352,8 +360,8 @@ func (l *Ledger) RegisterResource(data []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = l.db.Exec(`INSERT INTO managed_resources(id,kind,config_revision,capacity,vm_uuid,vm_mac,spec_json) VALUES(?,?,?,?,?,?,?)`,
-		r.ID, r.Kind, r.Revision, r.Capacity, vmUUID(r), vmMAC(r), canonical)
+	_, err = l.db.Exec(`INSERT INTO managed_resources(id,kind,config_revision,capacity,vm_uuid,vm_mac,spec_json,idle_since_ns) VALUES(?,?,?,?,?,?,?,?)`,
+		r.ID, r.Kind, r.Revision, r.Capacity, vmUUID(r), vmMAC(r), canonical, time.Now().UTC().UnixNano())
 	if err != nil {
 		return fmt.Errorf("%w: resource registration: %v", ErrConflict, err)
 	}
@@ -435,6 +443,16 @@ func (l *Ledger) AdmitSealed(data []byte, sealedDigest, objectID, requestKey, jo
 // surviving source files can be compared after an explicit bulk purge. The
 // controller supplies a verified manifest; ledger-only callers omit it.
 func (l *Ledger) AdmitSealedInventory(data []byte, sealedDigest, objectID string, inventory []byte, requestKey, jobID string) (Receipt, error) {
+	return l.AdmitWithParent(data, sealedDigest, objectID, inventory, requestKey, jobID, "", nil)
+}
+
+func (l *Ledger) AdmitWithParent(data []byte, sealedDigest, objectID string, inventory []byte, requestKey, jobID, installationID string, chain ParentChain) (Receipt, error) {
+	if err := admissionParentCapacity(installationID, jobID, chain); err != nil {
+		return Receipt{}, err
+	}
+	if err := chain.Validate(); err != nil {
+		return Receipt{}, err
+	}
 	if len(inventory) > 1<<20 || (len(inventory) > 0 && !json.Valid(inventory)) {
 		return Receipt{}, ErrInvalid
 	}
@@ -461,6 +479,11 @@ func (l *Ledger) AdmitSealedInventory(data []byte, sealedDigest, objectID string
 		return Receipt{}, err
 	}
 	defer tx.Rollback()
+	if nested, err := nestedTx(tx, installationID, chain); err != nil {
+		return Receipt{}, err
+	} else if nested {
+		return Receipt{}, ErrNestedAcquisition
+	}
 	var priorID, priorDigest string
 	err = tx.QueryRow(`SELECT job_id,submitted_digest FROM managed_admissions WHERE request_key=?`, requestKey).Scan(&priorID, &priorDigest)
 	if err == nil {
@@ -488,6 +511,11 @@ func (l *Ledger) AdmitSealedInventory(data []byte, sealedDigest, objectID string
 	if _, err := tx.Exec(`INSERT INTO managed_jobs(id,request_key,submitted_digest,resource_id,pinned_config_revision,admitted_at_ns,queue_deadline_ns,spec_json) VALUES(?,?,?,?,?,?,?,?)`,
 		jobID, requestKey, digest, job.ResourceID, configRevision, now.UnixNano(), now.Add(time.Duration(job.Deadlines.QueueSeconds)*time.Second).UnixNano(), canonical); err != nil {
 		return Receipt{}, admissionError(err)
+	}
+
+	parentJSON, _ := json.Marshal(chain)
+	if _, err := tx.Exec(`INSERT INTO managed_parent_context(job_id,chain_json) VALUES(?,?)`, jobID, parentJSON); err != nil {
+		return Receipt{}, err
 	}
 
 	inserted, err := tx.Exec(`INSERT INTO managed_admissions(request_key,job_id,submitted_digest,spec_json,sealed_digest,object_id,inventory_json,identity_json) VALUES(?,?,?,?,?,?,?,?)`, requestKey, jobID, digest, canonical, sealedDigest, objectID, inventory, []byte(`{}`))
@@ -530,10 +558,12 @@ type ReserveRequest struct {
 	ExpectedConfigRevision       int64
 	ExpectedAvailabilityRevision int64
 	MutationKey                  string
+	VMGuard                      *VMReservationGuard
 }
 
+// Reserve owns the commit guards described at NextQueued; selection is advisory.
 func (l *Ledger) Reserve(q ReserveRequest) (Receipt, error) {
-	return l.mutate("reserve", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
+	receipt, err := l.mutate("reserve", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
 		var resourceID, state string
 		var revision, pinned int64
 		err := tx.QueryRow(`SELECT resource_id,state,revision,pinned_config_revision FROM managed_jobs WHERE id=?`, q.JobID).Scan(&resourceID, &state, &revision, &pinned)
@@ -554,7 +584,7 @@ func (l *Ledger) Reserve(q ReserveRequest) (Receipt, error) {
 			return Receipt{}, ErrBusy
 		}
 		var queueHead string
-		if err := tx.QueryRow(`SELECT id FROM managed_jobs WHERE resource_id=? AND state='queued' ORDER BY rowid LIMIT 1`, resourceID).Scan(&queueHead); err != nil {
+		if err := tx.QueryRow(`SELECT j.id FROM managed_jobs j JOIN managed_admissions a ON a.job_id=j.id WHERE j.resource_id=? AND j.state='queued' ORDER BY a.sequence LIMIT 1`, resourceID).Scan(&queueHead); err != nil {
 			return Receipt{}, mapNoRows(err)
 		}
 		if queueHead != q.JobID {
@@ -606,6 +636,15 @@ func (l *Ledger) Reserve(q ReserveRequest) (Receipt, error) {
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='preparing',revision=revision+1,slot=?,lease_generation=? WHERE id=?`, slot, generation, q.JobID); err != nil {
 			return Receipt{}, err
 		}
+		if err := reserveVMHostPlaceTx(tx, q.JobID, resourceID, generation, q.VMGuard); err != nil {
+			return Receipt{}, err
+		}
+		if err := issueParentNonceTx(tx, q.JobID, generation); err != nil {
+			return Receipt{}, err
+		}
+		if _, err := tx.Exec(`DELETE FROM managed_queue_blockers WHERE job_id=?`, q.JobID); err != nil {
+			return Receipt{}, err
+		}
 		cursor, err := addEvent(tx, q.JobID, "reserved", map[string]any{"slot": slot, "lease_generation": generation})
 		if err != nil {
 			return Receipt{}, err
@@ -615,6 +654,13 @@ func (l *Ledger) Reserve(q ReserveRequest) (Receipt, error) {
 		receipt.EventCursor = cursor
 		return receipt, err
 	})
+	var blocked *HostCapacityBlocked
+	if errors.As(err, &blocked) {
+		if recordErr := l.RecordQueueBlocker(q.JobID, q.ExpectedJobRevision, blocked.Blocker); recordErr != nil && !errors.Is(recordErr, ErrStale) {
+			return Receipt{}, errors.Join(err, recordErr)
+		}
+	}
+	return receipt, err
 }
 
 type NoEffectObservationRequest struct {
@@ -694,6 +740,7 @@ type ClassifyNoEffectRequest struct {
 	LeaseGeneration              int64
 	FailureKind                  string // cancel or prepare_failure
 	VMUnavailable                bool
+	HostPauseReason              string
 	Proof                        NoEffectProof
 	MutationKey                  string
 }
@@ -744,12 +791,23 @@ func (l *Ledger) ClassifyNoEffect(q ClassifyNoEffectRequest) (Receipt, error) {
 			}
 			availabilityRev++
 		}
+		if q.HostPauseReason != "" {
+			if q.VMUnavailable || kind != "utm-macos" || q.FailureKind != "prepare_failure" || !oneOf(q.HostPauseReason, "host_vm_limit", "host_session_unavailable", "host_permission_unavailable") {
+				return Receipt{}, ErrInvalid
+			}
+			if _, err := tx.Exec(`UPDATE managed_resources SET availability='paused',availability_reason=?,availability_revision=availability_revision+1 WHERE kind='utm-macos' AND availability='available'`, q.HostPauseReason); err != nil {
+				return Receipt{}, err
+			}
+			if err := tx.QueryRow(`SELECT availability_revision FROM managed_resources WHERE id=?`, resourceID).Scan(&availabilityRev); err != nil {
+				return Receipt{}, err
+			}
+		}
 		proofJSON, _ := json.Marshal(q.Proof)
 		_, err = tx.Exec(`UPDATE managed_jobs SET state='settling',revision=revision+1,no_effect_proof_json=?,failure_kind=?,pause_availability_revision=? WHERE id=?`, proofJSON, q.FailureKind, availabilityRev, q.JobID)
 		if err != nil {
 			return Receipt{}, err
 		}
-		cursor, err := addEvent(tx, q.JobID, "no_effect_classified", map[string]any{"failure_kind": q.FailureKind, "vm_unavailable": q.VMUnavailable, "availability_revision": availabilityRev})
+		cursor, err := addEvent(tx, q.JobID, "no_effect_classified", map[string]any{"failure_kind": q.FailureKind, "vm_unavailable": q.VMUnavailable, "host_pause_reason": q.HostPauseReason, "availability_revision": availabilityRev})
 		if err != nil {
 			return Receipt{}, err
 		}
@@ -827,7 +885,7 @@ func (l *Ledger) SettleNoEffect(q SettleNoEffectRequest) (Receipt, error) {
 			ResourceRevision: configRev, LeaseGeneration: lease, JobState: "finished", ResourceAvailability: availability,
 			WorkloadOutcome: outcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict,
 			Observations: &ResultObservations{Source: q.JobID + ":" + proof.ObservationReference}})
-		if _, err := tx.Exec(`UPDATE managed_resources SET occupancy=occupancy-1 WHERE id=?`, resourceID); err != nil {
+		if err := releaseSlotTx(tx, resourceID); err != nil {
 			return Receipt{}, err
 		}
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, resultJSON, q.JobID); err != nil {
@@ -851,6 +909,10 @@ func (l *Ledger) CancelQueued(jobID string, expectedRevision int64, mutationKey 
 
 func (l *Ledger) ExpireQueued(jobID string, expectedRevision int64, mutationKey string) (Receipt, error) {
 	return l.finishQueued(jobID, expectedRevision, mutationKey, "queue_deadline", "inconclusive", "queue_expired")
+}
+
+func (l *Ledger) FailQueuedConfiguration(jobID string, expectedRevision int64, mutationKey string) (Receipt, error) {
+	return l.finishQueued(jobID, expectedRevision, mutationKey, "configuration_changed", "inconclusive", "resource_configuration_changed")
 }
 
 func (l *Ledger) FailQueuedInput(jobID string, expectedRevision int64, mutationKey string) (Receipt, error) {
@@ -898,6 +960,9 @@ func (l *Ledger) finishQueued(jobID string, expectedRevision int64, mutationKey,
 			ResourceRevision: configRev, JobState: "finished", ResourceAvailability: availability, WorkloadOutcome: facts.WorkloadOutcome,
 			EvidenceCompleteness: facts.EvidenceCompleteness, CleanupOutcome: facts.CleanupOutcome, FinalVerdict: verdict, Reason: reason})
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, resultJSON, jobID); err != nil {
+			return Receipt{}, err
+		}
+		if _, err := tx.Exec(`DELETE FROM managed_queue_blockers WHERE job_id=?`, jobID); err != nil {
 			return Receipt{}, err
 		}
 		cursor, err := addEvent(tx, jobID, "finished", map[string]any{"verdict": verdict, "cleanup_outcome": "not_needed", "reason": reason})

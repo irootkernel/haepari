@@ -1,6 +1,6 @@
 # Follow-up candidates
 
-These items came from EPIC-001 cold validation and TASK-005/006 review. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
+These items came from EPIC-001 cold validation and TASK-005/006/007 review. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
 
 ## Structural TODO candidates
 
@@ -20,3 +20,13 @@ These items came from EPIC-001 cold validation and TASK-005/006 review. They are
 - At TASK-012 startup/retention hardening, address private orphan `.h<nonce>` sockets left by process death between bind and publication/cleanup. They do not change controller exclusion or known-socket restart behavior, but repeated deaths can accumulate directory entries. Cleanup must prove ownership and preserve foreign, legacy and live listeners; never remove `.h*` paths by name pattern alone.
 
 - Before TASK-012 exposes retention, define and verify the treatment of legacy ledger-only admissions without a sealed object, including the v3 missing-input fallback and malformed stored specs. The current Unix replay requires a verifiable original object; blindly tombstoning an object-less fixture would make same-key replay remain storage uncertainty. At that re-entry point, exercise the compiled CLI against a real retained controller result, including `run` exit 2; current CLI fixture and real controller checks cover the two boundaries separately.
+
+- At TASK-016 backend registration, consolidate the transport and ledger local-only qualification gates while preserving rejection before unqualified VM registration. They currently fail safely in both layers, but every newly qualified kind requires coordinated updates.
+- Before a second embedding of `internal/client.Client`, make inherited parent-context propagation explicit in its constructor or call context. The CLI currently carries ambient `HAEPARI_PARENT_CONTEXT` correctly; an embedding should be able to supply or suppress a chain without mutating process environment.
+- At TASK-016 backend/configuration qualification, exercise settlement's config-drift rejection with a bounded invalidated-registration fixture. Legal `UpdateResource` already refuses occupied resources, so ordinary local callers cannot produce that interleaving; the residual check protects future adapter boundaries and damaged state.
+- At TASK-013/TASK-016 adapter integration, extend negative host-guard diagnostics across occupation, transition and uncertain victim categories and invalid no-start classification combinations. Current development checks cover conservative unregistered/pending/uncertain counting, over-limit refusal, policy/pause/unknown-idle blockers, atomic intent and no-start host pause; adapter wiring must preserve every category and reject mismatched failure proofs.
+
+- At TASK-013/TASK-016 adapter integration, centralize the persisted power-stage vocabulary and legal transition checks before another adapter consumes them. Current explicit stages and one-time effect claims are verified; adding a stage now requires coordinated transport/ledger changes.
+- At TASK-013/TASK-016 adapter integration, publish queued-job availability events for host-wide and VM-local prerequisite pauses, or explicitly specify their event scope; the current internal host-pause path records the cause without notifying every sibling queue. Supply the qualified VM guard in dispatch and skip heads blocked only by host capacity so younger eligible local resources can progress. Public VM registration is still rejected in TASK-007.
+- Before public VM inspection at TASK-016, retain an explicit operator explanation of unknown idle time (the current `idle_since` omission means unknown, not a fresh idle clock), and preserve its exclusion from automatic victim selection.
+- When changing parent-context identifier or nonce limits, derive admission serialization headroom from the same named maxima; the current bound is deliberate and covered, but its maximum-entry fixture mirrors the limits as literals.

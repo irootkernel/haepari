@@ -100,23 +100,39 @@ Implementation/test baseline: commit `ea1e18ffc4fb98288579ed5918545fb9766fdddd`;
 Requirement coverage: `HP-REQ-011`, `HP-REQ-012`, `HP-REQ-013`.
 
 #### Implement
-- [ ] Reserve resource and global capacity for managed preparation, running, manual, cleanup and uncertain work; do not implement public external grants.
-- [ ] Implement FIFO per-resource heads, capacities, global active limit, revisions/generations, pause/resume and quarantine. Lease all effectful phases atomically before adapter execution.
-- [ ] Accept reservation guards supplied by adapters, such as the host macOS guest limit, without adding priorities. Reject nested acquisition before admission and reject a nested caller's blocking wait on a non-terminal job, as specified in [nested acquisition](../contracts/managed-transitions.md#nested-acquisition).
-- [ ] Reserve VM victim stop intent and target start claim with the Job/lease and exact resource revisions before effects. Serialize concurrent host starts in the existing ledger, block victim reservations/configuration/power conflicts until state reconciliation, and leave an unserviceable request queued with an actionable reason.
+- [x] Reserve resource and global capacity for managed preparation, running, manual, cleanup and uncertain work; do not implement public external grants.
+- [x] Implement FIFO per-resource heads, capacities, global active limit, revisions/generations, pause/resume and quarantine. Lease all effectful phases atomically before adapter execution.
+- [x] Accept reservation guards supplied by adapters, such as the host macOS guest limit, without adding priorities. Reject nested acquisition before admission and reject a nested caller's blocking wait on a non-terminal job, as specified in [nested acquisition](../contracts/managed-transitions.md#nested-acquisition).
+- [x] Reserve VM victim stop intent and target start claim with the Job/lease and exact resource revisions before effects. Serialize concurrent host starts in the existing ledger, block victim reservations/configuration/power conflicts until state reconciliation, and leave an unserviceable request queued with an actionable reason.
 
 #### Do not
-- [ ] Do not add DAGs, priorities, multi-resource deadlock logic or time-based automatic lease takeover.
+- [x] Do not add DAGs, priorities, multi-resource deadlock logic or time-based automatic lease takeover.
 
 #### Verify
-- [ ] Prove exclusivity through cleanup/manual use, fairness under competing resources, no head-of-line blocking across unavailable resources, stale token rejection, and no double spending of a VM host place across concurrent starts or crash/restart.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Prove exclusivity through cleanup/manual use, fairness under competing resources, no head-of-line blocking across unavailable resources, stale token rejection, and no double spending of a VM host place across concurrent starts or crash/restart. Manual evidence here is the real ledger adapter-observation hold, not a human runtime session; TASK-019 integrates that session and completion workflow, and the public local controller still rejects manual Jobs.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+
+### Implementation
+
+The resource/runner contract defines the idle clock: UTC at new idle registration and managed occupancy one-to-zero, preserved through maintenance, configuration and restart, then resource ID for ties. A schema-4 resource without historical timestamp remains unknown and ineligible for automatic stop until a trustworthy final slot return.
+
+The schema-5 ledger selects per-resource FIFO heads by permanent admission sequence, filters unavailable/full/transitioning resources, and holds resource/global occupancy across effectful phases and uncertainty. Local registration permits multiple resources and capacities. Availability mutations fence configuration, availability and lease epoch; stored receipts support exact replay, current state and conflicting-key rejection. A local controller supplies resume readiness; quarantine cannot be cleared by pause/resume. Terminal settlement preserves another slot's current pause/quarantine and records the idle clock in the same capacity-return transaction.
+
+A VM adapter supplies a revision-bound observation set and host limit (1–2). Reservation commits the Job slot/lease, host-place claim, optional eligible longest-idle victim intent and exact identity tuple together. A one-time durable command claim precedes each effect, and observed stop precedes target-start permission. Pending/uncertain states survive reopening and prohibit blind retry. No eligible victim produces a durable `host_capacity_no_eligible_victim` inspect/event reason without a lease or deadline extension. Confirmed no-start host failures pause VM dispatch with no quarantine; local availability is preserved. Actual UTM commands and qualification remain with TASK-013/TASK-016; the public local controller rejects VM registration.
+
+An internal manual adapter can enter `awaiting_manual` from a fenced ready lease with the admitted environment identity and readiness evidence. The transaction records required scenarios and a UTC manual deadline with zero capacity delta. Exact replay does not renew the deadline. Occupancy survives the human deadline, reopen and interruption; no automatic managed takeover occurs. TASK-019 owns the public manual runtime, observer result and abandonment handling; the current CLI still rejects manual submission.
+
+Managed runners export the inherited installation/job/lease/nonce chain plus their own controller-issued entry. Nested submission is checked before sealing and again in the admission transaction, independently of spare capacity. Blocking nonterminal waits reject before waiter registration; non-blocking and terminal observations remain allowed. TASK-008 owns follow streams and TASK-035 owns advisory-lock endpoint integration with the same guard.
+
+The typed client preserves queue blocker details. Readiness refusals name the missing, symlink, non-directory or non-private jobs prerequisite; availability refusals name the required and observed states. Explicit CLI epoch pins are validated separately from omission, and a persisted explicit key plus the original pins supports exact replay.
+
+Production-path tests cover same-key concurrency, replay after changed readiness and lease epochs, invalid mutation and runner-context guards, atomic pause/resume/manual-hold commits across owned-process death, and simulated VM host observations against the real SQLite ledger. Local source and CLI checks do not qualify an installed service, actual UTM, provider workloads or sudden power loss.
 
 ## TASK-008
 

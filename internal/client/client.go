@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -68,6 +69,12 @@ func (c *Client) call(ctx context.Context, method, path string, input any, targe
 		return Envelope{}, err
 	}
 	req.Header.Set("X-Haepari-Protocol", protocol)
+	if raw := os.Getenv(managed.ParentContextEnvironment); raw != "" {
+		if _, err := managed.DecodeParentChain(raw); err != nil {
+			return Envelope{}, fmt.Errorf("%s: %w", managed.ParentContextEnvironment, managed.ErrInvalid)
+		}
+		req.Header.Set(managed.ParentContextHeader, raw)
+	}
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -111,8 +118,9 @@ func (c *Client) Submit(ctx context.Context, spec []byte, key string) (managed.R
 }
 
 type Inspection struct {
-	Receipt managed.Receipt `json:"receipt"`
-	Result  *managed.Result `json:"result,omitempty"`
+	Receipt      managed.Receipt       `json:"receipt"`
+	Result       *managed.Result       `json:"result,omitempty"`
+	QueueBlocker *managed.QueueBlocker `json:"queue_blocker,omitempty"`
 }
 
 func (c *Client) Inspect(ctx context.Context, id string) (Inspection, Envelope, error) {
@@ -126,5 +134,21 @@ func (c *Client) Wait(ctx context.Context, id string, timeout time.Duration) (ma
 		return result, Envelope{}, fmt.Errorf("invalid wait timeout")
 	}
 	envelope, err := c.call(ctx, "GET", "/v1/jobs/"+url.PathEscape(id)+"/wait?timeout="+url.QueryEscape(timeout.String()), nil, &result)
+	return result, envelope, err
+}
+
+func (c *Client) SetAvailability(ctx context.Context, q managed.AvailabilityRequest, resume bool) (managed.ResourceStatus, Envelope, error) {
+	action := "pause"
+	if resume {
+		action = "resume"
+	}
+	var result managed.ResourceStatus
+	envelope, err := c.call(ctx, "POST", "/v1/resources/"+url.PathEscape(q.ResourceID)+"/"+action, q, &result)
+	return result, envelope, err
+}
+
+func (c *Client) InspectResource(ctx context.Context, id string) (managed.ResourceStatus, Envelope, error) {
+	var result managed.ResourceStatus
+	envelope, err := c.call(ctx, "GET", "/v1/resources/"+url.PathEscape(id), nil, &result)
 	return result, envelope, err
 }

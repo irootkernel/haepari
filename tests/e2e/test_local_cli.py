@@ -165,6 +165,18 @@ def test_local_admission_result_replay_and_conflict():
         }))
         _response(_run(BINARY, env, "resource", "register", "--file", str(resource_path), "--json"))
 
+        paused = _response(_run(BINARY, env, "resource", "pause", "e2e-local", "--expected-revision", "1", "--request-key", "e2e-pause", "--json"))["data"]
+        pause_replay = _response(_run(BINARY, env, "resource", "pause", "e2e-local", "--expected-revision", "1", "--request-key", "e2e-pause", "--json"))["data"]
+        assert paused["availability"] == "paused"
+        assert pause_replay["availability_revision"] == paused["availability_revision"] == 2
+        stale = _response(_run(BINARY, env, "resource", "resume", "e2e-local", "--expected-revision", "1", "--json"), 2)
+        assert stale["error"]["code"] == "STALE_REVISION"
+        resumed = _response(_run(BINARY, env, "resource", "resume", "e2e-local", "--expected-revision", "2", "--request-key", "e2e-resume", "--json"))["data"]
+        resume_replay = _response(_run(BINARY, env, "resource", "resume", "e2e-local", "--expected-revision", "2", "--request-key", "e2e-resume", "--json"))["data"]
+        assert resumed["availability"] == "available"
+        assert resume_replay["availability_revision"] == resumed["availability_revision"] == 3
+        assert resumed["idle_since"] == paused["idle_since"]
+
         job = {
             "schema": "haepari.job/v1",
             "execution_mode": "managed",

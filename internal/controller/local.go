@@ -93,11 +93,20 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		if key == "PATH" {
+		if key == "PATH" || key == managed.ParentContextEnvironment {
 			continue
 		}
 		cmd.Env = append(cmd.Env, key+"="+job.Workload.Environment[key])
 	}
+	chain, err := s.ledger.RunnerParentChain(s.installationID(), receipt.JobID, receipt.LeaseGeneration)
+	if err != nil {
+		return err
+	}
+	chainJSON, err := json.Marshal(chain)
+	if err != nil {
+		return err
+	}
+	cmd.Env = append(cmd.Env, managed.ParentContextEnvironment+"="+string(chainJSON))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -655,4 +664,60 @@ func writeReceipt(root, name string, value any) error {
 		return syncErr
 	}
 	return closeErr
+}
+
+// Both startup and resume use the same no-symlink private-directory predicate.
+type localReadinessRefusal struct{ cause string }
+
+func (e *localReadinessRefusal) Error() string { return "Local prerequisites unavailable: " + e.cause }
+func (e *localReadinessRefusal) Unwrap() error { return managed.ErrBlocked }
+
+func inspectPrivateJobsRoot(path string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		cause := "the controller jobs directory could not be inspected."
+		if errors.Is(err, os.ErrNotExist) {
+			cause = "the controller jobs directory is missing."
+		}
+		return nil, &localReadinessRefusal{cause: cause}
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, &localReadinessRefusal{cause: "the controller jobs path is a symlink; a real private directory is required."}
+	}
+	if !info.IsDir() {
+		return nil, &localReadinessRefusal{cause: "the controller jobs path is not a directory."}
+	}
+	if info.Mode().Perm()&0077 != 0 {
+		return nil, &localReadinessRefusal{cause: "the controller jobs directory permits group or other access; remove that access before retrying."}
+	}
+	return info, nil
+}
+
+func (s *runtimeServer) observeLocalReadiness(resourceID string) (string, string, error) {
+	info, err := inspectPrivateJobsRoot(filepath.Join(s.root.Path, "jobs"))
+	if err != nil {
+		return "", "", err
+	}
+	ref, err := randomID("local-")
+	if err != nil {
+		return "", "", err
+	}
+	// Store the bound facts as the reference, so the durable digest remains
+	// verifiable. The path is relative to the named controller installation.
+	facts, err := json.Marshal(struct {
+		Schema       string `json:"schema"`
+		Installation string `json:"installation"`
+		Resource     string `json:"resource"`
+		Path         string `json:"path"`
+		Mode         uint32 `json:"mode"`
+		Modified     string `json:"modified"`
+		Observed     string `json:"observed"`
+		Outcome      string `json:"outcome"`
+		Reference    string `json:"reference"`
+	}{Schema: "local-readiness/v1", Installation: s.installationID(), Resource: resourceID, Path: "jobs", Mode: uint32(info.Mode().Perm()), Modified: info.ModTime().UTC().Format(time.RFC3339Nano), Observed: time.Now().UTC().Format(time.RFC3339Nano), Outcome: "ready", Reference: ref})
+	if err != nil {
+		return "", "", err
+	}
+	digest := sha256.Sum256(facts)
+	return hex.EncodeToString(digest[:]), string(facts), nil
 }

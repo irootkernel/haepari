@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -54,3 +55,14 @@ func mustJSON(t ginkgo.GinkgoTInterface, value any) json.RawMessage {
 	}
 	return data
 }
+
+var _ = ginkgo.Describe("Task007MalformedParentTransport", ginkgo.Label("unit"), func() {
+	ginkgo.It("rejects malformed context before calling the transport", func() {
+		t := ginkgo.GinkgoT()
+		t.Setenv(managed.ParentContextEnvironment, "invalid")
+		c := &Client{http: &http.Client{Transport: responseTransport{}}}
+		_, err := c.call(context.Background(), "GET", "/v1/hello", nil, nil)
+		gomega.Expect(errors.Is(err, managed.ErrInvalid)).To(gomega.BeTrue())
+		gomega.Expect(err.Error()).To(gomega.ContainSubstring(managed.ParentContextEnvironment))
+	})
+})

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -258,7 +259,12 @@ func crashResult() Result {
 }
 
 func crashOperation(l *Ledger, operation string, data []byte) (Receipt, error) {
+	if strings.HasPrefix(operation, "vm-") {
+		return Receipt{}, crashPowerOperation(l, operation)
+	}
 	switch operation {
+	case "availability-pause", "availability-resume", "manual-hold":
+		return crashSchedulingOperation(l, operation)
 	case "admit":
 		return l.Admit(data, digest, "crash-request", "crash-job")
 	case "reserve":

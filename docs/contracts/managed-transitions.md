@@ -141,7 +141,7 @@ A backward clock jump cannot extend a previously observed deadline without an ex
 **The parent context chain.**
 
 - Managed runners export a parent context to their descendants, including the guest entrypoint. The host wrapper propagates it when it invokes child tools.
-- The context is a chain. Each entry holds installation ID, job ID, lease generation and a controller-verifiable nonce.
+- The context is a chain. Each entry holds installation ID, job ID, lease generation and a controller-verifiable nonce. The local provisional transport uses bounded JSON in `HAEPARI_PARENT_CONTEXT` and `X-Haepari-Parent-Context`: at most 32 entries and 8192 encoded bytes, with exact lowercase JSON field names. Admission reserves room for the runner's own entry. The controller stores the inherited chain at admission and issues a fresh nonce in the lease reservation transaction; declared workload environment cannot replace that exported chain.
 - A runner appends its own entry and never replaces an inherited one. Entries from other installations are preserved but ignored by this controller.
 
 **What the controller rejects.** A caller is nested when its chain holds an entry for a job that currently occupies capacity in this installation. For a nested caller, the controller rejects:
@@ -164,3 +164,7 @@ A backward clock jump cannot extend a previously observed deadline without an ex
 - a chain that crosses two installations
 - a nested caller acquiring an advisory lock
 - a multi-slot resource quarantined by one job, while another job on it settles successfully
+
+### Current manual accounting foundation
+
+TASK-007 implements the internal `HoldManualCapacity` ready-to-awaiting_manual transaction. It requires the exact Job/configuration/availability revisions, occupied slot and lease, admitted manual mode and environment digest, and bounded adapter readiness evidence. It records the admitted required scenarios, scenario document and UTC manual deadline in the durable event and changes no resource/global capacity. Same-key exact replay returns the original receipt without extending that deadline. Time passage does not return a managed slot; interruption retains it for reconciliation. This is an adapter accounting seam, not public manual-session qualification. TASK-019 owns runtime session discovery, human completion and abandonment handling.

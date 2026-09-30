@@ -54,6 +54,8 @@ Requirement coverage: `HP-REQ-035`, `HP-REQ-036`, `HP-REQ-037`, `HP-REQ-038`.
 
 Requirement coverage: `HP-REQ-039`, `HP-REQ-040`, `HP-REQ-041`.
 
+TASK-007 supplies the internal fenced `HoldManualCapacity` accounting transition and durable scenario/deadline event. This task integrates it with observed setup, runtime session discovery, human completion and abandonment; the existing accounting seam alone does not provide a public manual Job or accepted human result.
+
 #### Implement
 - [ ] Add awaiting_manual, revision-bound human results, exact retry semantics and long-lived resource ownership. Provide installed-session discovery/behavior scenario templates and use-haepari behavior cases.
 

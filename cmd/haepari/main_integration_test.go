@@ -206,6 +206,55 @@ var _ = ginkgo.Describe("LocalCLIAdmissionWaitAndReplay", ginkgo.Label("integrat
 		if code := run([]string{"resource", "register", "--file", resourcePath, "--json"}, &out, &diagnostic); code != 0 {
 			t.Fatalf("register: exit %d: %s", code, diagnostic.String())
 		}
+		// Invalid explicit pins must leave both resource state and mutation identity unchanged.
+		var registered struct {
+			Data managed.ResourceStatus `json:"data"`
+		}
+		out.Reset()
+		diagnostic.Reset()
+		gomega.Expect(run([]string{"resource", "inspect", "local-one", "--json"}, &out, &diagnostic)).To(gomega.BeZero(), diagnostic.String())
+		gomega.Expect(json.Unmarshal(out.Bytes(), &registered)).To(gomega.Succeed())
+		for _, action := range []string{"pause", "resume"} {
+			for _, pins := range [][]string{
+				{"--expected-config-revision", "0"},
+				{"--expected-lease-generation", "-1"},
+				{"--expected-config-revision", "0", "--expected-lease-generation", "-1"},
+				{"--expected-config-revision", "0", "--expected-lease-generation", "0"},
+				{"--expected-config-revision", "1"},
+				{"--expected-lease-generation", "0"},
+			} {
+				out.Reset()
+				diagnostic.Reset()
+				args := append([]string{"resource", action, "local-one", "--expected-revision", "1", "--request-key", "cli-pause", "--json"}, pins...)
+				gomega.Expect(run(args, &out, &diagnostic)).To(gomega.Equal(2), diagnostic.String())
+				gomega.Expect(out.Len()).To(gomega.BeZero())
+				diagnostic.Reset()
+				gomega.Expect(run([]string{"resource", "inspect", "local-one", "--json"}, &out, &diagnostic)).To(gomega.BeZero(), diagnostic.String())
+				var unchanged struct {
+					Data managed.ResourceStatus `json:"data"`
+				}
+				gomega.Expect(json.Unmarshal(out.Bytes(), &unchanged)).To(gomega.Succeed())
+				gomega.Expect(unchanged.Data).To(gomega.Equal(registered.Data))
+			}
+		}
+		for _, args := range [][]string{
+			{"resource", "pause", "local-one", "--expected-revision", "1", "--request-key", "cli-pause", "--expected-config-revision", "1", "--expected-lease-generation", "0", "--json"},
+			{"resource", "pause", "local-one", "--expected-revision", "1", "--request-key", "cli-pause", "--json"},
+			{"resource", "resume", "local-one", "--expected-revision", "2", "--request-key", "cli-resume", "--expected-config-revision", "1", "--expected-lease-generation", "0", "--json"},
+			{"resource", "resume", "local-one", "--expected-revision", "2", "--request-key", "cli-resume", "--expected-config-revision", "1", "--expected-lease-generation", "0", "--json"},
+		} {
+			out.Reset()
+			diagnostic.Reset()
+			if code := run(args, &out, &diagnostic); code != 0 {
+				t.Fatalf("availability %v: %d %s %s", args, code, out.String(), diagnostic.String())
+			}
+			var value struct {
+				Data managed.ResourceStatus `json:"data"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &value); err != nil || value.Data.Mutation == nil {
+				t.Fatalf("availability receipt: %s %v", out.String(), err)
+			}
+		}
 		digest := strings.Repeat("a", 64)
 		job := managed.JobSpec{Schema: "haepari.job/v1", ExecutionMode: "managed", ResourceID: "local-one", Mode: "auto", Suite: "cli", Input: managed.Input{Root: source, InventoryDigest: strings.TrimPrefix(sealed.Manifest.TreeSHA256, "sha256:"), SelectedFiles: []string{"source/input.txt"}}, Environment: managed.Environment{ProfileID: "local", ProfileDigest: digest}, Workload: managed.Workload{Argv: []string{"/bin/sh", "-c", "mkdir -p ../results; cat input.txt > ../results/out.txt"}, CWD: "source", RequiredOutputs: []string{"results/out.txt"}}, Deadlines: managed.Deadlines{QueueSeconds: 30, PrepareSeconds: 30, RunSeconds: 30, CollectSeconds: 30, CleanupSeconds: 30}, Effects: managed.Effects{Mode: "offline", AuthorizationReference: "cli-integration"}, Provenance: managed.Provenance{CandidateDigest: digest, TestsDigest: digest, TargetProfileDigest: digest, EvidenceClass: "development"}}
 		jobJSON, _ := json.Marshal(job)
@@ -238,6 +287,41 @@ var _ = ginkgo.Describe("LocalCLIAdmissionWaitAndReplay", ginkgo.Label("integrat
 		}
 		if err := json.Unmarshal(out.Bytes(), &final); err != nil || final.Data.FinalVerdict != managed.Pass {
 			t.Fatalf("wait result: %+v %v", final, err)
+		}
+		out.Reset()
+		diagnostic.Reset()
+		if code := run([]string{"resource", "inspect", "local-one", "--json"}, &out, &diagnostic); code != 0 {
+			t.Fatalf("resource inspect: %d %s", code, diagnostic.String())
+		}
+		var resourceStatus struct {
+			Data managed.ResourceStatus `json:"data"`
+		}
+		gomega.Expect(json.Unmarshal(out.Bytes(), &resourceStatus)).To(gomega.Succeed())
+		gomega.Expect(resourceStatus.Data.LeaseGeneration).To(gomega.BeNumerically(">", 0))
+		out.Reset()
+		diagnostic.Reset()
+		gomega.Expect(os.Chmod(filepath.Join(root.Path, "jobs"), 0755)).To(gomega.Succeed())
+		if code := run([]string{"resource", "resume", "local-one", "--expected-revision", "2", "--request-key", "cli-resume", "--expected-config-revision", "1", "--expected-lease-generation", "0", "--json"}, &out, &diagnostic); code != 0 {
+			t.Fatalf("pinned replay after lease return: %d %s %s", code, out.String(), diagnostic.String())
+		}
+		var replayed struct {
+			Data managed.ResourceStatus `json:"data"`
+		}
+		gomega.Expect(json.Unmarshal(out.Bytes(), &replayed)).To(gomega.Succeed())
+		gomega.Expect(replayed.Data.Availability).To(gomega.Equal("available"))
+		gomega.Expect(replayed.Data.LeaseGeneration).To(gomega.Equal(resourceStatus.Data.LeaseGeneration))
+		gomega.Expect(replayed.Data.Mutation.MutationKey).To(gomega.Equal("cli-resume"))
+		gomega.Expect(os.Chmod(filepath.Join(root.Path, "jobs"), 0700)).To(gomega.Succeed())
+		// No explicit key creates a bounded cryptographic mutation identity.
+		for _, args := range [][]string{{"resource", "pause", "local-one", "--expected-revision", "3", "--json"}, {"resource", "resume", "local-one", "--expected-revision", "4", "--json"}} {
+			out.Reset()
+			diagnostic.Reset()
+			if code := run(args, &out, &diagnostic); code != 0 {
+				t.Fatalf("generated key: %d %s", code, diagnostic.String())
+			}
+			gomega.Expect(json.Unmarshal(out.Bytes(), &resourceStatus)).To(gomega.Succeed())
+			gomega.Expect(resourceStatus.Data.Mutation).NotTo(gomega.BeNil())
+			gomega.Expect(resourceStatus.Data.Mutation.MutationKey).To(gomega.HavePrefix("availability-"))
 		}
 		if replay := submit(); replay.JobID != receipt.JobID {
 			t.Fatalf("same-key replay created another job: %+v", replay)

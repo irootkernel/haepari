@@ -52,9 +52,8 @@ func Run(ctx context.Context, root state.Root) error {
 	if err := os.Mkdir(jobsRoot, 0700); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("create jobs root: %w", err)
 	}
-	jobsInfo, err := os.Lstat(jobsRoot)
-	if err != nil || !jobsInfo.IsDir() || jobsInfo.Mode()&os.ModeSymlink != 0 || jobsInfo.Mode().Perm()&0077 != 0 {
-		return fmt.Errorf("jobs root is not a private real directory")
+	if _, err := inspectPrivateJobsRoot(jobsRoot); err != nil {
+		return fmt.Errorf("jobs root is not a private real directory: %w", err)
 	}
 	listener, cleanup, err := listenPrivate(root.SocketPath, os.Lstat, func(path string) error {
 		return os.Chmod(path, 0600)

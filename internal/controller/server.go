@@ -30,6 +30,8 @@ type runtimeServer struct {
 	wake    chan struct{}
 	mu      sync.Mutex
 	waiters map[string][]chan struct{}
+	// Test barrier after a replay miss, before observing readiness. Nil in production.
+	beforeAvailabilityObservation func()
 }
 
 func newRuntime(root state.Root, ledger *managed.Ledger, store *snapshot.Store) *runtimeServer {
@@ -57,6 +59,10 @@ func send(w http.ResponseWriter, status int, operation string, data any, issue *
 func reject(w http.ResponseWriter, op string, err error) {
 	code, status, retry := "INVALID_REQUEST", http.StatusBadRequest, "none"
 	switch {
+	case errors.Is(err, managed.ErrNestedAcquisition):
+		code = "NESTED_ACQUISITION_REJECTED"
+	case errors.Is(err, managed.ErrNestedWait):
+		code = "NESTED_WAIT_REJECTED"
 	case errors.Is(err, managed.ErrConflict), errors.Is(err, snapshot.ErrChanged):
 		code = "CONFLICT"
 	case errors.Is(err, managed.ErrNotFound):
@@ -67,6 +73,9 @@ func reject(w http.ResponseWriter, op string, err error) {
 		status = http.StatusConflict
 	case errors.Is(err, managed.ErrResultUnavailable):
 		code = "RESULT_UNAVAILABLE"
+	case errors.Is(err, managed.ErrBlocked):
+		code = "RECOVERY_BLOCKED"
+		status = http.StatusConflict
 	case errors.Is(err, managed.ErrUnsupported):
 		code = "UNSUPPORTED"
 	case errors.Is(err, managed.ErrStale):
@@ -82,25 +91,39 @@ func reject(w http.ResponseWriter, op string, err error) {
 		retry = "reconcile"
 	}
 	message := map[string]string{
-		"RESULT_UNAVAILABLE":       "The admission is known, but its retained result is unavailable; no new job was launched.",
-		"INVALID_REQUEST":          "The request is malformed or unsafe.",
-		"PREREQUISITE_UNAVAILABLE": "The selected input source is unavailable; correct it before submitting again.",
-		"CONFLICT":                 "The request conflicts with existing or changed input.",
-		"NOT_FOUND":                "The requested job or resource was not found.",
-		"RESOURCE_BUSY":            "The resource is occupied or already registered.",
-		"UNSUPPORTED":              "This mode or resource is not supported.",
-		"STALE_REVISION":           "The expected revision is no longer current.",
-		"STORAGE_UNAVAILABLE":      "Durable state is unavailable; reconcile before retrying.",
+		"NESTED_ACQUISITION_REJECTED": "A managed parent still holds capacity; settle it before acquiring more work.",
+		"NESTED_WAIT_REJECTED":        "A managed parent still holds capacity; blocking on nonterminal work is prohibited.",
+		"RESULT_UNAVAILABLE":          "The admission is known, but its retained result is unavailable; no new job was launched.",
+		"INVALID_REQUEST":             "The request is malformed or unsafe.",
+		"PREREQUISITE_UNAVAILABLE":    "The selected input source is unavailable; correct it before submitting again.",
+		"CONFLICT":                    "The request conflicts with existing or changed input.",
+		"NOT_FOUND":                   "The requested job or resource was not found.",
+		"RESOURCE_BUSY":               "The resource is occupied or already registered.",
+		"UNSUPPORTED":                 "This mode or resource is not supported.",
+		"STALE_REVISION":              "The expected revision is no longer current.",
+		"RECOVERY_BLOCKED":            "The current availability or readiness blocks this transition; inspect the resource. Pause/resume cannot clear quarantine.",
+		"STORAGE_UNAVAILABLE":         "Durable state is unavailable; reconcile before retrying.",
 	}[code]
+	if code == "RECOVERY_BLOCKED" {
+		var availability *managed.AvailabilityRefusal
+		var readiness *localReadinessRefusal
+		switch {
+		case errors.As(err, &availability):
+			message = availability.Error()
+		case errors.As(err, &readiness):
+			message = readiness.Error()
+		}
+	}
 	send(w, status, op, nil, &responseError{Code: code, Message: message, Retry: retry})
 }
 func (s *runtimeServer) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/hello", func(w http.ResponseWriter, r *http.Request) {
-		sum := sha256.Sum256([]byte(s.root.Path))
-		send(w, 200, "hello", map[string]any{"protocol": protocol, "installation_id": "local-" + hex.EncodeToString(sum[:8])}, nil)
+		send(w, 200, "hello", map[string]any{"protocol": protocol, "installation_id": s.installationID()}, nil)
 	})
 	mux.HandleFunc("POST /v1/resources", s.register)
+	mux.HandleFunc("POST /v1/resources/{id}/{action}", s.resourceAvailability)
+	mux.HandleFunc("GET /v1/resources/{id}", s.resourceInspect)
 	mux.HandleFunc("POST /v1/jobs", s.submit)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.inspect)
 	mux.HandleFunc("GET /v1/jobs/{id}/wait", s.wait)
@@ -148,7 +171,7 @@ func (s *runtimeServer) register(w http.ResponseWriter, r *http.Request) {
 		reject(w, "resource.register", err)
 		return
 	}
-	if spec.Kind != "local" || spec.Capacity != 1 {
+	if spec.Kind != "local" {
 		reject(w, "resource.register", managed.ErrUnsupported)
 		return
 	}
@@ -160,6 +183,18 @@ func (s *runtimeServer) register(w http.ResponseWriter, r *http.Request) {
 	send(w, 200, "resource.register", map[string]any{"resource_id": spec.ID, "revision": spec.Revision}, nil)
 }
 func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
+	chain, err := managed.DecodeParentChain(r.Header.Get(managed.ParentContextHeader))
+	if err != nil {
+		reject(w, "submit", err)
+		return
+	}
+	if nested, err := s.ledger.Nested(s.installationID(), chain); err != nil {
+		reject(w, "submit", err)
+		return
+	} else if nested {
+		reject(w, "submit", managed.ErrNestedAcquisition)
+		return
+	}
 	var input struct {
 		Spec       json.RawMessage `json:"spec"`
 		RequestKey string          `json:"request_key"`
@@ -257,7 +292,7 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		reject(w, "submit", err)
 		return
 	}
-	receipt, err := s.ledger.AdmitSealedInventory(input.Spec, job.Input.InventoryDigest, sealed.ObjectID, inventory, input.RequestKey, jobID)
+	receipt, err := s.ledger.AdmitWithParent(input.Spec, job.Input.InventoryDigest, sealed.ObjectID, inventory, input.RequestKey, jobID, s.installationID(), chain)
 	if err != nil {
 		reject(w, "submit", err)
 		return
@@ -280,6 +315,16 @@ func (s *runtimeServer) inspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{"receipt": receipt}
+	if receipt.JobState == "queued" {
+		blocker, err := s.ledger.QueueBlocker(id)
+		if err != nil {
+			reject(w, "inspect", err)
+			return
+		}
+		if blocker != nil {
+			data["queue_blocker"] = blocker
+		}
+	}
 	if receipt.JobState == "finished" && receipt.ResultStatus != "unavailable" {
 		result, err := s.ledger.Result(id)
 		if err != nil {
@@ -311,6 +356,18 @@ func (s *runtimeServer) wait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if initial.JobState != "finished" {
+		chain, err := managed.DecodeParentChain(r.Header.Get(managed.ParentContextHeader))
+		if err != nil {
+			reject(w, "wait", err)
+			return
+		}
+		if nested, err := s.ledger.Nested(s.installationID(), chain); err != nil {
+			reject(w, "wait", err)
+			return
+		} else if nested {
+			reject(w, "wait", managed.ErrNestedWait)
+			return
+		}
 		ch := make(chan struct{})
 		s.mu.Lock()
 		s.waiters[id] = append(s.waiters[id], ch)
@@ -409,12 +466,20 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 			s.signalFinished(expired.JobID)
 		}
 		for {
+			// See managed.NextQueued for selector/Reserve/controller guard ownership.
 			queued, err := s.ledger.NextQueued()
 			if err != nil {
 				break
 			}
 			if time.Now().UTC().UnixNano() >= queued.DeadlineNS {
 				if _, err := s.ledger.ExpireQueued(queued.Receipt.JobID, queued.Receipt.JobRevision, "expired-"+queued.Receipt.JobID); err != nil {
+					break
+				}
+				s.signalFinished(queued.Receipt.JobID)
+				continue
+			}
+			if queued.PinnedConfigRevision != queued.Receipt.ResourceConfigRevision {
+				if _, err := s.ledger.FailQueuedConfiguration(queued.Receipt.JobID, queued.Receipt.JobRevision, "config-"+queued.Receipt.JobID); err != nil {
 					break
 				}
 				s.signalFinished(queued.Receipt.JobID)
@@ -477,4 +542,9 @@ func (s *runtimeServer) failed(id string, cause error) {
 		}
 	}
 	_ = s.ledger.ReconcileLocalFailure(id)
+}
+
+func (s *runtimeServer) installationID() string {
+	sum := sha256.Sum256([]byte(s.root.Path))
+	return "local-" + hex.EncodeToString(sum[:8])
 }

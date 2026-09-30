@@ -10,11 +10,12 @@ import (
 )
 
 type QueuedJob struct {
-	Receipt    Receipt
-	Spec       JobSpec
-	Inventory  []byte
-	ObjectID   string
-	DeadlineNS int64
+	Receipt              Receipt
+	Spec                 JobSpec
+	Inventory            []byte
+	ObjectID             string
+	DeadlineNS           int64
+	PinnedConfigRevision int64
 }
 
 type ExpiredJob struct {
@@ -67,13 +68,16 @@ func (l *Ledger) Request(key string) (QueuedJob, error) {
 	return job, err
 }
 
-// NextQueued is used only by the single controller scheduler. Reserve enforces
-// the queue head and capacity again in its transaction.
+// NextQueued is used only by the single controller scheduler. Advisory
+// selection requires per-resource FIFO, available capacity, global capacity and
+// no pending/uncertain power transition. Reserve repeats these guards inside its
+// transaction, then checks pinned revisions and deadline. The controller checks
+// pinned configuration, input readability and deadline before attempting Reserve.
 func (l *Ledger) NextQueued() (QueuedJob, error) {
 	var job QueuedJob
 	var spec []byte
-	err := l.db.QueryRow(`SELECT j.id,j.spec_json,i.object_id,j.queue_deadline_ns FROM managed_jobs j JOIN managed_job_inputs i ON i.job_id=j.id WHERE j.state='queued' ORDER BY j.rowid LIMIT 1`).
-		Scan(&job.Receipt.JobID, &spec, &job.ObjectID, &job.DeadlineNS)
+	err := l.db.QueryRow(`SELECT j.id,j.spec_json,i.object_id,j.queue_deadline_ns,j.pinned_config_revision FROM managed_jobs j JOIN managed_job_inputs i ON i.job_id=j.id JOIN managed_admissions a ON a.job_id=j.id JOIN managed_resources r ON r.id=j.resource_id WHERE j.state='queued' AND r.availability='available' AND r.occupancy<r.capacity AND (SELECT COALESCE(SUM(occupancy),0) FROM managed_resources)<? AND NOT EXISTS(SELECT 1 FROM managed_power_transitions p WHERE p.state IN ('pending','uncertain') AND (p.victim_resource_id=r.id OR p.target_resource_id=r.id)) AND NOT EXISTS(SELECT 1 FROM managed_jobs h JOIN managed_admissions ha ON ha.job_id=h.id WHERE h.resource_id=j.resource_id AND h.state='queued' AND ha.sequence<a.sequence) ORDER BY a.sequence LIMIT 1`, l.globalLimit).
+		Scan(&job.Receipt.JobID, &spec, &job.ObjectID, &job.DeadlineNS, &job.PinnedConfigRevision)
 	if err != nil {
 		return job, mapNoRows(err)
 	}
@@ -90,37 +94,16 @@ func (l *Ledger) Input(jobID string) (string, error) {
 	return objectID, mapNoRows(err)
 }
 
-// RegisterOnlyLocal is the one-resource admission gate for TASK-033. The
-// count and insertion share a transaction so concurrent clients cannot both
-// establish a second resource.
+// RegisterOnlyLocal keeps the runtime local-only until TASK-016 qualifies UTM.
 func (l *Ledger) RegisterOnlyLocal(data []byte) error {
 	r, err := DecodeResource(data)
 	if err != nil {
 		return err
 	}
-	if r.Kind != "local" || r.Capacity != 1 {
+	if r.Kind != "local" {
 		return ErrUnsupported
 	}
-	canonical, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	tx, err := l.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var count int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM managed_resources`).Scan(&count); err != nil {
-		return err
-	}
-	if count != 0 {
-		return ErrBusy
-	}
-	if _, err := tx.Exec(`INSERT INTO managed_resources(id,kind,config_revision,capacity,vm_uuid,vm_mac,spec_json) VALUES(?,?,?,?,?,?,?)`, r.ID, r.Kind, r.Revision, r.Capacity, "", "", canonical); err != nil {
-		return fmt.Errorf("%w: resource registration: %v", ErrConflict, err)
-	}
-	return l.commit(tx)
+	return l.RegisterResource(data)
 }
 
 // AdvanceLocal records a phase receipt before the next external effect.
@@ -259,7 +242,11 @@ func (l *Ledger) ReconcileLocalFailure(jobID string) error {
 			return err
 		}
 	}
-	if _, err := tx.Exec(`UPDATE managed_resources SET availability='quarantined',availability_reason='local_effect_uncertain',availability_revision=availability_revision+1 WHERE id=(SELECT resource_id FROM managed_jobs WHERE id=?) AND availability!='quarantined'`, jobID); err != nil {
+	var resourceID string
+	if err := tx.QueryRow(`SELECT resource_id FROM managed_jobs WHERE id=?`, jobID).Scan(&resourceID); err != nil {
+		return err
+	}
+	if err := quarantineResourceTx(tx, resourceID, "local_effect_uncertain"); err != nil {
 		return err
 	}
 	return l.commit(tx)
@@ -293,6 +280,24 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 		if err := json.Unmarshal(specJSON, &spec); err != nil {
 			return Receipt{}, err
 		}
+		if result.JobID != jobID || result.ResourceID != resourceID || result.ResourceRevision != pinned || result.LeaseGeneration != lease {
+			return Receipt{}, ErrInvalid
+		}
+		var currentAvailability string
+		var currentConfig int64
+		if err := tx.QueryRow(`SELECT availability,config_revision FROM managed_resources WHERE id=?`, resourceID).Scan(&currentAvailability, &currentConfig); err != nil {
+			return Receipt{}, mapNoRows(err)
+		}
+		if currentConfig != pinned {
+			return Receipt{}, ErrStale
+		}
+		result.ResourceAvailability = currentAvailability
+		if result.CleanupOutcome == "failed" {
+			result.ResourceAvailability = "quarantined"
+			if err := quarantineResourceTx(tx, resourceID, "local_cleanup_failed"); err != nil {
+				return Receipt{}, err
+			}
+		}
 		encoded, err := json.Marshal(result)
 		if err != nil {
 			return Receipt{}, err
@@ -300,22 +305,8 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 		if _, err := DecodeResultForJob(encoded, spec); err != nil {
 			return Receipt{}, err
 		}
-		if result.JobID != jobID || result.ResourceID != resourceID || result.ResourceRevision != pinned || result.LeaseGeneration != lease {
-			return Receipt{}, ErrInvalid
-		}
-		if result.CleanupOutcome == "failed" {
-			if _, err := tx.Exec(`UPDATE managed_resources SET availability='quarantined',availability_reason='local_cleanup_failed',availability_revision=availability_revision+1 WHERE id=?`, resourceID); err != nil {
-				return Receipt{}, err
-			}
-		} else if result.ResourceAvailability != "available" {
-			return Receipt{}, ErrInvalid
-		}
-		updated, err := tx.Exec(`UPDATE managed_resources SET occupancy=occupancy-1 WHERE id=? AND occupancy>0`, resourceID)
-		if err != nil {
+		if err := releaseSlotTx(tx, resourceID); err != nil {
 			return Receipt{}, err
-		}
-		if count, err := updated.RowsAffected(); err != nil || count != 1 {
-			return Receipt{}, ErrBlocked
 		}
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, encoded, jobID); err != nil {
 			return Receipt{}, err
@@ -400,12 +391,29 @@ func (l *Ledger) MarkInterrupted() error {
 		if _, err := addEvent(tx, id, "interrupted", map[string]any{"reason": "controller_restart"}); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`UPDATE managed_resources SET availability='quarantined',availability_reason='controller_restart_uncertain',availability_revision=availability_revision+1 WHERE id=(SELECT resource_id FROM managed_jobs WHERE id=?) AND availability!='quarantined'`, id); err != nil {
+	}
+	rows, err = tx.Query(`SELECT DISTINCT resource_id FROM managed_jobs WHERE state='reconciling' ORDER BY resource_id`)
+	if err != nil {
+		return err
+	}
+	var resourceIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
 			return err
 		}
+		resourceIDs = append(resourceIDs, id)
 	}
-	if _, err := tx.Exec(`UPDATE managed_resources SET availability='quarantined',availability_reason='controller_restart_uncertain',availability_revision=availability_revision+1 WHERE availability!='quarantined' AND id IN (SELECT resource_id FROM managed_jobs WHERE state='reconciling')`); err != nil {
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
 		return err
+	}
+	for _, id := range resourceIDs {
+		if err := quarantineResourceTx(tx, id, "controller_restart_uncertain"); err != nil {
+			return err
+		}
 	}
 	return l.commit(tx)
 }

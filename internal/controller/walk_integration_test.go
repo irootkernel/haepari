@@ -76,7 +76,6 @@ var _ = ginkgo.Describe("LocalWalkingSkeleton", ginkgo.Label("integration"), fun
 		defer c.Close()
 		resource := managed.ResourceSpec{Schema: "haepari.resource/v1", ID: "local-one", Kind: "local", ExecutionMode: "managed", Capacity: 1, Revision: 1, Adapter: managed.Adapter{QualificationReference: "isolated-integration"}, Cleanup: &managed.CleanupPolicy{PolicyReference: "owned-workspace"}}
 		for _, unsupported := range []managed.ResourceSpec{
-			func() managed.ResourceSpec { r := resource; r.Capacity = 2; return r }(),
 			func() managed.ResourceSpec {
 				r := resource
 				r.Kind, r.Cleanup = "utm-macos", nil
@@ -100,8 +99,8 @@ var _ = ginkgo.Describe("LocalWalkingSkeleton", ginkgo.Label("integration"), fun
 		secondResource.ID = "local-two"
 		secondJSON, _ := json.Marshal(secondResource)
 		var issue *client.Issue
-		if _, err := c.Register(context.Background(), secondJSON); !errors.As(err, &issue) || issue.Code != "RESOURCE_BUSY" {
-			t.Fatalf("second local resource should be refused: %v", err)
+		if _, err := c.Register(context.Background(), secondJSON); err != nil {
+			t.Fatalf("second local resource: %v", err)
 		}
 		digest := strings.Repeat("a", 64)
 		count := filepath.Join(parent, "count.txt")

@@ -271,7 +271,9 @@ var _ = ginkgo.Describe("VMFailurePauseOrderingAndStaleRegistration", ginkgo.Lab
 		if _, err := db.Exec(`UPDATE managed_power_transitions SET state='reconciled' WHERE operation_generation=2`); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
-		reserved, err := l.Reserve(ReserveRequest{JobID: "job-vm", ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "reserve-vm"})
+		observed, err := l.ObserveVM(VMObservation{ResourceID: "vm-a", ConfigRevision: 1, VMUUID: r.VM.UTMVMUUID, Power: "started", EvidenceDigest: digest})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		reserved, err := l.Reserve(ReserveRequest{JobID: "job-vm", ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "reserve-vm", VMGuard: &VMReservationGuard{HostLimit: 1, ObservationRevisions: map[string]int64{"vm-a": observed}}})
 		if err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
@@ -456,7 +458,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		path := filepath.Join(t.TempDir(), "state.sqlite")
 		db, l := openLedger(t, path, 1)
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 4 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 5 {
 			t.Fatalf("schema version %d: %v", version, err)
 		}
 		r := validResource()
@@ -475,7 +477,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		if err := l.RegisterResource(encode(t, r)); !errors.Is(err, ErrConflict) {
 			t.Fatalf("duplicate VM identity: %v", err)
 		}
-		if _, err := db.Exec(`PRAGMA user_version=5`); err != nil {
+		if _, err := db.Exec(`PRAGMA user_version=6`); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		if err := db.Close(); err != nil {
@@ -517,7 +519,7 @@ var _ = ginkgo.Describe("ProvisionalV1PowerTableMigration", ginkgo.Label("integr
 		db, l := openLedger(t, path, 1)
 		defer db.Close()
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 4 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 5 {
 			t.Fatalf("migrated version %d: %v", version, err)
 		}
 		var value int64

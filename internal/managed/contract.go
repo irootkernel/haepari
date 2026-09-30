@@ -133,9 +133,14 @@ type PowerTransitionIdentity struct {
 }
 
 func (p PowerTransitionIdentity) Valid() bool {
-	return p.OperationGeneration > 0 && identifier.MatchString(p.TargetJobID) && p.TargetLeaseGeneration > 0 &&
-		identifier.MatchString(p.TargetResourceID) && p.TargetConfigRevision > 0 && vmUUIDPattern.MatchString(p.TargetVMUUID) &&
-		identifier.MatchString(p.VictimResourceID) && p.VictimConfigRevision > 0 && vmUUIDPattern.MatchString(p.VictimVMUUID) &&
+	if p.OperationGeneration <= 0 || !identifier.MatchString(p.TargetJobID) || p.TargetLeaseGeneration <= 0 ||
+		!identifier.MatchString(p.TargetResourceID) || p.TargetConfigRevision <= 0 || !vmUUIDPattern.MatchString(p.TargetVMUUID) {
+		return false
+	}
+	if p.VictimResourceID == "" {
+		return p.VictimConfigRevision == 0 && p.VictimVMUUID == ""
+	}
+	return identifier.MatchString(p.VictimResourceID) && p.VictimConfigRevision > 0 && vmUUIDPattern.MatchString(p.VictimVMUUID) &&
 		p.TargetResourceID != p.VictimResourceID && !strings.EqualFold(p.TargetVMUUID, p.VictimVMUUID)
 }
 
