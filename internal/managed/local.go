@@ -124,8 +124,8 @@ func (l *Ledger) AdvanceLocal(jobID string, revision int64, from, to, key string
 		if err := tx.QueryRow(`SELECT state,revision FROM managed_jobs WHERE id=?`, jobID).Scan(&state, &current); err != nil {
 			return Receipt{}, mapNoRows(err)
 		}
-		if current != revision {
-			return Receipt{}, ErrStale
+		if _, err := localRevisionTx(tx, jobID, revision, from); err != nil {
+			return Receipt{}, err
 		}
 		if state != from {
 			return Receipt{}, ErrConflict
@@ -159,8 +159,8 @@ func (l *Ledger) StartLocal(jobID string, revision int64, runID string) (Receipt
 		if err := tx.QueryRow(`SELECT state,revision FROM managed_jobs WHERE id=?`, jobID).Scan(&state, &current); err != nil {
 			return Receipt{}, mapNoRows(err)
 		}
-		if current != revision {
-			return Receipt{}, ErrStale
+		if _, err := localRevisionTx(tx, jobID, revision, "ready"); err != nil {
+			return Receipt{}, err
 		}
 		if state != "ready" {
 			return Receipt{}, ErrConflict
@@ -270,8 +270,8 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 		if err != nil {
 			return Receipt{}, mapNoRows(err)
 		}
-		if current != revision {
-			return Receipt{}, ErrStale
+		if _, err := localRevisionTx(tx, jobID, revision, "settling"); err != nil {
+			return Receipt{}, err
 		}
 		if state != "settling" {
 			return Receipt{}, ErrConflict
@@ -297,6 +297,9 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 			if err := quarantineResourceTx(tx, resourceID, "local_cleanup_failed"); err != nil {
 				return Receipt{}, err
 			}
+		}
+		if err := validateLocalOutcomeTx(tx, jobID, result); err != nil {
+			return Receipt{}, err
 		}
 		encoded, err := json.Marshal(result)
 		if err != nil {

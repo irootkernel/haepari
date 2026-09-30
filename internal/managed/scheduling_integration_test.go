@@ -114,7 +114,7 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 			_, err := db.Exec("DROP TABLE " + name)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
-		_, err := db.Exec(`ALTER TABLE managed_resources DROP COLUMN idle_since_ns; DELETE FROM schema_migrations WHERE version=5; PRAGMA user_version=4`)
+		_, err := db.Exec(`DROP TABLE managed_installation; DROP TABLE managed_cancellations; DROP TABLE managed_cancel_edges; DROP TABLE managed_local_outcomes; ALTER TABLE managed_resources DROP COLUMN idle_since_ns; DELETE FROM schema_migrations WHERE version>=5; PRAGMA user_version=4`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(db.Close()).To(gomega.Succeed())
 		db, l = openLedger(t, path, 2)

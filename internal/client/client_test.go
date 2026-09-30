@@ -66,3 +66,11 @@ var _ = ginkgo.Describe("Task007MalformedParentTransport", ginkgo.Label("unit"),
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring(managed.ParentContextEnvironment))
 	})
 })
+
+var _ = ginkgo.Describe("Task008OversizedResponse", ginkgo.Label("unit"), func() {
+	ginkgo.It("rejects a response beyond the closed envelope limit", func() {
+		c := &Client{http: &http.Client{Transport: responseTransport{body: bytes.Repeat([]byte(" "), managed.MaxEnvelopeBytes+1)}}}
+		_, _, err := c.Wait(context.Background(), "job-1", time.Second)
+		gomega.Expect(err).To(gomega.MatchError("oversized controller response"))
+	})
+})

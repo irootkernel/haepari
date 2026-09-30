@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,19 @@ type Ledger struct {
 	db                  *sql.DB
 	globalLimit         int
 	transactionBoundary func(string) // nil in production; crash probes surround the real commit
+	changesMu           sync.Mutex
+	changes             chan struct{}
+}
+
+// Changes returns the current commit generation. Subscribe before reading the
+// durable predicate; notifications carry no lifecycle or progress authority.
+func (l *Ledger) Changes() <-chan struct{} {
+	l.changesMu.Lock()
+	defer l.changesMu.Unlock()
+	if l.changes == nil {
+		l.changes = make(chan struct{})
+	}
+	return l.changes
 }
 
 func (l *Ledger) commit(tx *sql.Tx) error {
@@ -27,6 +41,12 @@ func (l *Ledger) commit(tx *sql.Tx) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	l.changesMu.Lock()
+	if l.changes != nil {
+		close(l.changes)
+	}
+	l.changes = make(chan struct{})
+	l.changesMu.Unlock()
 	if l.transactionBoundary != nil {
 		l.transactionBoundary("after_commit")
 	}
@@ -64,6 +84,8 @@ type EventBatch struct {
 	Resync        *Receipt `json:"resync,omitempty"`
 	CurrentCursor int64    `json:"current_cursor"`
 	NextCursor    int64    `json:"next_cursor"`
+	Snapshot      Receipt  `json:"snapshot"`
+	More          bool     `json:"more"`
 }
 
 // EventsAfter returns global monotonic cursors scoped to one Job. A nonzero
@@ -77,8 +99,12 @@ func (l *Ledger) EventsAfter(jobID string, after int64, limit int) (EventBatch, 
 		return EventBatch{}, err
 	}
 	defer tx.Rollback()
-	if _, err := l.snapshotTx(tx, jobID); err != nil {
+	snapshot, err := l.snapshotTx(tx, jobID)
+	if err != nil {
 		return EventBatch{}, err
+	}
+	if snapshot.ResultStatus == "unavailable" {
+		return EventBatch{}, ErrResultUnavailable
 	}
 	var current int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(cursor),0) FROM managed_event_owners WHERE job_id=?`, jobID).Scan(&current); err != nil {
@@ -96,44 +122,50 @@ func (l *Ledger) EventsAfter(jobID string, after int64, limit int) (EventBatch, 
 		if owner != jobID {
 			return EventBatch{}, ErrInvalid
 		}
-		var exists int
-		err = tx.QueryRow(`SELECT 1 FROM managed_events WHERE cursor=?`, after).Scan(&exists)
-		if errors.Is(err, sql.ErrNoRows) {
-			snapshot, err := l.snapshotTx(tx, jobID)
-			if err != nil {
-				return EventBatch{}, err
-			}
-			return EventBatch{Resync: &snapshot, CurrentCursor: current, NextCursor: current}, nil
-		}
-		if err != nil {
-			return EventBatch{}, err
-		}
 	}
 	var purgedThrough int64
 	if err := tx.QueryRow(`SELECT purged_through FROM managed_event_progress WHERE job_id=?`, jobID).Scan(&purgedThrough); err != nil {
 		return EventBatch{}, mapNoRows(err)
 	}
+	// Only explicit retention permits resynchronization. A lost owned payload
+	// above the floor is storage uncertainty, never an empty successful page.
+	var missing int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM managed_event_owners o LEFT JOIN managed_events e ON e.cursor=o.cursor WHERE o.job_id=? AND o.cursor>? AND e.cursor IS NULL`, jobID, purgedThrough).Scan(&missing); err != nil {
+		return EventBatch{}, err
+	}
+	if missing != 0 {
+		return EventBatch{}, fmt.Errorf("managed event payload missing")
+	}
 	if purgedThrough > 0 && after <= purgedThrough {
-		snapshot, err := l.snapshotTx(tx, jobID)
-		if err != nil {
-			return EventBatch{}, err
-		}
-		return EventBatch{Resync: &snapshot, CurrentCursor: current, NextCursor: current}, nil
+		return EventBatch{Resync: &snapshot, Snapshot: snapshot, CurrentCursor: current, NextCursor: current}, nil
 	}
 	rows, err := tx.Query(`SELECT cursor,job_id,kind,payload_json FROM managed_events WHERE job_id=? AND cursor>? ORDER BY cursor LIMIT ?`, jobID, after, limit)
 	if err != nil {
 		return EventBatch{}, err
 	}
 	defer rows.Close()
-	batch := EventBatch{CurrentCursor: current, NextCursor: after, Events: []Event{}}
+	batch := EventBatch{Snapshot: snapshot, CurrentCursor: current, NextCursor: after, Events: []Event{}}
+	bytes := 0
 	for rows.Next() {
 		var event Event
 		if err := rows.Scan(&event.Cursor, &event.JobID, &event.Kind, &event.Payload); err != nil {
 			return EventBatch{}, err
 		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			return EventBatch{}, err
+		}
+		if len(encoded) > 2<<20 {
+			return EventBatch{}, fmt.Errorf("managed event payload exceeds page bound")
+		}
+		if bytes+len(encoded) > 2<<20 {
+			break
+		}
+		bytes += len(encoded)
 		batch.Events = append(batch.Events, event)
 		batch.NextCursor = event.Cursor
 	}
+	batch.More = batch.NextCursor < current
 	return batch, rows.Err()
 }
 
@@ -256,7 +288,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 5 {
+	if version > 6 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
 	if version >= 4 {
@@ -268,8 +300,13 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 			return nil, fmt.Errorf("managed schema4 lost its required admission table")
 		}
 	}
-	if version == 5 {
+	if version >= 5 {
 		if err := checkSchedulingSchemaTx(tx); err != nil {
+			return nil, err
+		}
+	}
+	if version >= 6 {
+		if err := checkClientSchemaTx(tx); err != nil {
 			return nil, err
 		}
 	}
@@ -325,6 +362,9 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := initSchedulingTx(tx, version); err != nil {
 		return nil, err
 	}
+	if err := initClientSchemaTx(tx, version); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -360,12 +400,17 @@ func (l *Ledger) RegisterResource(data []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = l.db.Exec(`INSERT INTO managed_resources(id,kind,config_revision,capacity,vm_uuid,vm_mac,spec_json,idle_since_ns) VALUES(?,?,?,?,?,?,?,?)`,
+	tx, err := l.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`INSERT INTO managed_resources(id,kind,config_revision,capacity,vm_uuid,vm_mac,spec_json,idle_since_ns) VALUES(?,?,?,?,?,?,?,?)`,
 		r.ID, r.Kind, r.Revision, r.Capacity, vmUUID(r), vmMAC(r), canonical, time.Now().UTC().UnixNano())
 	if err != nil {
 		return fmt.Errorf("%w: resource registration: %v", ErrConflict, err)
 	}
-	return nil
+	return l.commit(tx)
 }
 
 func vmUUID(r ResourceSpec) string {

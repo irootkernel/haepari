@@ -1,0 +1,282 @@
+package controller
+
+import (
+	"errors"
+	"net/http"
+	"os"
+	"os/exec"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/irootkernel/haepari/internal/managed"
+)
+
+type nativeCompletion struct {
+	err error
+	at  time.Time
+}
+
+// The gate serializes spawn and observed native completion against public
+// cancellation. It is never held throughout preparation, collection or cleanup.
+type localRunControl struct {
+	mu           sync.Mutex
+	wake         chan struct{}
+	receipt      managed.Receipt
+	identity     managed.LocalIdentity
+	completionMu sync.Mutex
+	completed    chan struct{}
+	completion   *nativeCompletion
+	observed     bool
+	deadline     time.Time
+	cmd          *exec.Cmd
+	effects      bool
+	beforePhase  func(string) // deterministic integration barrier; nil in production
+}
+
+func (c *localRunControl) phase(name string) {
+	if c.beforePhase != nil {
+		c.beforePhase(name)
+	}
+}
+
+func (s *runtimeServer) registerLocal(r managed.Receipt) (*localRunControl, error) {
+	s.cancelMu.Lock()
+	defer s.cancelMu.Unlock()
+	if s.localRuns == nil {
+		s.localRuns = make(map[string]*localRunControl)
+	}
+	if s.localRuns[r.JobID] != nil {
+		return nil, managed.ErrConflict
+	}
+	c := &localRunControl{wake: make(chan struct{}, 1), completed: make(chan struct{}), receipt: r, identity: managed.LocalIdentity{JobID: r.JobID, ResourceID: r.ResourceID, ConfigRevision: r.ResourceConfigRevision, Slot: r.Slot, LeaseGeneration: r.LeaseGeneration}}
+	s.localRuns[r.JobID] = c
+	// Registration precedes durable recheck: a commit before registration is
+	// found here; a commit afterwards either wakes this handle or is rechecked.
+	current, err := s.ledger.Snapshot(r.JobID)
+	if err != nil {
+		delete(s.localRuns, r.JobID)
+		return nil, err
+	}
+	if current.ResourceID != r.ResourceID || current.ResourceConfigRevision != r.ResourceConfigRevision || current.LeaseGeneration != r.LeaseGeneration || current.Slot != r.Slot {
+		delete(s.localRuns, r.JobID)
+		return nil, managed.ErrStale
+	}
+	c.receipt = current
+	id, err := s.ledger.LocalIdentity(r.JobID)
+	if err != nil {
+		delete(s.localRuns, r.JobID)
+		return nil, err
+	}
+	if id.ResourceID != r.ResourceID || id.ConfigRevision != r.ResourceConfigRevision || id.LeaseGeneration != r.LeaseGeneration || id.Slot != r.Slot {
+		delete(s.localRuns, r.JobID)
+		return nil, managed.ErrStale
+	}
+	c.identity = id
+	return c, nil
+}
+
+func (s *runtimeServer) unregisterLocal(c *localRunControl) {
+	s.cancelMu.Lock()
+	defer s.cancelMu.Unlock()
+	if s.localRuns[c.identity.JobID] == c {
+		delete(s.localRuns, c.identity.JobID)
+	}
+}
+
+func (s *runtimeServer) cancel(w http.ResponseWriter, r *http.Request) {
+	var q managed.CancelRequest
+	if err := decodeBody(r, &q); err != nil {
+		reject(w, "cancel", err)
+		return
+	}
+	if q.JobID == "" {
+		q.JobID = r.PathValue("id")
+	}
+	if q.JobID != r.PathValue("id") {
+		reject(w, "cancel", managed.ErrInvalid)
+		return
+	}
+	receipt, err := s.requestCancel(q)
+	if err != nil {
+		reject(w, "cancel", err)
+		return
+	}
+	send(w, http.StatusOK, "cancel", receipt, nil)
+}
+
+func (s *runtimeServer) requestCancel(q managed.CancelRequest) (managed.CancelReceipt, error) {
+	s.cancelMu.Lock()
+	c := s.localRuns[q.JobID]
+	s.cancelMu.Unlock()
+	if c != nil {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		// Import a native result already published by Wait before deciding the
+		// cancellation edge. Main-process exit is not a process-tree proof.
+		if err := s.observeLocalCompletion(c); err != nil {
+			return managed.CancelReceipt{}, err
+		}
+	}
+	receipt, err := s.ledger.Cancel(q)
+	if err != nil {
+		return receipt, err
+	}
+	if c != nil {
+		c.receipt = receipt.Receipt
+		select {
+		case c.wake <- struct{}{}:
+		default:
+		}
+	}
+	s.notifyScheduler()
+	return receipt, nil
+}
+
+// Only the Wait goroutine publishes completion. Readers never consume a
+// result channel; a closed notification is safe for arbitrarily many observers.
+func (c *localRunControl) publishCompletion(end nativeCompletion) {
+	c.completionMu.Lock()
+	defer c.completionMu.Unlock()
+	if c.completion == nil {
+		c.completion = &end
+		close(c.completed)
+	}
+}
+func (c *localRunControl) nativeCompletion() *nativeCompletion {
+	c.completionMu.Lock()
+	defer c.completionMu.Unlock()
+	return c.completion
+}
+
+// Called with c.mu held. Only Wait owns cmd.ProcessState until publication.
+func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
+	if c.observed {
+		return nil
+	}
+	end := c.nativeCompletion()
+	if end == nil {
+		return nil
+	}
+	out := nativeOutcome(c.cmd, *end, c.deadline)
+	r, err := s.ledger.RecordLocalOutcome(managed.LocalOutcomeRequest{Identity: c.identity, ExpectedRevision: c.receipt.JobRevision, Outcome: out, MutationKey: "outcome-" + c.identity.JobID})
+	if err != nil {
+		return err
+	}
+	c.receipt = r
+	c.observed = true
+	return nil
+}
+
+func nativeOutcome(cmd *exec.Cmd, end nativeCompletion, deadline time.Time) managed.LocalOutcome {
+	out := managed.LocalOutcome{Started: true, WorkloadOutcome: "fail"}
+	if !deadline.IsZero() && end.at.After(deadline) {
+		out.WorkloadOutcome = "timed_out"
+	} else if end.err == nil {
+		out.WorkloadOutcome = "pass"
+	}
+	if cmd != nil && cmd.ProcessState != nil {
+		code := cmd.ProcessState.ExitCode()
+		if code >= 0 && code <= 255 {
+			out.NativeExitCode = &code
+		}
+		if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+			out.NativeExitCode = nil
+			out.NativeSignal = status.Signal().String()
+		}
+	}
+	return out
+}
+
+// Every wait, including after SIGKILL and receipt-write failure, is bounded.
+// Only the current live command handle can be signalled; no historical PID is
+// reattached here (TASK009 owns restart/process identity qualification).
+func terminateLocal(c *localRunControl, budget time.Duration) error {
+	if budget <= 0 {
+		return errors.New("missing termination budget")
+	}
+	deadline := time.Now().Add(budget)
+	if c.cmd == nil || c.cmd.Process == nil {
+		return errors.New("missing owned process")
+	}
+	pid := c.cmd.Process.Pid
+	_ = syscall.Kill(-pid, syscall.SIGTERM)
+	c.phase("termination_wait")
+	grace := time.NewTimer(min(2*time.Second, budget/2))
+	defer grace.Stop()
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	for {
+		if c.nativeCompletion() != nil {
+			break
+		}
+		select {
+		case <-c.completed:
+		case <-grace.C:
+			_ = syscall.Kill(-pid, syscall.SIGKILL)
+		case <-timer.C:
+			return errors.New("owned workload termination unproven")
+		}
+	}
+	return ensureGroupStopped(pid, time.Until(deadline))
+}
+
+// Called only after the preparation worker stopped, or before it was allowed
+// any filesystem effect. Never called for an ambiguous preparation timeout.
+func (s *runtimeServer) settleCancelledPreparation(c *localRunControl, job managed.JobSpec, jobRoot, workspace string) error {
+	c.mu.Lock()
+	current, err := s.ledger.RecordLocalOutcome(managed.LocalOutcomeRequest{Identity: c.identity, ExpectedRevision: c.receipt.JobRevision, Outcome: managed.LocalOutcome{Started: false, WorkloadOutcome: "cancelled"}, MutationKey: "outcome-" + c.identity.JobID})
+	if err == nil {
+		current, err = s.ledger.CompleteLocalRun(managed.LocalTerminationRequest{Identity: c.identity, ExpectedRevision: current.JobRevision, NoOwnedEffect: !c.effects, MutationKey: "termination-" + c.identity.JobID})
+	}
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	c.phase("collecting")
+	current, err = s.ledger.AdvanceLocal(current.JobID, current.JobRevision, "collecting", "cleaning", "collected-"+current.JobID)
+	if err != nil {
+		return err
+	}
+	c.phase("cleaning")
+	cleanup := managed.CleanupOutcome("not_needed")
+	var protected []managed.ProtectedEvidence
+	if c.effects {
+		deadline := time.Now().Add(time.Duration(job.Deadlines.CleanupSeconds) * time.Second)
+		cleanupErr, status := boundedPhase(deadline, func() error {
+			err := removeTreeUntil(workspace, deadline)
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		})
+		if status == phaseUnproven {
+			return errors.New("cancelled preparation cleanup termination unproven")
+		}
+		cleanup = "verified"
+		if cleanupErr != nil || status == phaseLate {
+			cleanup = "failed"
+			protected = append(protected, managed.ProtectedEvidence{Path: "workspace", Reason: "cleanup_incomplete", RecoveryReference: "job:" + current.JobID})
+		}
+		if err = writeReceipt(jobRoot, "cancel-no-start.json", map[string]any{"no_start": true, "cleanup": cleanup}); err != nil {
+			return err
+		}
+	}
+	current, err = s.ledger.AdvanceLocal(current.JobID, current.JobRevision, "cleaning", "settling", "cleaned-"+current.JobID)
+	if err != nil {
+		return err
+	}
+	c.phase("settling")
+	verdict, err := managed.DeriveVerdict(managed.ResultFacts{WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: cleanup, ManualEligible: true, CancelledBeforeOutcome: true, TerminationProven: true, NoOwnedEffect: !c.effects})
+	if err != nil {
+		return err
+	}
+	result := managed.Result{Schema: "haepari.result/v1", JobID: current.JobID, ResourceID: current.ResourceID, ResourceRevision: current.ResourceConfigRevision, LeaseGeneration: current.LeaseGeneration, JobState: "finished", ResourceAvailability: current.ResourceAvailability, WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: cleanup, FinalVerdict: verdict, Reason: "cancel_before_start", ProtectedEvidence: protected}
+	if cleanup == "failed" {
+		result.ResourceAvailability = "quarantined"
+	}
+	if _, err = s.ledger.SettleLocal(current.JobID, current.JobRevision, result); err != nil {
+		return err
+	}
+	return nil
+}

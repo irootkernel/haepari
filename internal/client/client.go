@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -18,9 +20,21 @@ import (
 )
 
 const protocol = "managed-execution/v1"
-const maxResponseBytes = 4 << 20
+const maxResponseBytes = managed.MaxEnvelopeBytes
 
-type Client struct{ http *http.Client }
+var ErrParentContext = errors.New("invalid inherited parent context")
+
+type Client struct {
+	http             *http.Client
+	minimum, maximum int
+	Hello            Handshake
+}
+type Handshake struct {
+	Protocol       string   `json:"protocol"`
+	Version        int      `json:"protocol_version"`
+	InstallationID string   `json:"installation_id"`
+	Capabilities   []string `json:"capabilities"`
+}
 type Envelope struct {
 	Schema    string          `json:"schema"`
 	Operation string          `json:"operation"`
@@ -37,63 +51,84 @@ type Issue struct {
 func (i *Issue) Error() string { return i.Code }
 
 func Connect(ctx context.Context, root state.Root) (*Client, error) {
+	return ConnectRange(ctx, root, 1, 1)
+}
+func ConnectRange(ctx context.Context, root state.Root, minimum, maximum int) (*Client, error) {
+	if minimum < 1 || maximum < minimum {
+		return nil, managed.ErrInvalid
+	}
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", root.SocketPath)
 	}}
-	c := &Client{http: &http.Client{Transport: transport}}
-	var hello struct {
-		Protocol       string `json:"protocol"`
-		InstallationID string `json:"installation_id"`
-	}
+	c := &Client{http: &http.Client{Transport: transport}, minimum: minimum, maximum: maximum}
+	var hello Handshake
 	if _, err := c.call(ctx, "GET", "/v1/hello", nil, &hello); err != nil {
+		c.Close()
 		return nil, err
 	}
-	if hello.Protocol != protocol || hello.InstallationID == "" {
-		return nil, errors.New("protocol handshake failed")
+	if hello.Protocol != protocol || hello.InstallationID == "" || hello.Version != 1 || hello.Version < minimum || hello.Version > maximum || !slices.Contains(hello.Capabilities, protocol) {
+		c.Close()
+		return nil, &Issue{Code: "PROTOCOL_UNSUPPORTED", Message: "Invalid protocol negotiation response.", Retry: "none"}
 	}
+	c.Hello = hello
 	return c, nil
 }
 func (c *Client) Close() { c.http.CloseIdleConnections() }
 
-func (c *Client) call(ctx context.Context, method, path string, input any, target any) (Envelope, error) {
+func (c *Client) newRequest(ctx context.Context, method, path string, input any) (*http.Request, error) {
 	var body io.Reader
 	if input != nil {
 		encoded, err := json.Marshal(input)
 		if err != nil {
-			return Envelope{}, err
+			return nil, err
 		}
 		body = bytes.NewReader(encoded)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, "http://haepari"+path, body)
 	if err != nil {
-		return Envelope{}, err
+		return nil, err
 	}
 	req.Header.Set("X-Haepari-Protocol", protocol)
+	minimum, maximum := c.minimum, c.maximum
+	if minimum == 0 && maximum == 0 {
+		minimum, maximum = 1, 1
+	}
+	req.Header.Set("X-Haepari-Protocol-Min", strconv.Itoa(minimum))
+	req.Header.Set("X-Haepari-Protocol-Max", strconv.Itoa(maximum))
 	if raw := os.Getenv(managed.ParentContextEnvironment); raw != "" {
 		if _, err := managed.DecodeParentChain(raw); err != nil {
-			return Envelope{}, fmt.Errorf("%s: %w", managed.ParentContextEnvironment, managed.ErrInvalid)
+			return nil, fmt.Errorf("%s: %w: %w", managed.ParentContextEnvironment, ErrParentContext, managed.ErrInvalid)
 		}
 		req.Header.Set(managed.ParentContextHeader, raw)
 	}
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	return req, nil
+}
+func (c *Client) call(ctx context.Context, method, path string, input any, target any) (Envelope, error) {
+	req, err := c.newRequest(ctx, method, path, input)
+	if err != nil {
+		return Envelope{}, err
+	}
 	response, err := c.http.Do(req)
 	if err != nil {
 		return Envelope{}, err
 	}
 	defer response.Body.Close()
-	var envelope Envelope
-	decoder := json.NewDecoder(io.LimitReader(response.Body, maxResponseBytes+1))
-	if err := decoder.Decode(&envelope); err != nil {
+	raw, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+	if err != nil {
 		return Envelope{}, err
 	}
-	var tail any
-	if err := decoder.Decode(&tail); err != io.EOF {
-		return Envelope{}, errors.New("oversized or trailing controller response")
+	if len(raw) > maxResponseBytes {
+		return Envelope{}, errors.New("oversized controller response")
 	}
-	if envelope.Schema != "haepari.envelope/v1" {
-		return Envelope{}, errors.New("invalid controller envelope")
+	if _, err := managed.DecodeEnvelope(raw); err != nil {
+		return Envelope{}, err
+	}
+	var envelope Envelope
+	if err = json.Unmarshal(raw, &envelope); err != nil {
+		return Envelope{}, err
 	}
 	if !envelope.OK {
 		if envelope.Error == nil {

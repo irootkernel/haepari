@@ -247,7 +247,17 @@ func CanonicalDigest(job JobSpec, sealedDigest string) (string, error) {
 }
 
 func decodeClosed(data []byte, target any) error {
-	if len(data) == 0 || len(data) > maxDocumentBytes {
+	if err := decodeClosedWithin(data, target, maxDocumentBytes); err != nil {
+		return err
+	}
+	if hasPlaceholder(data) {
+		return ErrInvalid
+	}
+	return nil
+}
+
+func decodeClosedWithin(data []byte, target any, maximum int) error {
+	if len(data) == 0 || len(data) > maximum {
 		return ErrInvalid
 	}
 	if err := rejectDuplicateKeys(data); err != nil {
@@ -262,9 +272,6 @@ func decodeClosed(data []byte, target any) error {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
-		return ErrInvalid
-	}
-	if hasPlaceholder(data) {
 		return ErrInvalid
 	}
 	return nil

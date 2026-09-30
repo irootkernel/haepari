@@ -65,7 +65,10 @@ func Run(ctx context.Context, root state.Root) error {
 	if err := ledger.MarkInterrupted(); err != nil {
 		return fmt.Errorf("reconcile interrupted jobs: %w", err)
 	}
-	runtime := newRuntime(root, ledger, store)
+	runtime, err := newRuntime(root, ledger, store)
+	if err != nil {
+		return fmt.Errorf("bind installation identity: %w", err)
+	}
 	server := &http.Server{Handler: runtime.routes(), ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan struct{})
 	defer close(done)

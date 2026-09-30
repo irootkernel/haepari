@@ -61,7 +61,7 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 
 ### Repository Index and Authorities
 
-- `docs/README.md` indexes the Haepari v0.1.0 design package. The repository currently contains an implementation plan, not a working Haepari binary or accepted product test suite.
+- `docs/README.md` indexes the Haepari v0.1.0 design package and current implementation boundaries. Discover implemented build and test commands from `Makefile` and the common test contract in `TESTING.md`; the roadmap alone owns acceptance.
 - `docs/requirements.md` owns product obligations; `docs/architecture.md` and active `docs/contracts/` documents own implementation semantics; `docs/architecture-decision-records/` records rationale.
 - `docs/roadmap.md` alone owns Haepari task identity, sequence, prerequisites, and lifecycle status. Task checkboxes are acceptance evidence, not separate status authority.
 - `docs/verification.md`, `docs/traceability.md`, and `docs/operations.md` define planned checks and operating procedures. `docs/handoffs/implementation-prompt.md` guides implementation; `docs/handoffs/haepari-to-aquarium.md` defines the producer handoff.

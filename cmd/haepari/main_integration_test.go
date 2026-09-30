@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/irootkernel/haepari/internal/client"
 	"github.com/irootkernel/haepari/internal/controller"
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/snapshot"
@@ -625,7 +627,7 @@ var _ = ginkgo.Describe("UnavailableAdmissionRun", ginkgo.Label("integration"), 
 		server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/v1/hello":
-				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "hello", "ok": true, "data": map[string]string{"protocol": "managed-execution/v1", "installation_id": "fixture"}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "hello", "ok": true, "data": map[string]any{"protocol": "managed-execution/v1", "protocol_version": 1, "capabilities": []string{"managed-execution/v1"}, "installation_id": "fixture"}})
 			case "/v1/jobs":
 				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "submit", "ok": true, "data": managed.Receipt{JobID: "known-job", JobState: "finished", ResourceID: "local-one", ResultStatus: "unavailable"}})
 			case "/v1/jobs/known-job/wait":
@@ -679,5 +681,136 @@ var _ = ginkgo.Describe("UnavailableAdmissionRun", ginkgo.Label("integration"), 
 		gomega.Expect(strings.Count(output.String(), "\n")).To(gomega.Equal(1))
 		gomega.Expect(diagnostic.String()).To(gomega.BeEmpty())
 
+	})
+})
+
+// The real CLI and Unix client consume a bounded fixture protocol response.
+// No workload, lease or cleanup authority is created by this fixture.
+type observerFailWriter struct{}
+
+func (observerFailWriter) Write([]byte) (int, error) { return 0, errors.New("fixture write failed") }
+
+var _ = ginkgo.Describe("Task008CLIObserverWire", ginkgo.Label("integration"), func() {
+	ginkgo.It("preserves plain bytes, gap and continuation diagnostics, typed follow exits, and generated keys", func() {
+		t := ginkgo.GinkgoT()
+		parent, err := os.MkdirTemp("/tmp", "hp-observer-cli-")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer os.RemoveAll(parent)
+		root, err := state.Resolve(filepath.Join(parent, "state"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(root.Prepare()).To(gomega.Succeed())
+		listener, err := net.Listen("unix", root.SocketPath)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		payload := []byte{0xff, 0x00, 0xfe}
+		snapshot := managed.Receipt{JobID: "job-1", JobState: "finished"}
+		keys := make(chan string, 2)
+		server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			encode := func(operation string, data any) {
+				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": operation, "ok": true, "data": data})
+			}
+			if r.URL.Path == "/v1/hello" {
+				encode("hello", client.Handshake{Protocol: "managed-execution/v1", Version: 1, InstallationID: "fixture", Capabilities: []string{"managed-execution/v1"}})
+				return
+			}
+			if strings.Contains(r.URL.Path, "missing") {
+				w.WriteHeader(400)
+				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "logs", "ok": false, "error": client.Issue{Code: "NOT_FOUND", Message: "Fixture absent job", Retry: "none"}})
+				return
+			}
+			for id, code := range map[string]string{"unavailable": "RESULT_UNAVAILABLE", "storage": "STORAGE_UNAVAILABLE"} {
+				if strings.Contains(r.URL.Path, id) {
+					w.WriteHeader(400)
+					_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "logs", "ok": false, "error": client.Issue{Code: code, Message: "Fixture " + id, Retry: "reconcile"}})
+					return
+				}
+			}
+			if strings.Contains(r.URL.Path, "stream-error") {
+				w.Header().Set("Content-Type", "application/x-ndjson")
+				_ = json.NewEncoder(w).Encode(client.Record{Schema: client.ObserverSchema, Type: "error", JobID: "stream-error", Error: &client.Issue{Code: "STORAGE_UNAVAILABLE", Message: "Fixture failed stream", Retry: "reconcile"}})
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/cancel") {
+				var q managed.CancelRequest
+				_ = json.NewDecoder(r.Body).Decode(&q)
+				keys <- q.MutationKey
+				encode("cancel", managed.CancelReceipt{Receipt: snapshot, Mutation: snapshot})
+				return
+			}
+			page := client.LogPage{JobID: "job-1", Identity: "new", NextOffset: 3, Size: 4, Data: payload, More: true, Snapshot: snapshot}
+			gap := client.LogPage{JobID: "job-1", Identity: "new", Size: 3, Data: []byte{}, More: true, Snapshot: snapshot, Gap: &client.LogGap{Reason: "replaced", RequestedOffset: 8, PreviousIdentity: "old"}}
+			if r.URL.Query().Get("follow") == "1" {
+				w.Header().Set("Content-Type", "application/x-ndjson")
+				_ = json.NewEncoder(w).Encode(client.Record{Schema: client.ObserverSchema, Type: "resync", JobID: "job-1", Identity: "new", Logs: &gap})
+				page.Size, page.More = 3, false
+				_ = json.NewEncoder(w).Encode(client.Record{Schema: client.ObserverSchema, Type: "page", JobID: "job-1", Identity: "new", Offset: 3, Logs: &page})
+				_ = json.NewEncoder(w).Encode(client.Record{Schema: client.ObserverSchema, Type: "end", JobID: "job-1", Identity: "new", Offset: 3, Reason: "finished"})
+			} else if r.URL.Query().Get("identity") == "old" {
+				encode("logs", gap)
+			} else {
+				encode("logs", page)
+			}
+		})}
+		done := make(chan error, 1)
+		go func() { done <- server.Serve(listener) }()
+		defer func() { _ = server.Close(); <-done }()
+		t.Setenv("HAEPARI_HOME", root.Path)
+		var out, diagnostic bytes.Buffer
+		gomega.Expect(run([]string{"logs", "job-1"}, &out, &diagnostic)).To(gomega.BeZero(), diagnostic.String())
+		gomega.Expect(out.Bytes()).To(gomega.Equal(payload))
+		gomega.Expect(diagnostic.String()).To(gomega.Equal("LOG_MORE: resume with --after 3 --identity new\n"))
+		out.Reset()
+		diagnostic.Reset()
+		gomega.Expect(run([]string{"logs", "job-1", "--after", "8", "--identity", "old"}, &out, &diagnostic)).To(gomega.BeZero(), diagnostic.String())
+		gomega.Expect(out.Len()).To(gomega.BeZero())
+		gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring("LOG_GAP: replaced; resume with --after 0 --identity new\n"))
+		out.Reset()
+		diagnostic.Reset()
+		gomega.Expect(run([]string{"logs", "job-1", "--after", "8", "--identity", "old", "--follow"}, &out, &diagnostic)).To(gomega.BeZero(), diagnostic.String())
+		gomega.Expect(out.Bytes()).To(gomega.Equal(payload))
+		gomega.Expect(diagnostic.String()).To(gomega.Equal("LOG_GAP: replaced; resume with --after 0 --identity new\n"))
+		for _, args := range [][]string{{"logs", "job-1"}, {"logs", "job-1", "--after", "8", "--identity", "old", "--follow"}} {
+			diagnostic.Reset()
+			gomega.Expect(run(args, observerFailWriter{}, &diagnostic)).To(gomega.Equal(6))
+			gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring("fixture write failed"))
+		}
+		for _, kind := range []string{"events", "logs"} {
+			out.Reset()
+			diagnostic.Reset()
+			gomega.Expect(run([]string{kind, "missing", "--follow", "--json"}, &out, &diagnostic)).To(gomega.Equal(2), diagnostic.String())
+			gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring("NOT_FOUND"))
+		}
+		for _, failure := range []struct {
+			id, diagnostic string
+			code           int
+		}{
+			{"missing", "NOT_FOUND: Fixture absent job\n", 2},
+			{"unavailable", "RESULT_UNAVAILABLE: Fixture unavailable\n", 2},
+			{"storage", "STORAGE_UNAVAILABLE: Fixture storage\n", 6},
+		} {
+			for _, follow := range []bool{false, true} {
+				args := []string{"logs", failure.id}
+				if follow {
+					args = append(args, "--follow")
+				}
+				out.Reset()
+				diagnostic.Reset()
+				gomega.Expect(run(args, &out, &diagnostic)).To(gomega.Equal(failure.code))
+				gomega.Expect(out.Len()).To(gomega.BeZero())
+				gomega.Expect(diagnostic.String()).To(gomega.Equal(failure.diagnostic))
+			}
+		}
+		out.Reset()
+		diagnostic.Reset()
+		gomega.Expect(run([]string{"logs", "stream-error", "--follow"}, &out, &diagnostic)).To(gomega.Equal(6))
+		gomega.Expect(out.Len()).To(gomega.BeZero())
+		gomega.Expect(diagnostic.String()).To(gomega.Equal("STORAGE_UNAVAILABLE: Fixture failed stream\n"))
+		for range 2 {
+			out.Reset()
+			diagnostic.Reset()
+			gomega.Expect(run([]string{"cancel", "job-1", "--expected-revision", "1", "--json"}, &out, &diagnostic)).To(gomega.BeZero(), diagnostic.String())
+		}
+		first, second := <-keys, <-keys
+		gomega.Expect(managed.ValidRequestKey(first) && managed.ValidRequestKey(second)).To(gomega.BeTrue())
+		gomega.Expect(first).NotTo(gomega.Equal(second))
 	})
 })

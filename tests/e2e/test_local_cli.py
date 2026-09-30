@@ -113,7 +113,13 @@ def _controller():
                     try:
                         result = _run(BINARY, env, "wait", job_id, "--timeout", "5s", "--json", timeout=8)
                         data = json.loads(result.stdout).get("data", {})
-                        if result.returncode not in (0, 1, 3, 4) or data.get("cleanup_outcome") != "verified":
+                        safe_queued_cancel = (
+                            result.returncode == 4
+                            and data.get("cleanup_outcome") == "not_needed"
+                            and data.get("lease_generation") == 0
+                            and data.get("workload_outcome") == "cancelled"
+                        )
+                        if result.returncode not in (0, 1, 3, 4) or (data.get("cleanup_outcome") != "verified" and not safe_queued_cancel):
                             cleanup_error = f"owned job {job_id} lacks verified cleanup"
                     except (subprocess.TimeoutExpired, json.JSONDecodeError):
                         cleanup_error = f"owned job {job_id} could not be rechecked"
@@ -233,3 +239,64 @@ def test_local_admission_result_replay_and_conflict():
         rejected = _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "same-key", "--json"), expected=2)
         assert rejected["error"]["code"] == "CONFLICT"
         assert marker.read_text() == "x"
+
+        resources = _response(_run(BINARY, env, "resources", "list", "--limit", "1", "--json"))["data"]
+        assert resources["resources"][0]["resource_id"] == "e2e-local"
+        jobs = _response(_run(BINARY, env, "jobs", "list", "--resource", "e2e-local", "--state", "finished", "--json"))["data"]
+        assert jobs["jobs"][0]["receipt"]["job_id"] == first
+        cursor = 0
+        observed = []
+        while True:
+            page = _response(_run(BINARY, env, "events", first, "--after", str(cursor), "--limit", "1", "--json"))["data"]
+            observed += page["events"]
+            cursor = page["next_cursor"]
+            if not page["more"]:
+                break
+        assert observed and all(a["cursor"] < b["cursor"] for a, b in zip(observed, observed[1:]))
+        stream = _run(BINARY, env, "events", first, "--after", str(cursor), "--follow", "--json")
+        assert stream.returncode == 0, stream.stderr
+        records = [json.loads(line) for line in stream.stdout.splitlines()]
+        assert records[-1]["type"] == "end" and records[-1]["cursor"] == cursor
+        assert all(record["schema"] == "haepari.observer/v1" for record in records)
+        late = _response(_run(BINARY, env, "cancel", first, "--expected-revision", "1", "--request-key", "late-cancel", "--json"))["data"]
+        assert late["receipt"]["verdict"] == "PASS"
+        assert not late["cancellation"]["requested"]
+
+        job["suite"] = "failed-observation"
+        job["workload"]["argv"] = ["/bin/sh", "-c", "mkdir -p ../results; printf result > ../results/out.txt; printf 'observed log\\n'; exit 7"]
+        job_path.write_text(json.dumps(job))
+        failure = _run(BINARY, env, "run", "--spec", str(job_path), "--request-key", "failed-job", "--json", timeout=40)
+        assert failure.returncode == 1, (failure.stdout, failure.stderr)
+        run_records = [json.loads(line) for line in failure.stdout.splitlines()]
+        failed_id = run_records[0]["data"]["job_id"]
+        owned_jobs.append(failed_id)
+        assert run_records[-1]["data"]["workload_outcome"] == "fail"
+        assert run_records[-1]["data"]["native_exit_code"] == 7
+        inspected = _response(_run(BINARY, env, "inspect", failed_id, "--json"))
+        assert inspected["ok"] and inspected["data"]["result"]["final_verdict"] == "FAIL"
+        logs = _response(_run(BINARY, env, "logs", failed_id, "--json"))["data"]
+        import base64
+        assert base64.b64decode(logs["data"]) == b"observed log\n"
+        assert logs["next_offset"] == len(b"observed log\n")
+        plain = _run(BINARY, env, "logs", failed_id)
+        assert plain.returncode == 0 and plain.stdout == "observed log\n" and plain.stderr == ""
+        missing = _run(BINARY, env, "events", "absent-observer-job", "--follow", "--json")
+        assert missing.returncode == 2 and "NOT_FOUND" in missing.stderr
+        tail = _run(BINARY, env, "logs", failed_id, "--after", str(logs["next_offset"]), "--identity", logs["identity"], "--follow", "--json")
+        assert tail.returncode == 0, tail.stderr
+        assert json.loads(tail.stdout.splitlines()[-1])["type"] == "end"
+
+        _response(_run(BINARY, env, "resource", "pause", "e2e-local", "--expected-revision", "3", "--request-key", "queue-pause", "--json"))
+        job["suite"] = "queued-cancel"
+        job_path.write_text(json.dumps(job))
+        queued = _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "queued-job", "--json"))["data"]
+        queued_id = queued["job_id"]
+        owned_jobs.append(queued_id)
+        timed = _response(_run(BINARY, env, "wait", queued_id, "--timeout", "50ms", "--json"), 5)
+        assert timed["error"]["code"] == "WAIT_TIMEOUT"
+        cancelled = _response(_run(BINARY, env, "cancel", queued_id, "--expected-revision", str(queued["job_revision"]), "--request-key", "cancel-queued", "--json"))["data"]
+        replay = _response(_run(BINARY, env, "cancel", queued_id, "--expected-revision", str(queued["job_revision"]), "--request-key", "cancel-queued", "--json"))["data"]
+        assert replay["mutation"] == cancelled["mutation"]
+        assert cancelled["receipt"]["lease_generation"] == 0 and cancelled["receipt"]["global_occupancy"] == 0
+        final_cancel = _response(_run(BINARY, env, "wait", queued_id, "--json"), 4)["data"]
+        assert final_cancel["final_verdict"] == "CANCELLED" and final_cancel["cleanup_outcome"] == "not_needed"

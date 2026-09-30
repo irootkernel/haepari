@@ -146,8 +146,8 @@ A backward clock jump cannot extend a previously observed deadline without an ex
 
 **What the controller rejects.** A caller is nested when its chain holds an entry for a job that currently occupies capacity in this installation. For a nested caller, the controller rejects:
 
-- **Submission or lock acquisition** (`NESTED_ACQUISITION_REJECTED`): rejected before admission, whatever resource or [advisory lock](locks.md) is requested and however much capacity is free.
-- **Blocking observation of a non-terminal job** (`NESTED_WAIT_REJECTED`): `wait`, `run`, `events --follow` and `logs --follow`. Blocking on another job's progress while holding capacity can deadlock at the global limit.
+- **Submission (including `run` admission) or lock acquisition** (`NESTED_ACQUISITION_REJECTED`): rejected before admission, whatever resource or [advisory lock](locks.md) is requested and however much capacity is free.
+- **Blocking observation of a non-terminal job** (`NESTED_WAIT_REJECTED`): `wait`, `events --follow` and `logs --follow`. `run` first submits a Job, so a nested invocation is rejected at admission with `NESTED_ACQUISITION_REJECTED` before any wait. Blocking on another job's progress while holding capacity can deadlock at the global limit.
 
 **What stays allowed.** Non-blocking `inspect`, `events` and `logs` pages on any job, and any observation of a terminal job. To run more work, either execute inside the held Job, or settle and release it before submitting an independent Job. No recursive slot borrowing or queue bypass exists.
 

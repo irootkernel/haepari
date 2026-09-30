@@ -37,7 +37,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | resource register/inspect/pause/resume | submit | run | inspect | wait")
+		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | resource register/inspect/pause/resume | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
 		return 2
 	}
 	switch args[0] {
@@ -61,7 +61,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			CompiledBackends  []string `json:"compiled_backends"`
 			QualifiedBackends []string `json:"qualified_backends"`
 			Protocols         []string `json:"protocol_versions"`
-		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}})
+			Capabilities      []string `json:"capabilities"`
+		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, []string{"managed-execution/v1", "durable-observation/v1"}})
 	case "daemon":
 		if len(args) < 2 || args[1] != "run" {
 			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local]")
@@ -119,6 +120,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return inspect(args[1:], stdout, stderr)
 	case "wait":
 		return wait(args[1:], stdout, stderr)
+	case "jobs", "resources":
+		return list(args[0], args[1:], stdout, stderr)
+	case "events", "logs":
+		return observe(args[0], args[1:], stdout, stderr)
+	case "cancel":
+		return cancelJob(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unsupported command %q\n", args[0])
 		return 2
@@ -133,9 +140,17 @@ func connect(stderr io.Writer) (*client.Client, int) {
 	}
 	c, err := client.Connect(context.Background(), root)
 	if err != nil {
-		if errors.Is(err, managed.ErrInvalid) {
+		if errors.Is(err, client.ErrParentContext) {
 			fmt.Fprintf(stderr, "invalid parent context: %v (check HAEPARI_PARENT_CONTEXT)\n", err)
 			return nil, 2
+		}
+		var issue *client.Issue
+		if errors.As(err, &issue) {
+			fmt.Fprintf(stderr, "%s: %s\n", issue.Code, issue.Message)
+			code, e := managed.ExitCode(managed.ErrorCode(issue.Code))
+			if e == nil {
+				return nil, code
+			}
 		}
 		fmt.Fprintf(stderr, "cannot connect to Haepari controller: %v (check the daemon and HAEPARI_HOME)\n", err)
 		return nil, 6
@@ -164,6 +179,12 @@ func clientFailure(w, stderr io.Writer, envelope client.Envelope, err error) int
 		}
 	}
 	fmt.Fprintln(stderr, err)
+	var issue *client.Issue
+	if errors.As(err, &issue) {
+		if code, mappingErr := managed.ExitCode(managed.ErrorCode(issue.Code)); mappingErr == nil {
+			return code
+		}
+	}
 	if errors.Is(err, managed.ErrInvalid) {
 		return 2
 	}

@@ -204,7 +204,11 @@ func DecodeResultForJob(data []byte, job JobSpec) (Result, error) {
 	if err != nil {
 		return result, err
 	}
-	if result.EvidenceCompleteness == "complete" && result.CleanupOutcome != "not_needed" {
+	// A cancelled preparation never ran the workload whose outputs were
+	// declared. SettleLocal additionally requires a durable no-start receipt.
+	cancelledNoStart := result.Reason == "cancel_before_start" && result.WorkloadOutcome == "cancelled" &&
+		result.NativeExitCode == nil && result.NativeSignal == "" && (result.FinalVerdict == Cancelled || result.FinalVerdict == Incomplete)
+	if result.EvidenceCompleteness == "complete" && result.CleanupOutcome != "not_needed" && !cancelledNoStart {
 		present := map[string]bool{}
 		for _, artifact := range result.Artifacts {
 			present[artifact.Path] = true
@@ -264,6 +268,7 @@ const (
 	NestedAcquisitionRejected ErrorCode = "NESTED_ACQUISITION_REJECTED"
 	NestedWaitRejected        ErrorCode = "NESTED_WAIT_REJECTED"
 	NotFound                  ErrorCode = "NOT_FOUND"
+	ResultUnavailable         ErrorCode = "RESULT_UNAVAILABLE"
 	ResourceBusy              ErrorCode = "RESOURCE_BUSY"
 	LockExpired               ErrorCode = "LOCK_EXPIRED"
 	ProtocolUnsupported       ErrorCode = "PROTOCOL_UNSUPPORTED"
@@ -277,7 +282,7 @@ const (
 func ExitCode(code ErrorCode) (int, error) {
 	switch code {
 	case InvalidRequest, Conflict, Unsupported, PrerequisiteUnavailable, NestedAcquisitionRejected,
-		NestedWaitRejected, NotFound, ResourceBusy, LockExpired, ProtocolUnsupported, StaleRevision, RecoveryBlocked:
+		NestedWaitRejected, NotFound, ResultUnavailable, ResourceBusy, LockExpired, ProtocolUnsupported, StaleRevision, RecoveryBlocked:
 		return 2, nil
 	case WaitTimeout:
 		return 5, nil
@@ -318,9 +323,11 @@ type MachineError struct {
 	ResourceID string    `json:"resource_id,omitempty"`
 }
 
+const MaxEnvelopeBytes = 4 << 20
+
 func DecodeEnvelope(data []byte) (Envelope, error) {
 	var result Envelope
-	if err := decodeClosed(data, &result); err != nil {
+	if err := decodeClosedWithin(data, &result, MaxEnvelopeBytes); err != nil {
 		return result, err
 	}
 	if result.Schema != "haepari.envelope/v1" {

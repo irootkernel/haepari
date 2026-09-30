@@ -31,12 +31,38 @@ func (s *runtimeServer) execute(_ context.Context, receipt managed.Receipt, job 
 var errPrepareUnproven = errors.New("preparation termination unproven after deadline")
 
 func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpec, objectID string, prepareDeadline time.Time) error {
-	if receipt.JobState != "preparing" {
-		return managed.ErrConflict
+	c, err := s.registerLocal(receipt)
+	if err != nil {
+		return err
 	}
+	defer s.unregisterLocal(c)
+	return s.executeLocalControlled(c, job, objectID, prepareDeadline)
+}
+
+func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.JobSpec, objectID string, prepareDeadline time.Time) error {
+	receipt := c.receipt
 	jobRoot := filepath.Join(s.root.Path, "jobs", receipt.JobID)
 	workspace := filepath.Join(jobRoot, "workspace")
-	if err := prepareLocal(prepareDeadline, func() error {
+	c.phase("preparing")
+	c.mu.Lock()
+	status, err := s.ledger.Cancellation(receipt.JobID)
+	if err != nil {
+		c.mu.Unlock()
+		return err
+	}
+	if status.Requested {
+		c.mu.Unlock()
+		return s.settleCancelledPreparation(c, job, jobRoot, workspace)
+	}
+	if receipt.JobState != "preparing" {
+		c.mu.Unlock()
+		return managed.ErrConflict
+	}
+	// This flag is conservative: once the worker is allowed to create files,
+	// only observing its completion permits cleanup or a no-start settlement.
+	c.effects = true
+	c.mu.Unlock()
+	prepareErr := prepareLocal(prepareDeadline, func() error {
 		if !time.Now().Before(prepareDeadline) {
 			return context.DeadlineExceeded
 		}
@@ -50,35 +76,69 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 		if err != nil {
 			return err
 		}
-		return copyInput(snap, workspace, prepareDeadline)
-	}); err != nil {
+		return copyInputWithCancel(snap, workspace, prepareDeadline, c.wake)
+	})
+	if errors.Is(prepareErr, errPrepareUnproven) {
+		return prepareErr
+	}
+	c.mu.Lock()
+	status, err = s.ledger.Cancellation(receipt.JobID)
+	if err != nil {
+		c.mu.Unlock()
 		return err
 	}
-	var err error
+	if status.Requested {
+		c.mu.Unlock()
+		return s.settleCancelledPreparation(c, job, jobRoot, workspace)
+	}
+	if prepareErr != nil {
+		c.mu.Unlock()
+		return prepareErr
+	}
 	receipt, err = s.ledger.AdvanceLocal(receipt.JobID, receipt.JobRevision, "preparing", "ready", "prepared-"+receipt.JobID)
+	c.receipt = receipt
+	c.mu.Unlock()
 	if err != nil {
 		return err
 	}
+	c.phase("ready")
 	runID, err := randomID("run-")
 	if err != nil {
 		return err
 	}
+	c.mu.Lock()
+	status, err = s.ledger.Cancellation(receipt.JobID)
+	if err != nil {
+		c.mu.Unlock()
+		return err
+	}
+	if status.Requested {
+		c.mu.Unlock()
+		return s.settleCancelledPreparation(c, job, jobRoot, workspace)
+	}
 	receipt, err = s.ledger.StartLocal(receipt.JobID, receipt.JobRevision, runID)
 	if err != nil {
+		c.mu.Unlock()
 		return err
 	}
+	c.receipt = receipt
+	c.identity.RunID = runID
 	if err := writeReceipt(jobRoot, "intent.json", map[string]any{"run_id": runID, "job_id": receipt.JobID, "lease_generation": receipt.LeaseGeneration}); err != nil {
+		c.mu.Unlock()
 		return err
 	}
-
 	logFile, err := os.OpenFile(filepath.Join(jobRoot, "output.log"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
+		c.mu.Unlock()
 		return err
 	}
 	defer logFile.Close()
-	runCtx, cancel := context.WithTimeout(context.Background(), time.Duration(job.Deadlines.RunSeconds)*time.Second)
-	defer cancel()
-	runDeadline, _ := runCtx.Deadline()
+	if err := s.bindLocalLog(receipt, runID, logFile); err != nil {
+		c.mu.Unlock()
+		return err
+	}
+	runDeadline := time.Now().Add(time.Duration(job.Deadlines.RunSeconds) * time.Second)
+	c.deadline = runDeadline
 	workDir := filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD))
 	workPath := "/usr/bin:/bin"
 	if declared, ok := job.Workload.Environment["PATH"]; ok {
@@ -93,96 +153,131 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		if key == "PATH" || key == managed.ParentContextEnvironment {
-			continue
+		if key != "PATH" && key != managed.ParentContextEnvironment {
+			cmd.Env = append(cmd.Env, key+"="+job.Workload.Environment[key])
 		}
-		cmd.Env = append(cmd.Env, key+"="+job.Workload.Environment[key])
 	}
 	chain, err := s.ledger.RunnerParentChain(s.installationID(), receipt.JobID, receipt.LeaseGeneration)
 	if err != nil {
+		c.mu.Unlock()
 		return err
 	}
 	chainJSON, err := json.Marshal(chain)
 	if err != nil {
+		c.mu.Unlock()
 		return err
 	}
 	cmd.Env = append(cmd.Env, managed.ParentContextEnvironment+"="+string(chainJSON))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	started := false
 	startErr := resolveErr
 	if startErr == nil {
 		startErr = cmd.Start()
 	}
-	if startErr == nil {
-		started = true
+	started := startErr == nil
+	c.cmd = cmd
+	if started {
+		go func() { err := cmd.Wait(); c.publishCompletion(nativeCompletion{err: err, at: time.Now()}) }()
 		if err := writeReceipt(jobRoot, "start.json", map[string]any{"run_id": runID, "pid": cmd.Process.Pid, "started_at": time.Now().UTC()}); err != nil {
-			// Keep tracking the child even if the receipt fails. Its state stays
-			// nonterminal and no second run may be claimed.
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			_ = cmd.Wait()
+			c.mu.Unlock()
+			stopErr := terminateLocal(c, time.Duration(job.Deadlines.CleanupSeconds)*time.Second)
+			return errors.Join(err, stopErr)
+		}
+	} else {
+		receipt, err = s.ledger.RecordLocalOutcome(managed.LocalOutcomeRequest{Identity: c.identity, ExpectedRevision: receipt.JobRevision, Outcome: managed.LocalOutcome{Started: false, WorkloadOutcome: "inconclusive"}, MutationKey: "outcome-" + receipt.JobID})
+		c.receipt = receipt
+		c.observed = err == nil
+		if err != nil {
+			c.mu.Unlock()
 			return err
 		}
 	}
-	var waitErr error
-	timedOut := false
+	c.mu.Unlock()
+	c.phase("running")
+	treeStopped := false
 	if started {
-		type waitResult struct {
-			err error
-			at  time.Time
-		}
-		ended := make(chan waitResult, 1)
-		go func() { err := cmd.Wait(); ended <- waitResult{err: err, at: time.Now()} }()
-		var result waitResult
-		select {
-		case result = <-ended:
-		case <-runCtx.Done():
-			select {
-			case result = <-ended:
-			default:
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-				select {
-				case result = <-ended:
-				case <-time.After(2 * time.Second):
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-					result = <-ended
+		timer := time.NewTimer(time.Until(runDeadline))
+		defer timer.Stop()
+		for {
+			changed := s.ledger.Changes()
+			c.mu.Lock()
+			if err = s.observeLocalCompletion(c); err != nil {
+				c.mu.Unlock()
+				return err
+			}
+			if c.observed {
+				c.mu.Unlock()
+				break
+			}
+			status, err = s.ledger.Cancellation(receipt.JobID)
+			if err != nil {
+				c.mu.Unlock()
+				return err
+			}
+			cancelNow := status.Requested || !time.Now().Before(runDeadline)
+			if cancelNow {
+				// Explicit cancellation already has an intent. Deadline termination is
+				// also journalled before signals, but cannot be mistaken for explicit cancel.
+				if !status.Requested {
+					var e error
+					c.receipt, e = s.ledger.BeginLocalDeadline(c.identity, c.receipt.JobRevision)
+					if e != nil {
+						c.mu.Unlock()
+						return e
+					}
 				}
+				c.mu.Unlock()
+				err = terminateLocal(c, time.Duration(job.Deadlines.CleanupSeconds)*time.Second)
+				c.mu.Lock()
+				if err == nil {
+					err = s.observeLocalCompletion(c)
+				}
+				c.mu.Unlock()
+				if err != nil {
+					return err
+				}
+				treeStopped = true
+				break
+			}
+			c.mu.Unlock()
+			select {
+			case <-c.completed:
+			case <-c.wake:
+			case <-changed:
+			case <-timer.C:
 			}
 		}
-		waitErr = result.err
-		timedOut = result.at.After(runDeadline)
-	} else {
-		waitErr = startErr
-	}
-	if started {
-		if err := ensureGroupStopped(cmd.Process.Pid, time.Duration(job.Deadlines.CleanupSeconds)*time.Second); err != nil {
-			return err
+		// A main-process exit is distinct from absence of every owned group member.
+		if !treeStopped {
+			if err = ensureGroupStopped(cmd.Process.Pid, time.Duration(job.Deadlines.CleanupSeconds)*time.Second); err != nil {
+				return err
+			}
 		}
 	}
-	if err := logFile.Sync(); err != nil {
-		return err
-	}
-	code := 0
-	var nativeCode *int
-	signal := ""
-	if started && cmd.ProcessState != nil {
-		code = cmd.ProcessState.ExitCode()
-		if code >= 0 && code <= 255 {
-			nativeCode = &code
-		}
-		if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-			signal = status.Signal().String()
-			nativeCode = nil
-		}
-	}
-	if err := writeReceipt(jobRoot, "exit.json", map[string]any{"run_id": runID, "started": started, "exit_code": nativeCode, "signal": signal, "timed_out": timedOut, "wait_error": waitErr != nil}); err != nil {
-		return err
-	}
-	receipt, err = s.ledger.AdvanceLocal(receipt.JobID, receipt.JobRevision, "running", "collecting", "exited-"+receipt.JobID)
+	c.mu.Lock()
+	receipt = c.receipt
+	// A cancellation committed after native observation changes only intent.
+	receipt, err = s.ledger.CompleteLocalRun(managed.LocalTerminationRequest{Identity: c.identity, ExpectedRevision: receipt.JobRevision, MutationKey: "termination-" + receipt.JobID})
+	c.receipt = receipt
+	c.mu.Unlock()
 	if err != nil {
 		return err
 	}
+	frozen, err := s.ledger.LocalOutcome(receipt.JobID)
+	if err != nil {
+		return err
+	}
+	outcome := frozen.WorkloadOutcome
+	nativeCode, signal := frozen.NativeExitCode, frozen.NativeSignal
+	timedOut := outcome == "timed_out"
+	if err = logFile.Sync(); err != nil {
+		return err
+	}
+	if err = writeReceipt(jobRoot, "exit.json", map[string]any{"run_id": runID, "started": started, "exit_code": nativeCode, "signal": signal, "timed_out": timedOut}); err != nil {
+		return err
+	}
+	c.phase("collecting")
 	collectDeadline := time.Now().Add(time.Duration(job.Deadlines.CollectSeconds) * time.Second)
 	collected, collectionStatus := boundedPhase(collectDeadline, func() collectionAttempt {
 		artifacts, complete, expired := collectOutputs(workspace, filepath.Join(jobRoot, "artifacts"), job.Workload.RequiredOutputs, collectDeadline)
@@ -205,6 +300,7 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	if err != nil {
 		return err
 	}
+	c.phase("cleaning")
 	var cleanupErr error
 	protected := []managed.ProtectedEvidence{}
 	if complete {
@@ -246,19 +342,12 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	if err != nil {
 		return err
 	}
-	outcome := managed.WorkloadOutcome("inconclusive")
-	if timedOut {
-		outcome = "timed_out"
-	} else if started && waitErr == nil {
-		outcome = "pass"
-	} else if started {
-		outcome = "fail"
-	}
+	c.phase("settling")
 	evidence := managed.EvidenceCompleteness("complete")
 	if !complete {
 		evidence = "partial"
 	}
-	verdict, err := managed.DeriveVerdict(managed.ResultFacts{WorkloadOutcome: outcome, EvidenceCompleteness: evidence, CleanupOutcome: managed.CleanupOutcome(cleanup), ManualEligible: true, TerminationProven: true})
+	verdict, err := managed.DeriveVerdict(managed.ResultFacts{WorkloadOutcome: outcome, EvidenceCompleteness: evidence, CleanupOutcome: managed.CleanupOutcome(cleanup), ManualEligible: true, CancelledBeforeOutcome: outcome == "cancelled", TerminationProven: true})
 	if err != nil {
 		return err
 	}
@@ -278,7 +367,6 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 	if _, err := s.ledger.SettleLocal(receipt.JobID, receipt.JobRevision, result); err != nil {
 		return err
 	}
-	s.signalFinished(receipt.JobID)
 	return nil
 }
 
@@ -371,10 +459,19 @@ func completionStatus(finishedAt, deadline time.Time) phaseStatus {
 }
 
 func copyInput(snap snapshot.Snapshot, destination string, deadline time.Time) error {
+	return copyInputWithCancel(snap, destination, deadline, nil)
+}
+
+func copyInputWithCancel(snap snapshot.Snapshot, destination string, deadline time.Time, wake <-chan struct{}) error {
 	if err := os.Mkdir(destination, 0700); err != nil {
 		return err
 	}
 	for _, entry := range snap.Manifest.Entries {
+		select {
+		case <-wake:
+			return context.Canceled
+		default:
+		}
 		if !time.Now().Before(deadline) {
 			return context.DeadlineExceeded
 		}

@@ -138,7 +138,7 @@ var _ = ginkgo.Describe("LocalWalkingSkeleton", ginkgo.Label("integration"), fun
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-		header := fmt.Sprintf("POST /v1/jobs HTTP/1.1\r\nHost: haepari\r\nContent-Type: application/json\r\nX-Haepari-Protocol: managed-execution/v1\r\nContent-Length: %d\r\n\r\n", len(lostBody))
+		header := fmt.Sprintf("POST /v1/jobs HTTP/1.1\r\nHost: haepari\r\nContent-Type: application/json\r\nX-Haepari-Protocol: managed-execution/v1\r\nX-Haepari-Protocol-Min: 1\r\nX-Haepari-Protocol-Max: 1\r\nContent-Length: %d\r\n\r\n", len(lostBody))
 		if _, err := io.Copy(conn, bytes.NewReader(append([]byte(header), lostBody...))); err != nil {
 			conn.Close()
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -240,14 +240,14 @@ var _ = ginkgo.Describe("LocalWalkingSkeleton", ginkgo.Label("integration"), fun
 			t.Fatalf("failure result: %+v %v", failed, err)
 		}
 		missingJob := job
-		missingJob.Workload.Argv = []string{"/bin/sh", "-c", "mkdir -p ../results; printf recoverable > ../results/partial.txt"}
+		missingJob.Workload.Argv = []string{"/bin/sh", "-c", "mkdir -p ../results; printf recoverable > ../results/partial.txt; exit 7"}
 		missingSpec, _ := json.Marshal(missingJob)
 		missingReceipt, _, err := c.Submit(context.Background(), missingSpec, "missing-key")
 		if err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		missing, _, err := c.Wait(context.Background(), missingReceipt.JobID, 5*time.Second)
-		if err != nil || missing.FinalVerdict != managed.Incomplete || missing.EvidenceCompleteness != "partial" || missing.CleanupOutcome != "failed" || missing.ResourceAvailability != "quarantined" || len(missing.ProtectedEvidence) != 1 {
+		if err != nil || missing.FinalVerdict != managed.Incomplete || missing.WorkloadOutcome != "fail" || missing.NativeExitCode == nil || *missing.NativeExitCode != 7 || missing.EvidenceCompleteness != "partial" || missing.CleanupOutcome != "failed" || missing.ResourceAvailability != "quarantined" || len(missing.ProtectedEvidence) != 1 {
 			t.Fatalf("protected partial evidence: %+v %v", missing, err)
 		}
 		if _, err := os.Stat(filepath.Join(root.Path, "jobs", missingReceipt.JobID, "workspace", "results", "partial.txt")); err != nil {
@@ -333,6 +333,8 @@ var _ = ginkgo.Describe("RequestSizeAndChangedSourceMapping", ginkgo.Label("inte
 			reply := httptest.NewRecorder()
 			request := httptest.NewRequest("GET", "/v1/jobs/missing/wait?timeout="+timeout, nil)
 			request.Header.Set("X-Haepari-Protocol", protocol)
+			request.Header.Set("X-Haepari-Protocol-Min", "1")
+			request.Header.Set("X-Haepari-Protocol-Max", "1")
 			(&runtimeServer{}).routes().ServeHTTP(reply, request)
 			var response client.Envelope
 			if err := json.Unmarshal(reply.Body.Bytes(), &response); err != nil || reply.Code != 400 || response.Error == nil || response.Error.Code != "INVALID_REQUEST" {

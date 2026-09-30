@@ -51,6 +51,7 @@ var _ = ginkgo.Describe("Capabilities", ginkgo.Label("unit"), func() {
 				CompiledBackends  []string `json:"compiled_backends"`
 				QualifiedBackends []string `json:"qualified_backends"`
 				Protocols         []string `json:"protocol_versions"`
+				Capabilities      []string `json:"capabilities"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(output.Bytes(), &result); err != nil {
@@ -59,6 +60,7 @@ var _ = ginkgo.Describe("Capabilities", ginkgo.Label("unit"), func() {
 		if result.Schema != "haepari.envelope/v1" || result.Operation != "capabilities" || !result.OK || len(result.Data.CompiledBackends) != 1 || result.Data.CompiledBackends[0] != "local" || len(result.Data.QualifiedBackends) != 0 || len(result.Data.Protocols) != 1 || result.Data.Protocols[0] != "managed-execution/v1" {
 			t.Fatalf("unexpected capabilities: %+v", result)
 		}
+		gomega.Expect(result.Data.Capabilities).To(gomega.ConsistOf("managed-execution/v1", "durable-observation/v1"))
 
 	})
 })
@@ -99,7 +101,7 @@ var _ = ginkgo.Describe("CLIContractErrorAndVerdictExits", ginkgo.Label("unit"),
 			code string
 			want int
 		}{
-			{"CONFLICT", 2}, {"UNSUPPORTED", 2}, {"WAIT_TIMEOUT", 5},
+			{"CONFLICT", 2}, {"UNSUPPORTED", 2}, {"RESULT_UNAVAILABLE", 2}, {"WAIT_TIMEOUT", 5},
 			{"STORAGE_UNAVAILABLE", 6}, {"TRANSPORT_UNCERTAIN", 6},
 		} {
 			var out, diagnostic bytes.Buffer
@@ -111,6 +113,20 @@ var _ = ginkgo.Describe("CLIContractErrorAndVerdictExits", ginkgo.Label("unit"),
 			if out.Len() == 0 {
 				t.Errorf("%s error envelope missing", tc.code)
 			}
+		}
+		// Follow responses carry their typed issue without a page envelope.
+		for _, tc := range []struct {
+			code string
+			want int
+		}{
+			{"NOT_FOUND", 2}, {"RESULT_UNAVAILABLE", 2}, {"NESTED_WAIT_REJECTED", 2},
+			{"WAIT_TIMEOUT", 5}, {"STORAGE_UNAVAILABLE", 6}, {"TRANSPORT_UNCERTAIN", 6},
+		} {
+			var out, diagnostic bytes.Buffer
+			issue := &client.Issue{Code: tc.code, Message: "bounded explanation", Retry: "none"}
+			gomega.Expect(clientFailure(&out, &diagnostic, client.Envelope{}, issue)).To(gomega.Equal(tc.want))
+			gomega.Expect(out.Len()).To(gomega.BeZero())
+			gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring(tc.code))
 		}
 		for _, tc := range []struct {
 			verdict managed.Verdict

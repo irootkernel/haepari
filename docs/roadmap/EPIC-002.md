@@ -141,21 +141,76 @@ Production-path tests cover same-key concurrency, replay after changed readiness
 Requirement coverage: `HP-REQ-014`, `HP-REQ-015`.
 
 #### Implement
-- [ ] Expose native submit/run, paged job/resource lists, inspect/wait/events/logs and cancellation commands over the local API. Return job IDs early and retain a durable event cursor for reconnection.
-- [ ] Negotiate the protocol version between CLI and controller before any mutation; an unsupported version returns `PROTOCOL_UNSUPPORTED` without effects.
+- [x] Expose native submit/run, paged job/resource lists, inspect/wait/events/logs and cancellation commands over the local API. Return job IDs early and retain a durable event cursor for reconnection.
+- [x] Negotiate the protocol version between CLI and controller before any mutation; an unsupported version returns `PROTOCOL_UNSUPPORTED` without effects.
 
 #### Do not
-- [ ] Do not make CLI lifetime own job lifetime, poll status from the paired contract, or treat cancel acknowledgement as termination.
+- [x] Do not make CLI lifetime own job lifetime, poll status from the paired contract, or treat cancel acknowledgement as termination.
 
 #### Verify
-- [ ] Exercise wait deadline, dropped clients, cursor resynchronization, inspect of failed jobs, and cancel-before/after-finish races.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Exercise wait deadline, dropped clients, cursor resynchronization, inspect of failed jobs, and cancel-before/after-finish races.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+
+### Implementation
+
+Schema 6 preserves a stable installation identity, cancellation intents, cancellation-only revision edges and the observed local run outcome with its separate termination proof. Version-range checks run before routing requests to effects. Native Job/resource lists use bounded pages and scope their continuation cursors to the installation and filters. Event pages include a same-view Job snapshot and durable cursor; unexplained payload loss fails rather than becoming an implicit resync. Explicit prefix purge returns a resync checkpoint.
+
+Waits and event followers subscribe before reading the durable predicate. Committed ledger generations wake observers, including terminal changes made without an HTTP request; unrelated commits do not renew a caller's timeout. Event/log follow uses one connection with versioned NDJSON records, heartbeats, explicit checkpoints and a drained terminal end. Log bytes are bounded and base64 encoded, and their private contained file is bound to the claimed run and file identity. Disconnecting an observer does not cancel work.
+
+Cancellation atomically races queued reservation and records exact-key/revision receipts. A reply describes intent separately from termination. Active local execution journals observed native completion before deciding a late cancellation, signals only its current owned process handle with bounded waits, and retains occupancy when termination is unproven. Known workload outcomes survive collection/cleanup and later cancellation; missing required evidence produces INCOMPLETE with the failure fact retained. Public VM execution, escaped-process/restart identity qualification and the full adapter cancellation matrix remain with TASK-009/TASK-010/TASK-013/TASK-016.
+
+### Verification
+
+Observed on 2026-10-01, macOS 27.0 build 26A428 arm64 and Go 1.27.1. `make test` exited 0: prepare (formatting, three vet/build modes, locked Python preparation and documentation validation), 67 Go unit specs, 240 Go integration specs, both under the race detector, and one real CLI E2E scenario. Earlier focused integration coverage separately passed 85 specs for client protocol/pages, event/log streams and file containment, cancellation races, durable admission retention and the local walking skeleton. The CLI scenario observes filtered pages and terminal backlog, exact failing-workload JSON and plain log bytes, typed follow rejection exits, successful failed-job inspection, immutable late cancellation and exact replay of a queued cancellation. Deterministic barriers exercise subscribe/read and spawn/log-binding races, native completion publication, concurrent cancellation, and observer disconnect without changing Job ownership. Schema migration tests preserve admissions and refuse lost identity/cancellation storage. A focused four-spec race run also verifies typed follow-error exit mapping, plain invalid-UTF8 bytes and replacement/continuation diagnostics, output-write failure, generated cancellation keys and oversized response rejection. A further focused eight-spec race run verifies public cancellation keys colliding with internal runner prefixes at preparing/ready/running barriers, exact replay and conflicting payloads, immutable terminal PASS/FAIL, paired angle-bracket response literals, usable plain-log gap identities, and all four event/log observation forms returning RESULT_UNAVAILABLE before and after fixture-only bulk retention. Cancellation keys occupy a separate stored namespace while their public identities stay unchanged. Fixture-only bulk retention preserves the original cancellation receipt and intent; production GC remains TASK-012. The current common gate covers those earlier cases. A further focused five-spec race run verifies stderr-only typed plain-log errors for paged, pre-stream and streamed failures; retained terminal pages between available results, exact cursor continuation and finished filtering before and after fixture-only payload deletion; actual established-stream storage-error delivery without changing Job ownership; and rejection of unexplained above-floor payload loss from zero, floor and latest reconnect cursors. The same SQLite view checks retained event integrity before returning a purge resync.
+
+These checks qualify the implemented local slice only. Real UTM execution, installed-service recovery, hardware sleep/wake, escaped or reattached process identity, sudden power loss and release qualification were not run. The implementation/test baseline is commit `7ab3b90896813994bf0026d558f5784f113eb45f`; all other product/test/runner inputs are unchanged from that baseline. Changed inputs for this observation are the following Git blobs. Documentation-only lifecycle updates require their own focused validation.
+
+| Input | Git blob |
+| --- | --- |
+| `cmd/haepari/main.go` | `01afde7a95c1216e4b44de10dd109a6dabf5ef39` |
+| `cmd/haepari/main_integration_test.go` | `7b7fff35189d5a0a628e611cb84c110129e26242` |
+| `cmd/haepari/main_test.go` | `07786c24e1712854fcc4fc865bcc8155d739e81a` |
+| `cmd/haepari/observers.go` | `c30915b5c4453a90ddf3be75bcca2d133be8d5bf` |
+| `cmd/haepari/observers_test.go` | `c14f0927aac2671571daa95767ccdb9371f25b39` |
+| `internal/client/client.go` | `2a34583ca460b98d6094d105322df5ce0441aef2` |
+| `internal/client/client_test.go` | `97f0ec4818110242878d448c2907353a7356dd82` |
+| `internal/client/observers.go` | `560969140a54436fca071a5e3999d14c8b1c80c6` |
+| `internal/client/observers_test.go` | `33547b1052a49c7b0ebf492327433fe0ce85a1dc` |
+| `internal/client/pages.go` | `36dbb480a23dc89ac7119ec885177eca1e854bb3` |
+| `internal/controller/admission_integration_test.go` | `e5bde23942b8902ddac11abf87b67e361e946747` |
+| `internal/controller/availability_integration_test.go` | `f627b48d0e0e910fe6cfea4564ab77efc5059d78` |
+| `internal/controller/cancellation.go` | `ed69697a5b0af0e1e9adfb87cdae97a7f89eed84` |
+| `internal/controller/cancellation_integration_test.go` | `b0b7901c2aeaa8b82ff6f17690f7e62c14535395` |
+| `internal/controller/client_integration_test.go` | `6bf3b79a0bd1dac7b6ef2b7b8f423b43392e3ad5` |
+| `internal/controller/local.go` | `1f979c3ac688e8fbdb3bb7cf519fb81e15b17aca` |
+| `internal/controller/local_integration_test.go` | `b30b08d8635bba4d43f7bcba5ca7f4d2126dfebd` |
+| `internal/controller/log_reader.go` | `852fd674c24a383000c62d6e7cf95571a3adf51b` |
+| `internal/controller/observers.go` | `bb96b57b542ad016475380c12148dd3a4e8fc2d6` |
+| `internal/controller/observers_integration_test.go` | `f98eccabcaebb14aea88f700609aa9b016593c0a` |
+| `internal/controller/pages.go` | `7038748556a860a08d9dc8cfa513cc23230d6f34` |
+| `internal/controller/run.go` | `3717fe64124521ab18e74eceb2c22ab98c5cd412` |
+| `internal/controller/scheduling_integration_test.go` | `eb6fcaa2863771bf97d7a231b957d46c5bae68eb` |
+| `internal/controller/server.go` | `7924b746e4778de84e717ec6c0290aee9fcc7eac` |
+| `internal/controller/walk_integration_test.go` | `9c2816a20eabcf86a494ce52783d38a9cf509ca7` |
+| `internal/managed/admission_integration_test.go` | `4087cd8a97ad237f9222bc5d90dd89214695d89e` |
+| `internal/managed/cancellation.go` | `2529a98a65cc3b5f4355ade1d95ee5efb774c291` |
+| `internal/managed/cancellation_integration_test.go` | `3dc9ab08e37abd25e0aee2b576f512d79a80ac36` |
+| `internal/managed/client.go` | `63e8b3be4caacfe96f365a66f4752a51229de14b` |
+| `internal/managed/client_integration_test.go` | `b01a5dfae7af4f4c48f3a28b24216319106a594a` |
+| `internal/managed/contract.go` | `e303f7cc5e4d171a651e65e050757dd7ebcb787c` |
+| `internal/managed/ledger.go` | `6080c165adc4e4e017e5633d3dfb36cabab98674` |
+| `internal/managed/ledger_test.go` | `e0cf6de1399cf65fccd8df9e9b2c58096699e2b3` |
+| `internal/managed/local.go` | `ac911bd7d979ad6b170430cb186e8734414ef543` |
+| `internal/managed/observers.go` | `61383cedd41aa3f6c989e54ec512dc52cd7feddd` |
+| `internal/managed/outcome.go` | `40cf1e66080b98fbc58c61d6a69031703b30f82c` |
+| `internal/managed/scheduling_integration_test.go` | `88a2d4b6ae975f932ee8f213e00fefcf9d936447` |
+| `tests/e2e/test_local_cli.py` | `964a3fe5159708d4e2670a60bfad6b8d01d99fdb` |
 
 ## TASK-035
 

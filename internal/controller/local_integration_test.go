@@ -154,7 +154,8 @@ var _ = ginkgo.Describe("PreparationDeadlineAndUnprovenWorkerKeepCorrectOwnershi
 				if err != nil {
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				}
-				s := newRuntime(root, ledger, nil)
+				s, err := newRuntime(root, ledger, nil)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				cause := tc.cause
 				var release, finished chan struct{}
 				if tc.name == "expired" {

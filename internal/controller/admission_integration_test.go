@@ -56,7 +56,7 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		gomega.Expect(ledger.RegisterOnlyLocal(encoded)).To(gomega.Succeed())
 		original, err := ledger.AdmitSealed(spec, job.Input.InventoryDigest, sealed.ObjectID, "legacy-key", "legacy-job")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = db.Exec(`DROP TABLE managed_admissions; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3`)
+		_, err = db.Exec(`DROP TABLE managed_installation; DROP TABLE managed_cancellations; DROP TABLE managed_cancel_edges; DROP TABLE managed_local_outcomes; DROP TABLE managed_admissions; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(db.Close()).To(gomega.Succeed())
 		db, err = sqlite.Open(root.DBPath)
@@ -67,7 +67,8 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		var inventory []byte
 		gomega.Expect(db.QueryRow(`SELECT inventory_json FROM managed_admissions WHERE request_key='legacy-key'`).Scan(&inventory)).To(gomega.Succeed())
 		gomega.Expect(inventory).To(gomega.BeEmpty())
-		runtime := newRuntime(root, ledger, store)
+		runtime, err := newRuntime(root, ledger, store)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: root.SocketPath, Net: "unix"})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(os.Chmod(root.SocketPath, 0600)).To(gomega.Succeed())
@@ -129,7 +130,8 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		encoded, err := json.Marshal(resource)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(ledger.RegisterOnlyLocal(encoded)).To(gomega.Succeed())
-		runtime := newRuntime(root, ledger, store)
+		runtime, err := newRuntime(root, ledger, store)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: root.SocketPath, Net: "unix"})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(os.Chmod(root.SocketPath, 0600)).To(gomega.Succeed())
@@ -179,6 +181,8 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		request, err := http.NewRequest("POST", "http://haepari/v1/jobs", strings.NewReader(string(body)))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		request.Header.Set("X-Haepari-Protocol", protocol)
+		request.Header.Set("X-Haepari-Protocol-Min", "1")
+		request.Header.Set("X-Haepari-Protocol-Max", "1")
 		response, err := (&http.Client{Transport: transport, Timeout: 5 * time.Second}).Do(request)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(response.StatusCode).To(gomega.Equal(200))
@@ -255,6 +259,23 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		_, err = db.Exec(`DROP TABLE saved_admissions`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(ledger.RetainAdmissionTombstone(identity.JobID)).To(gomega.Succeed())
+		assertUnavailableObservers := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			consumed := 0
+			consume := func(client.Record) error { consumed++; return nil }
+			_, _, eventErr := c.Events(ctx, identity.JobID, client.EventsOptions{})
+			_, _, logErr := c.Logs(ctx, identity.JobID, client.LogsOptions{})
+			for _, observerErr := range []error{eventErr, logErr,
+				c.FollowEvents(ctx, identity.JobID, client.EventsOptions{}, consume),
+				c.FollowLogs(ctx, identity.JobID, client.LogsOptions{}, consume)} {
+				var observerIssue *client.Issue
+				gomega.Expect(errors.As(observerErr, &observerIssue)).To(gomega.BeTrue())
+				gomega.Expect(observerIssue.Code).To(gomega.Equal("RESULT_UNAVAILABLE"))
+			}
+			gomega.Expect(consumed).To(gomega.BeZero())
+		}
+		assertUnavailableObservers()
 		// Corrupt retained metadata is storage uncertainty, not caller conflict.
 		for _, damaged := range [][]byte{nil, []byte(`{}`)} {
 			_, err = db.Exec(`UPDATE managed_admissions SET inventory_json=? WHERE request_key='durable-key'`, damaged)
@@ -270,7 +291,7 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 
 		// This is synthetic, fixture-only retention. Production GC is TASK-012.
 		gomega.Expect(os.RemoveAll(filepath.Dir(sealed.Root))).To(gomega.Succeed())
-		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_jobs"} {
+		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_local_outcomes", "managed_cancel_edges", "managed_events", "managed_event_owners", "managed_event_progress", "managed_jobs"} {
 			_, err := db.Exec("DELETE FROM " + table)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
@@ -286,6 +307,7 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		_, _, err = c.Wait(context.Background(), identity.JobID, time.Second)
 		gomega.Expect(errors.As(err, &issue)).To(gomega.BeTrue())
 		gomega.Expect(issue.Code).To(gomega.Equal("RESULT_UNAVAILABLE"))
+		assertUnavailableObservers()
 		gomega.Expect(os.WriteFile(filepath.Join(source, "source/input.txt"), []byte("changed"), 0600)).To(gomega.Succeed())
 		_, _, err = c.Submit(context.Background(), spec, "durable-key")
 		gomega.Expect(errors.As(err, &issue)).To(gomega.BeTrue())
