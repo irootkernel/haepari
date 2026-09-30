@@ -1,16 +1,16 @@
 # Follow-up candidates
 
-These items came from EPIC-001 cold validation and TASK-005 review. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
+These items came from EPIC-001 cold validation and TASK-005/006 review. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
 
 ## Structural TODO candidates
 
-- At TASK-005/007/009, decide whether the current `internal/managed` ledger schema and queries, `internal/store/sqlite` connection setup, and `internal/controller` bootstrap/scheduler/local execution need explicit application, store, and executor seams before adding another backend. Remove the unused `Ledger.Input` API if no owner emerges. The current consolidation makes later backend changes touch transport and persistence together.
+- At TASK-005/007/009, decide whether the current `internal/managed` ledger schema and queries, `internal/store/sqlite` connection setup, and `internal/controller` bootstrap/scheduler/local execution need explicit application, store, and executor seams before adding another backend. Remove the unused `Ledger.Input` API if no owner emerges. Include the SQLite-specific admission error classifier when evaluating the store boundary; a future driver change must preserve UNIQUE/PRIMARY KEY conflicts and keep trigger, I/O and connection failures as storage uncertainty. Include the same-key replay sequence when evaluating a shared application entry point; another transport must preserve digest, original inventory binding and surviving-source comparison together. The current consolidation makes later backend changes touch transport and persistence together.
 - At TASK-010/012, centralize terminal settlement choreography, lifecycle vocabulary, error-to-exit mapping, and envelope validation so the controller, CLI, and managed contract cannot drift as more result/error paths are added. Keep externally visible behavior and existing error codes stable during that refactor.
 - At TASK-009/012, consolidate contained no-follow file traversal and define the snapshot-to-managed digest representation at one boundary. The current duplicated traversal and prefix conversion require coordinated changes when new artifact paths are added.
 
 ## Deferred verification and diagnostics
 
-- Before TASK-006/008 accepts concurrent clients, add deterministic same-key concurrent admission and wait-registration race coverage; sequential tests cannot prove the intended single-admission and no-lost-wakeup invariants.
+- Before TASK-008 accepts observer concurrency, add deterministic wait-registration race coverage. TASK-006 now covers concurrent same-key durable admission and single execution; that proof does not cover the separate no-lost-wakeup invariant.
 - Before TASK-008/012 freezes protocol behavior, assert both sides of unsupported-version handshake and malformed/missing protocol-header rejection. Current positive traffic does not prove rejection before mutation.
 - Before TASK-009/010 expands local execution, assert the deadline-boundary and SIGTERM-accepted paths with deterministic timing/termination fixtures. Existing timeout tests cover escalation but do not cover every classification branch.
 - Before TASK-009 relies on workload PATH resolution for more workloads, drive a bare-name command through `executeLocal`, including declared PATH wiring, relative slash resolution, and non-executable first candidates. Direct resolver coverage alone cannot detect controller wiring drift.
@@ -18,3 +18,5 @@ These items came from EPIC-001 cold validation and TASK-005 review. They are can
 - Before TASK-009 exposes start failures as operator evidence, distinguish an unresolved workload executable from other process-start failures in the retained result or receipt without exposing unrestricted OS error text. The current generic `process_start_failed` reason slows diagnosis of workload PATH mistakes.
 
 - At TASK-012 startup/retention hardening, address private orphan `.h<nonce>` sockets left by process death between bind and publication/cleanup. They do not change controller exclusion or known-socket restart behavior, but repeated deaths can accumulate directory entries. Cleanup must prove ownership and preserve foreign, legacy and live listeners; never remove `.h*` paths by name pattern alone.
+
+- Before TASK-012 exposes retention, define and verify the treatment of legacy ledger-only admissions without a sealed object, including the v3 missing-input fallback and malformed stored specs. The current Unix replay requires a verifiable original object; blindly tombstoning an object-less fixture would make same-key replay remain storage uncertainty. At that re-entry point, exercise the compiled CLI against a real retained controller result, including `run` exit 2; current CLI fixture and real controller checks cover the two boundaries separately.

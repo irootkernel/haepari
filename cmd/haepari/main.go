@@ -199,7 +199,7 @@ func submit(args []string, stdout, stderr io.Writer, blocking bool) int {
 	flags := flag.NewFlagSet("submit", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	path := flags.String("spec", "", "job spec")
-	key := flags.String("request-key", "", "persisted request key")
+	key := flags.String("request-key", "", "persisted request key: 1-128 ASCII alphanumeric, dot, underscore or dash; starts alphanumeric")
 	jsonFlag := flags.Bool("json", false, "JSON response")
 	if flags.Parse(args) != nil {
 		return 2
@@ -236,6 +236,10 @@ func submit(args []string, stdout, stderr io.Writer, blocking bool) int {
 		}
 	} else {
 		fmt.Fprintln(stdout, receipt.JobID)
+	}
+	if receipt.ResultStatus == "unavailable" {
+		fmt.Fprintln(stderr, "RESULT_UNAVAILABLE: known admission has no retained result; no new job was launched")
+		return 2
 	}
 	result, final, err := c.Wait(context.Background(), receipt.JobID, 24*time.Hour)
 	if err != nil {

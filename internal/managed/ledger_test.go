@@ -456,7 +456,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		path := filepath.Join(t.TempDir(), "state.sqlite")
 		db, l := openLedger(t, path, 1)
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 4 {
 			t.Fatalf("schema version %d: %v", version, err)
 		}
 		r := validResource()
@@ -475,7 +475,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		if err := l.RegisterResource(encode(t, r)); !errors.Is(err, ErrConflict) {
 			t.Fatalf("duplicate VM identity: %v", err)
 		}
-		if _, err := db.Exec(`PRAGMA user_version=4`); err != nil {
+		if _, err := db.Exec(`PRAGMA user_version=5`); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		if err := db.Close(); err != nil {
@@ -517,7 +517,7 @@ var _ = ginkgo.Describe("ProvisionalV1PowerTableMigration", ginkgo.Label("integr
 		db, l := openLedger(t, path, 1)
 		defer db.Close()
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 4 {
 			t.Fatalf("migrated version %d: %v", version, err)
 		}
 		var value int64

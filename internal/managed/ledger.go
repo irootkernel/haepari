@@ -34,20 +34,22 @@ func (l *Ledger) commit(tx *sql.Tx) error {
 }
 
 type Receipt struct {
-	JobID                        string  `json:"job_id"`
-	JobRevision                  int64   `json:"job_revision"`
-	JobState                     string  `json:"job_state"`
-	ResourceID                   string  `json:"resource_id"`
-	ResourceConfigRevision       int64   `json:"resource_config_revision"`
-	ResourceAvailabilityRevision int64   `json:"resource_availability_revision"`
-	ResourceAvailability         string  `json:"resource_availability"`
-	Slot                         int     `json:"slot"`
-	LeaseGeneration              int64   `json:"lease_generation"`
-	ResourceOccupancy            int     `json:"resource_occupancy"`
-	GlobalOccupancy              int     `json:"global_occupancy"`
-	CapacityDelta                int     `json:"capacity_delta"`
-	Verdict                      Verdict `json:"verdict,omitempty"`
-	EventCursor                  int64   `json:"event_cursor"`
+	Admission                    AdmissionIdentity `json:"admission,omitempty"`
+	ResultStatus                 string            `json:"result_status,omitempty"`
+	JobID                        string            `json:"job_id"`
+	JobRevision                  int64             `json:"job_revision"`
+	JobState                     string            `json:"job_state"`
+	ResourceID                   string            `json:"resource_id"`
+	ResourceConfigRevision       int64             `json:"resource_config_revision"`
+	ResourceAvailabilityRevision int64             `json:"resource_availability_revision"`
+	ResourceAvailability         string            `json:"resource_availability"`
+	Slot                         int               `json:"slot"`
+	LeaseGeneration              int64             `json:"lease_generation"`
+	ResourceOccupancy            int               `json:"resource_occupancy"`
+	GlobalOccupancy              int               `json:"global_occupancy"`
+	CapacityDelta                int               `json:"capacity_delta"`
+	Verdict                      Verdict           `json:"verdict,omitempty"`
+	EventCursor                  int64             `json:"event_cursor"`
 }
 
 type Event struct {
@@ -207,6 +209,10 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 		 lease_generation INTEGER NOT NULL DEFAULT 0, vm_uuid TEXT NOT NULL DEFAULT '', vm_mac TEXT NOT NULL DEFAULT '', spec_json BLOB NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS managed_vm_uuid ON managed_resources(vm_uuid) WHERE vm_uuid != ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS managed_vm_mac ON managed_resources(vm_mac) WHERE vm_mac != ''`,
+		`CREATE TABLE IF NOT EXISTS managed_admissions (
+		 sequence INTEGER PRIMARY KEY AUTOINCREMENT, request_key TEXT NOT NULL UNIQUE, job_id TEXT NOT NULL UNIQUE,
+		 submitted_digest TEXT NOT NULL, spec_json BLOB NOT NULL, sealed_digest TEXT NOT NULL, object_id TEXT NOT NULL,
+		 inventory_json BLOB, identity_json BLOB NOT NULL, retention_state TEXT NOT NULL DEFAULT 'available', tombstone_receipt BLOB)`,
 		`CREATE TABLE IF NOT EXISTS managed_jobs (
 		 id TEXT PRIMARY KEY, request_key TEXT NOT NULL UNIQUE, submitted_digest TEXT NOT NULL,
 		 resource_id TEXT NOT NULL REFERENCES managed_resources(id), revision INTEGER NOT NULL DEFAULT 1,
@@ -250,8 +256,17 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 3 {
+	if version > 4 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
+	}
+	if version == 4 {
+		var exists int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='managed_admissions'`).Scan(&exists); err != nil {
+			return nil, err
+		}
+		if exists != 1 {
+			return nil, fmt.Errorf("managed schema4 lost its required admission table")
+		}
 	}
 	for _, statement := range statements {
 		if _, err := tx.Exec(statement); err != nil {
@@ -288,6 +303,17 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 			return nil, err
 		}
 		if _, err := tx.Exec(`PRAGMA user_version=3`); err != nil {
+			return nil, err
+		}
+	}
+	if version < 4 {
+		if err := migrateAdmissions(tx); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`INSERT INTO schema_migrations(version,identity) VALUES(4,'durable-admissions-v4')`); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`PRAGMA user_version=4`); err != nil {
 			return nil, err
 		}
 	}
@@ -402,6 +428,16 @@ func (l *Ledger) Admit(data []byte, sealedDigest, requestKey, jobID string) (Rec
 // the same transaction. Empty object IDs are retained for legacy ledger-only
 // callers; the controller always supplies an object ID.
 func (l *Ledger) AdmitSealed(data []byte, sealedDigest, objectID, requestKey, jobID string) (Receipt, error) {
+	return l.AdmitSealedInventory(data, sealedDigest, objectID, nil, requestKey, jobID)
+}
+
+// AdmitSealedInventory retains the small sealed manifest alongside the key so
+// surviving source files can be compared after an explicit bulk purge. The
+// controller supplies a verified manifest; ledger-only callers omit it.
+func (l *Ledger) AdmitSealedInventory(data []byte, sealedDigest, objectID string, inventory []byte, requestKey, jobID string) (Receipt, error) {
+	if len(inventory) > 1<<20 || (len(inventory) > 0 && !json.Valid(inventory)) {
+		return Receipt{}, ErrInvalid
+	}
 	job, err := DecodeJob(data)
 	if err != nil {
 		return Receipt{}, err
@@ -426,18 +462,17 @@ func (l *Ledger) AdmitSealed(data []byte, sealedDigest, objectID, requestKey, jo
 	}
 	defer tx.Rollback()
 	var priorID, priorDigest string
-	err = tx.QueryRow(`SELECT id,submitted_digest FROM managed_jobs WHERE request_key=?`, requestKey).Scan(&priorID, &priorDigest)
+	err = tx.QueryRow(`SELECT job_id,submitted_digest FROM managed_admissions WHERE request_key=?`, requestKey).Scan(&priorID, &priorDigest)
 	if err == nil {
 		if priorDigest != digest {
 			return Receipt{}, ErrConflict
 		}
-		var priorObject string
-		if err := tx.QueryRow(`SELECT object_id FROM managed_job_inputs WHERE job_id=?`, priorID).Scan(&priorObject); err != nil || priorObject != objectID {
-			return Receipt{}, ErrConflict
-		}
-		return l.snapshotTx(tx, priorID)
+		return l.admissionReceiptTx(tx, priorID)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
+		return Receipt{}, err
+	}
+	if err := checkAdmissionLossTx(tx, requestKey); err != nil {
 		return Receipt{}, err
 	}
 	var configRevision int64
@@ -452,7 +487,23 @@ func (l *Ledger) AdmitSealed(data []byte, sealedDigest, objectID, requestKey, jo
 	now := time.Now().UTC()
 	if _, err := tx.Exec(`INSERT INTO managed_jobs(id,request_key,submitted_digest,resource_id,pinned_config_revision,admitted_at_ns,queue_deadline_ns,spec_json) VALUES(?,?,?,?,?,?,?,?)`,
 		jobID, requestKey, digest, job.ResourceID, configRevision, now.UnixNano(), now.Add(time.Duration(job.Deadlines.QueueSeconds)*time.Second).UnixNano(), canonical); err != nil {
-		return Receipt{}, fmt.Errorf("%w: admission: %v", ErrConflict, err)
+		return Receipt{}, admissionError(err)
+	}
+
+	inserted, err := tx.Exec(`INSERT INTO managed_admissions(request_key,job_id,submitted_digest,spec_json,sealed_digest,object_id,inventory_json,identity_json) VALUES(?,?,?,?,?,?,?,?)`, requestKey, jobID, digest, canonical, sealedDigest, objectID, inventory, []byte(`{}`))
+	if err != nil {
+		return Receipt{}, admissionError(err)
+	}
+	sequence, err := inserted.LastInsertId()
+	if err != nil {
+		return Receipt{}, err
+	}
+	identityJSON, err := json.Marshal(admissionIdentity(job, sequence, requestKey, digest, sealedDigest, objectID, configRevision, now.UnixNano()))
+	if err != nil {
+		return Receipt{}, err
+	}
+	if _, err := tx.Exec(`UPDATE managed_admissions SET identity_json=? WHERE job_id=?`, identityJSON, jobID); err != nil {
+		return Receipt{}, err
 	}
 	if _, err := tx.Exec(`INSERT INTO managed_event_progress(job_id) VALUES(?)`, jobID); err != nil {
 		return Receipt{}, err
@@ -861,12 +912,21 @@ func (l *Ledger) finishQueued(jobID string, expectedRevision int64, mutationKey,
 }
 
 func (l *Ledger) Snapshot(jobID string) (Receipt, error) {
-	return l.snapshotTx(l.db, jobID)
+	tx, err := l.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return Receipt{}, err
+	}
+	defer tx.Rollback()
+	return l.snapshotTx(tx, jobID)
 }
 
 type rowQuerier interface{ QueryRow(string, ...any) *sql.Row }
 
 func (l *Ledger) snapshotTx(q rowQuerier, jobID string) (Receipt, error) {
+	return l.admissionReceiptTx(q, jobID)
+}
+
+func (l *Ledger) currentSnapshotTx(q rowQuerier, jobID string) (Receipt, error) {
 	var r Receipt
 	var slot sql.NullInt64
 	var lease sql.NullInt64

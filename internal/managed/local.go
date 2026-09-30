@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -11,6 +12,7 @@ import (
 type QueuedJob struct {
 	Receipt    Receipt
 	Spec       JobSpec
+	Inventory  []byte
 	ObjectID   string
 	DeadlineNS int64
 }
@@ -39,17 +41,29 @@ func (l *Ledger) FirstExpiredQueued(now time.Time) (ExpiredJob, error) {
 
 // Request returns the immutable admission identity for same-key recovery.
 func (l *Ledger) Request(key string) (QueuedJob, error) {
+	if !ValidRequestKey(key) {
+		return QueuedJob{}, ErrInvalid
+	}
+	tx, err := l.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return QueuedJob{}, err
+	}
+	defer tx.Rollback()
 	var job QueuedJob
 	var spec []byte
-	err := l.db.QueryRow(`SELECT j.id,j.spec_json,i.object_id FROM managed_jobs j JOIN managed_job_inputs i ON i.job_id=j.id WHERE j.request_key=?`, key).
-		Scan(&job.Receipt.JobID, &spec, &job.ObjectID)
+	err = tx.QueryRow(`SELECT job_id,spec_json,object_id,inventory_json FROM managed_admissions WHERE request_key=?`, key).Scan(&job.Receipt.JobID, &spec, &job.ObjectID, &job.Inventory)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if err := checkAdmissionLossTx(tx, key); err != nil {
+				return job, err
+			}
+		}
 		return job, mapNoRows(err)
 	}
 	if err := json.Unmarshal(spec, &job.Spec); err != nil {
 		return job, err
 	}
-	job.Receipt, err = l.Snapshot(job.Receipt.JobID)
+	job.Receipt, err = l.admissionReceiptTx(tx, job.Receipt.JobID)
 	return job, err
 }
 
@@ -318,10 +332,33 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 }
 
 func (l *Ledger) Result(jobID string) (Result, error) {
-	var raw []byte
-	err := l.db.QueryRow(`SELECT result_json FROM managed_jobs WHERE id=?`, jobID).Scan(&raw)
+	tx, err := l.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
+		return Result{}, err
+	}
+	defer tx.Rollback()
+	var retention string
+	if err := tx.QueryRow(`SELECT retention_state FROM managed_admissions WHERE job_id=?`, jobID).Scan(&retention); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if err := checkJobAdmissionLossTx(tx, jobID); err != nil {
+				return Result{}, err
+			}
+		}
 		return Result{}, mapNoRows(err)
+	}
+	if retention == "unavailable" {
+		return Result{}, ErrResultUnavailable
+	}
+	if retention != "available" {
+		return Result{}, fmt.Errorf("invalid admission retention state for %s", jobID)
+	}
+	var raw []byte
+	err = tx.QueryRow(`SELECT result_json FROM managed_jobs WHERE id=?`, jobID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Result{}, fmt.Errorf("accepted admission %s lost its result payload", jobID)
+	}
+	if err != nil {
+		return Result{}, err
 	}
 	if len(raw) == 0 {
 		return Result{}, ErrBusy

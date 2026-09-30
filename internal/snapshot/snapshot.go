@@ -231,14 +231,9 @@ func (s *Store) Read(id string) (Snapshot, error) {
 	if err != nil || statErr != nil || closeErr != nil || version != after || len(encoded) > 1<<20 || "sha256:"+digest(encoded) != id {
 		return Snapshot{}, ErrCorrupt
 	}
-	var manifest Manifest
-	if err := json.Unmarshal(encoded, &manifest); err != nil {
-		return Snapshot{}, ErrCorrupt
-	}
-	canonical, _ := json.Marshal(manifest)
-	if string(canonical) != string(encoded) || manifest.Schema != manifestSchema || manifest.Algorithm != treeAlgorithm ||
-		validateProvenance(manifest.Provenance) != nil || validateEntries(manifest.Entries) != nil || treeDigest(manifest.Entries) != manifest.TreeSHA256 {
-		return Snapshot{}, ErrCorrupt
+	manifest, err := DecodeInventory(encoded, id)
+	if err != nil {
+		return Snapshot{}, err
 	}
 	files := filepath.Join(object, "files")
 	root, err := openSourceRoot(files)
@@ -264,6 +259,23 @@ func (s *Store) Read(id string) (Snapshot, error) {
 		return Snapshot{}, ErrCorrupt
 	}
 	return Snapshot{ObjectID: id, Root: files, Manifest: manifest}, nil
+}
+
+// DecodeInventory verifies retained manifest bytes against the original object
+// identity without requiring payload files, which retention may have removed.
+func DecodeInventory(encoded []byte, objectID string) (Manifest, error) {
+	if len(encoded) > 1<<20 || !validDigest(objectID) || "sha256:"+digest(encoded) != objectID {
+		return Manifest{}, ErrCorrupt
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(encoded, &manifest); err != nil {
+		return Manifest{}, ErrCorrupt
+	}
+	canonical, err := json.Marshal(manifest)
+	if err != nil || string(canonical) != string(encoded) || manifest.Schema != manifestSchema || manifest.Algorithm != treeAlgorithm || validateProvenance(manifest.Provenance) != nil || validateEntries(manifest.Entries) != nil || treeDigest(manifest.Entries) != manifest.TreeSHA256 {
+		return Manifest{}, ErrCorrupt
+	}
+	return manifest, nil
 }
 
 func verifyInventory(files string, entries []Entry) error {

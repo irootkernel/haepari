@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +65,8 @@ func reject(w http.ResponseWriter, op string, err error) {
 	case errors.Is(err, managed.ErrBusy):
 		code = "RESOURCE_BUSY"
 		status = http.StatusConflict
+	case errors.Is(err, managed.ErrResultUnavailable):
+		code = "RESULT_UNAVAILABLE"
 	case errors.Is(err, managed.ErrUnsupported):
 		code = "UNSUPPORTED"
 	case errors.Is(err, managed.ErrStale):
@@ -81,6 +82,7 @@ func reject(w http.ResponseWriter, op string, err error) {
 		retry = "reconcile"
 	}
 	message := map[string]string{
+		"RESULT_UNAVAILABLE":       "The admission is known, but its retained result is unavailable; no new job was launched.",
 		"INVALID_REQUEST":          "The request is malformed or unsafe.",
 		"PREREQUISITE_UNAVAILABLE": "The selected input source is unavailable; correct it before submitting again.",
 		"CONFLICT":                 "The request conflicts with existing or changed input.",
@@ -171,45 +173,60 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		reject(w, "submit", err)
 		return
 	}
-	if input.RequestKey == "" {
-		reject(w, "submit", managed.ErrUnsupported)
+	if !managed.ValidRequestKey(input.RequestKey) {
+		reject(w, "submit", managed.ErrInvalid)
 		return
 	}
 	prior, err := s.ledger.Request(input.RequestKey)
 	if err == nil {
-		if !reflect.DeepEqual(prior.Spec, job) || prior.Spec.Input.InventoryDigest != job.Input.InventoryDigest {
+		submittedDigest, err := managed.CanonicalDigest(job, job.Input.InventoryDigest)
+		if err != nil {
+			reject(w, "submit", err)
+			return
+		}
+		if submittedDigest != prior.Receipt.Admission.SubmittedDigest {
 			reject(w, "submit", managed.ErrConflict)
 			return
 		}
-		original, readErr := s.store.Read(prior.ObjectID)
-		if readErr != nil {
-			reject(w, "submit", readErr)
-			return
-		}
-		// An available source is rechecked, so changed bytes cannot hide behind
-		// a reused key. A removed source recovers the already sealed object.
-		sealed, sealErr := s.store.Seal(r.Context(), job.Input.Root, job.Input.SelectedFiles, snapshot.Provenance{EvidenceClass: job.Provenance.EvidenceClass})
-		if sealErr == nil && strings.TrimPrefix(sealed.Manifest.TreeSHA256, "sha256:") != job.Input.InventoryDigest {
-			reject(w, "submit", managed.ErrConflict)
-			return
-		}
-		if errors.Is(sealErr, os.ErrNotExist) {
-			if compareErr := snapshot.CompareAvailable(r.Context(), job.Input.Root, original); compareErr != nil {
-				if errors.Is(compareErr, snapshot.ErrChanged) {
-					reject(w, "submit", managed.ErrConflict)
-				} else {
-					reject(w, "submit", compareErr)
-				}
+
+		var original snapshot.Snapshot
+		if prior.Receipt.ResultStatus == "unavailable" {
+			original.Manifest, err = snapshot.DecodeInventory(prior.Inventory, prior.ObjectID)
+			if err != nil {
+				reject(w, "submit", err)
 				return
 			}
-		} else if sealErr != nil {
-			if errors.Is(sealErr, snapshot.ErrInvalid) || errors.Is(sealErr, snapshot.ErrChanged) {
+			original.ObjectID = prior.ObjectID
+		} else {
+			original, err = s.store.Read(prior.ObjectID)
+			if err != nil {
+				reject(w, "submit", err)
+				return
+			}
+			if len(prior.Inventory) == 0 {
+				inventory, err := json.Marshal(original.Manifest)
+				if err != nil {
+					reject(w, "submit", err)
+					return
+				}
+				if err := s.ledger.BindAdmissionInventory(input.RequestKey, original.ObjectID, inventory); err != nil {
+					reject(w, "submit", err)
+					return
+				}
+			}
+
+		}
+		// Compare surviving selected files without re-sealing or recreating a
+		// purged payload. Missing source retains the admitted identity.
+		if err := snapshot.CompareAvailable(r.Context(), job.Input.Root, original); err != nil {
+			if errors.Is(err, snapshot.ErrChanged) || errors.Is(err, snapshot.ErrInvalid) {
 				reject(w, "submit", managed.ErrConflict)
 			} else {
-				reject(w, "submit", sealErr)
+				reject(w, "submit", err)
 			}
 			return
 		}
+
 		send(w, 200, "submit", prior.Receipt, nil)
 		return
 	}
@@ -235,7 +252,12 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		reject(w, "submit", err)
 		return
 	}
-	receipt, err := s.ledger.AdmitSealed(input.Spec, job.Input.InventoryDigest, sealed.ObjectID, input.RequestKey, jobID)
+	inventory, err := json.Marshal(sealed.Manifest)
+	if err != nil {
+		reject(w, "submit", err)
+		return
+	}
+	receipt, err := s.ledger.AdmitSealedInventory(input.Spec, job.Input.InventoryDigest, sealed.ObjectID, inventory, input.RequestKey, jobID)
 	if err != nil {
 		reject(w, "submit", err)
 		return
@@ -258,7 +280,7 @@ func (s *runtimeServer) inspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{"receipt": receipt}
-	if receipt.JobState == "finished" {
+	if receipt.JobState == "finished" && receipt.ResultStatus != "unavailable" {
 		result, err := s.ledger.Result(id)
 		if err != nil {
 			reject(w, "inspect", err)
@@ -282,6 +304,10 @@ func (s *runtimeServer) wait(w http.ResponseWriter, r *http.Request) {
 	initial, err := s.ledger.Snapshot(id)
 	if err != nil {
 		reject(w, "wait", err)
+		return
+	}
+	if initial.ResultStatus == "unavailable" {
+		reject(w, "wait", managed.ErrResultUnavailable)
 		return
 	}
 	if initial.JobState != "finished" {

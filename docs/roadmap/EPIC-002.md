@@ -54,20 +54,44 @@ Implementation/test baseline: commit `2a3894f99f51436d3cd2eda843f4fc6c79d2f683`;
 Requirement coverage: `HP-REQ-009`, `HP-REQ-010`.
 
 #### Implement
-- [ ] Seal inputs before acceptance, commit request-key identity, recover lost replies, and keep tombstones after bulk purge. Deduplicate on the canonical submitted request; record the resolved environment and resource-configuration identities separately so that an identical replay after a resource update returns the original admission. A rejection never consumes a request key.
+- [x] Seal inputs before acceptance, commit request-key identity, recover lost replies, and keep tombstones after bulk purge. Deduplicate on the canonical submitted request; record the resolved environment and resource-configuration identities separately so that an identical replay after a resource update returns the original admission. A rejection never consumes a request key.
 
 #### Do not
-- [ ] Do not acknowledge uncommitted jobs, expire keys into re-executable requests, or re-open mutable source paths during dispatch.
+- [x] Do not acknowledge uncommitted jobs, expire keys into re-executable requests, or re-open mutable source paths during dispatch.
 
 #### Verify
-- [ ] Race same-key submissions, lose replies before/after commit, submit conflicting payloads, purge then retry, and inject staging/disk/database failure.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Race same-key submissions, lose replies before/after commit, submit conflicting payloads, purge then retry, and inject staging/disk/database failure.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+
+### Implementation and verification
+
+Schema version 4 stores durable `managed_admissions` independently of bulk Job/input/run/event payloads. The same transaction commits the key, canonical submitted digest, global sequence, sealed input/object and inventory, original pinned resource revision, frozen environment profile identity, UTC admission time, Job and initial event. Replay rechecks the key inside that transaction and returns the original admission alongside a current read-only lifecycle snapshot; configuration updates do not change deduplication or original resolved identities. Invalid keys are rejected before sealing. Same-key recovery compares surviving selected files without recreating an object. Database failures remain storage uncertainty unless a UNIQUE or PRIMARY KEY constraint conflicts; trigger failures remain storage uncertainty.
+
+An explicit terminal retention receipt returns the known admission with `result_status: unavailable`; it has no verdict, capacity or lease claims and cannot create another Job. `run` emits that admission and exits 2 without waiting; `wait` reports `RESULT_UNAVAILABLE` with exit 2, and inspection omits a fabricated result. Missing accepted rows or objects without an explicit retention receipt remain storage uncertainty. The internal retention metadata guard rejects non-terminal/quarantined work and an object-backed legacy admission without its inventory. A legacy inventory binds only from the verified original object, never from mutable source. Production bulk deletion, unresolved-evidence policy and retention authorization remain TASK-012; the synthetic deletion in these checks touches only temporary fixtures.
+
+Observed on 2026-09-30, macOS 27.0 build 26A428 arm64, Go 1.27.1, SQLite module v1.59.0 and a non-root state owner. `go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter='unit || integration' ./cmd/haepari ./internal/managed ./internal/controller ./internal/snapshot ./internal/store/sqlite` passed 97 specs and exited 0. `go vet -tags=integration ./cmd/haepari ./internal/managed ./internal/controller ./internal/snapshot ./internal/store/sqlite` exited 0; `make test-e2e` passed one real CLI case; `python3 docs/tools/validate_docs.py` exited 0. These checks race 16 identical and 16 mixed/conflicting ledger admissions and eight Unix clients, discard a committed Unix reply, observe one actual workload execution, preserve identity across configuration update and v3 migration, reopen a synthetic purged tombstone, reject changed surviving input, and prove that staging permission failure, read-only SQLite and a rolled-back insertion consume no key. They classify missing admission rows (including a loss during legacy inventory binding), a missing schema-4 admission table, a missing unpurged sealed object and missing or corrupt retained inventory as storage uncertainty. A reopened synthetic v3 store replays through the real Unix controller and binds the original verified inventory; changed source still conflicts. The CLI fixture checks successful `submit --json` separately from `run` exit 2 and a single `wait --json` RESULT_UNAVAILABLE envelope with exit 2. The follow-up checks cover accepted 128-character and rejected 129-character keys, leading separators and non-ASCII, invalid and oversized inventory without key consumption, and the exact six-key tombstone envelope. Existing process-death probes now include the independent admission table before/after real commits. The unavailable-result CLI branch uses a bounded Unix response fixture; the controller tombstone path uses the actual ledger, Unix client and runtime. No common `make test`, production purge, installed service, real VM or sudden-power-loss qualification is claimed.
+
+Implementation/test baseline: commit `ea1e18ffc4fb98288579ed5918545fb9766fdddd`; all other production, test and runner inputs are unchanged. Changed inputs for this observation:
+
+| Input | Git blob |
+| --- | --- |
+| `cmd/haepari/main.go` | `eb872f0a6a898c7c9c361b25fc688e151663ba30` |
+| `cmd/haepari/main_integration_test.go` | `d1b633d66f8e8e8687cb8d75ad90b1adf76993cc` |
+| `internal/controller/server.go` | `9beeea226ddbfb12c8d63b0955258f97fb246f98` |
+| `internal/controller/admission_integration_test.go` | `1f0bff4bd69c114ce2960f739d1f8223a82974ce` |
+| `internal/managed/admission.go` | `30f5adeed00546f5e94060b3163bf5eaaca654fc` |
+| `internal/managed/admission_integration_test.go` | `0367f3879cae61767269631cd79446056ce9020b` |
+| `internal/managed/durability_test.go` | `90c82ab3b752972662de893e979e462280cd9abb` |
+| `internal/managed/ledger.go` | `80a99483a85a74f88de020226ee810ccd9002af1` |
+| `internal/managed/ledger_test.go` | `2d481e3c442ffd4510893aa55291c6f1ec713f42` |
+| `internal/managed/local.go` | `4e3a702409b1472a70b169fa99013302f68c748e` |
+| `internal/snapshot/snapshot.go` | `c3a4b46a20e55a279e81caf352ebc7d216d39a59` |
 
 ## TASK-007
 

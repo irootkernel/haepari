@@ -129,7 +129,7 @@ var _ = ginkgo.Describe("CrashTransactionBoundaries", ginkgo.Label("integration"
 				receipt, err := l.Snapshot("crash-job")
 				if operation == "admit" && boundary == "before_commit" {
 					gomega.Expect(errors.Is(err, ErrNotFound)).To(gomega.BeTrue())
-					for _, table := range []string{"managed_jobs", "managed_job_inputs", "managed_events", "managed_event_owners", "managed_event_progress"} {
+					for _, table := range []string{"managed_admissions", "managed_jobs", "managed_job_inputs", "managed_events", "managed_event_owners", "managed_event_progress"} {
 						var count int
 						gomega.Expect(db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)).To(gomega.Succeed())
 						gomega.Expect(count).To(gomega.BeZero())

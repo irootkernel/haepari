@@ -12,11 +12,14 @@ import (
 	"github.com/irootkernel/haepari/internal/state"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -518,5 +521,79 @@ var _ = ginkgo.Describe("InvalidControllerLockExitCode", ginkgo.Label("integrati
 		gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring(path))
 		_, err = os.Lstat(root.DBPath)
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+	})
+})
+
+var _ = ginkgo.Describe("UnavailableAdmissionRun", ginkgo.Label("integration"), func() {
+	ginkgo.It("emits the known admission then exits 2 without starting observation or inventing a verdict", func() {
+		t := ginkgo.GinkgoT()
+		parent, err := os.MkdirTemp("/tmp", "hp-cli-")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer os.RemoveAll(parent)
+		root, err := state.Resolve(filepath.Join(parent, "state"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(root.Prepare()).To(gomega.Succeed())
+		spec := filepath.Join(parent, "job.json")
+		gomega.Expect(os.WriteFile(spec, []byte(`{}`), 0600)).To(gomega.Succeed())
+		listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: root.SocketPath, Net: "unix"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var waits atomic.Int32
+		server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/v1/hello":
+				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "hello", "ok": true, "data": map[string]string{"protocol": "managed-execution/v1", "installation_id": "fixture"}})
+			case "/v1/jobs":
+				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "submit", "ok": true, "data": managed.Receipt{JobID: "known-job", JobState: "finished", ResourceID: "local-one", ResultStatus: "unavailable"}})
+			case "/v1/jobs/known-job/wait":
+				waits.Add(1)
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{"schema": "haepari.envelope/v1", "operation": "wait", "ok": false, "error": map[string]string{"code": "RESULT_UNAVAILABLE", "message": "Known admission has no retained result.", "retry": "none"}})
+
+			default:
+				waits.Add(1)
+				http.Error(w, "unexpected wait", 500)
+			}
+		})}
+		done := make(chan error, 1)
+		go func() { done <- server.Serve(listener) }()
+		defer func() { _ = server.Close(); <-done }()
+		t.Setenv("HAEPARI_HOME", root.Path)
+
+		for _, command := range []string{"submit", "run"} {
+			for _, jsonOutput := range []bool{false, true} {
+				if command == "submit" && !jsonOutput {
+					continue
+				}
+				args := []string{command, "--spec", spec, "--request-key", "known-key"}
+				if jsonOutput {
+					args = append(args, "--json")
+				}
+				var output, diagnostic bytes.Buffer
+				expectedExit := 0
+				if command == "run" {
+					expectedExit = 2
+				}
+				gomega.Expect(run(args, &output, &diagnostic)).To(gomega.Equal(expectedExit))
+				gomega.Expect(output.String()).To(gomega.ContainSubstring("known-job"))
+				if command == "run" {
+					gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring("RESULT_UNAVAILABLE"))
+				} else {
+					gomega.Expect(diagnostic.String()).To(gomega.BeEmpty())
+				}
+				gomega.Expect(output.String()).NotTo(gomega.ContainSubstring("final_verdict"))
+				if jsonOutput {
+					gomega.Expect(strings.Count(output.String(), "\n")).To(gomega.Equal(1))
+				}
+			}
+		}
+		gomega.Expect(waits.Load()).To(gomega.BeZero())
+		var output, diagnostic bytes.Buffer
+		gomega.Expect(run([]string{"wait", "known-job", "--json"}, &output, &diagnostic)).To(gomega.Equal(2))
+		gomega.Expect(waits.Load()).To(gomega.Equal(int32(1)))
+		gomega.Expect(output.String()).To(gomega.ContainSubstring("RESULT_UNAVAILABLE"))
+		gomega.Expect(output.String()).NotTo(gomega.ContainSubstring("final_verdict"))
+		gomega.Expect(strings.Count(output.String(), "\n")).To(gomega.Equal(1))
+		gomega.Expect(diagnostic.String()).To(gomega.BeEmpty())
+
 	})
 })

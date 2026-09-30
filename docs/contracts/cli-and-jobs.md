@@ -49,7 +49,7 @@ The provisional internal envelope identifier is `haepari.envelope/v1`. `ok=true`
 | --- | --- |
 | 0 | Command succeeded; for `run`/terminal `wait`, final verdict PASS. |
 | 1 | Terminal `run`/`wait` has a verified FAIL. |
-| 2 | Invalid usage, rejected input, conflict, or unsupported contract. No implied workload failure. |
+| 2 | Invalid usage, rejected input, conflict, unsupported contract, or a known admission whose retained result is unavailable. No implied workload failure. |
 | 3 | Terminal INCOMPLETE with a known result envelope. |
 | 4 | Terminal job is CANCELLED after safe settlement. |
 | 5 | Caller wait deadline elapsed; the job is not cancelled. |
@@ -66,6 +66,7 @@ Each machine error code maps to one CLI exit:
 | `NESTED_ACQUISITION_REJECTED` | Submission or advisory lock acquisition from a caller whose parent context occupies capacity | 2 |
 | `NESTED_WAIT_REJECTED` | Blocking observation (`wait`, `run`, `events --follow`, `logs --follow`) of a non-terminal job from such a caller | 2 |
 | `NOT_FOUND` | The job, resource or recovery plan does not exist | 2 |
+| `RESULT_UNAVAILABLE` | The admission is known but its retained result is unavailable; no new job is launched | 2 |
 | `RESOURCE_BUSY` | The resource change requires an idle or unreferenced resource | 2 |
 | `LOCK_EXPIRED` | A lock grant expired or was released before this renewal | 2 |
 | `PROTOCOL_UNSUPPORTED` | CLI and controller share no protocol version; no mutation | 2 |
@@ -101,9 +102,11 @@ The provisional decoder rejects duplicate JSON keys at any depth, unknown fields
 
 No field lets a project replace the host UTM control program, VM identity, SSH identity, resource capacity, or cleanup policy. Those belong to operator-controlled resource configuration.
 
-The request key is required for mutating submission. A managed runner propagates a controller-verifiable parent execution context. A child holding capacity in the same installation cannot submit another Job or block on a non-terminal job's progress (`wait`, `run`, `events --follow`, `logs --follow`); non-blocking reads and observation of terminal jobs remain allowed. See [nested acquisition](managed-transitions.md#nested-acquisition). A project wrapper persists that key and the frozen input identity in ignored/private run metadata before its first submission, so an uncertain transport response can be reconciled without generating another key. Its scope is one Haepari installation, not the working directory; the R2 shared external namespace is deferred. The deduplication digest is the canonical digest of the submitted request: the validated typed structure, including alias names exactly as submitted, plus the sealed input digest. Resolved environment and resource-configuration identities are recorded with the admission but are not part of the deduplication digest, so an identical replay after a resource update or an alias move returns the original admission. No raw secret values participate. Same key/digest recovers an existing admission; a different digest conflicts. A rejection does not consume the key. A new run after a known terminal failure requires a new key and a new explicit submission linked to the prior job.
+The request key is required for mutating submission. It is 1–128 ASCII characters, begins with an alphanumeric character, and contains only alphanumeric characters, `.`, `_` and `-`. Invalid keys are rejected before sealing or admission. A managed runner propagates a controller-verifiable parent execution context. A child holding capacity in the same installation cannot submit another Job or block on a non-terminal job's progress (`wait`, `run`, `events --follow`, `logs --follow`); non-blocking reads and observation of terminal jobs remain allowed. See [nested acquisition](managed-transitions.md#nested-acquisition). A project wrapper persists that key and the frozen input identity in ignored/private run metadata before its first submission, so an uncertain transport response can be reconciled without generating another key. Its scope is one Haepari installation, not the working directory; the R2 shared external namespace is deferred. The deduplication digest is the canonical digest of the submitted request: the validated typed structure, including alias names exactly as submitted, plus the sealed input digest. Resolved environment and resource-configuration identities are recorded with the admission but are not part of the deduplication digest, so an identical replay after a resource update or an alias move returns the original admission. No raw secret values participate. Same key/digest recovers an existing admission; a different digest conflicts. A rejection does not consume the key. A new run after a known terminal failure requires a new key and a new explicit submission linked to the prior job.
 
 Admission tombstones survive ordinary purging. A tombstone returns the known admission and an unavailable-result status without executing. There is no short timer after which an old request key silently becomes reusable.
+
+The TASK-006 internal receipt uses `admission` for immutable sequence, request/submitted/input/object identities, original resource configuration revision, environment profile identity and UTC admission time. These are separate from the current resource revision and occupancy fields. A retained tombstone has `result_status: unavailable` with the known Job/admission identity, and omits verdict, capacity and lease fields. `submit` returns that known admission successfully; `run` emits it and exits 2 without waiting, and `wait` reports `RESULT_UNAVAILABLE` with exit 2. This is unavailable retained evidence, not a Job verdict or a rejected/new submission. `inspect` exposes the tombstone without a fabricated result. Bulk retention remains TASK-012; missing accepted payloads without an explicit retention receipt are storage uncertainty.
 
 ## Event and wait semantics
 
