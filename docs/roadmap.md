@@ -1,6 +1,6 @@
 # Haepari roadmap
 
-Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. TASK-001, TASK-002, TASK-003, TASK-004, TASK-033 and TASK-034 are Accepted; EPIC-001 is Accepted. Other active tasks are Planned, and EPIC-008 is Deferred. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
+Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. The tables below record current task and epic lifecycle states. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
 
 ## Execution policy
 
@@ -25,7 +25,7 @@ Lifecycle status vocabulary:
 | Epic | Goal | Tasks | Scope | Status |
 | --- | --- | --- | --- | --- |
 | [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | Accepted |
-| [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | Planned |
+| [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | In progress |
 | [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Planned |
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Planned |
 | [EPIC-005](roadmap/EPIC-005.md) | Project, skill, manual and migration integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Planned |
@@ -43,7 +43,7 @@ Lifecycle status vocabulary:
 | [TASK-033](roadmap/EPIC-001.md#task-033) | Deliver the first production-path local walking skeleton | TASK-001, TASK-002, TASK-003 | Active | Accepted |
 | [TASK-004](roadmap/EPIC-001.md#task-004) | Qualify general macOS OS supervision | TASK-001 | Active | Accepted |
 | [TASK-034](roadmap/EPIC-004.md#task-034) | Probe UTM host automation non-destructively | None | Active | Accepted |
-| [TASK-005](roadmap/EPIC-002.md#task-005) | Implement durable storage and controller ownership | TASK-033, TASK-004 | Active | Planned |
+| [TASK-005](roadmap/EPIC-002.md#task-005) | Implement durable storage and controller ownership | TASK-033, TASK-004 | Active | Accepted |
 | [TASK-006](roadmap/EPIC-002.md#task-006) | Implement admission and durable deduplication | TASK-005, TASK-003 | Active | Planned |
 | [TASK-007](roadmap/EPIC-002.md#task-007) | Implement resource scheduling and fenced leases | TASK-006 | Active | Planned |
 | [TASK-008](roadmap/EPIC-002.md#task-008) | Implement client waits, events and cancellation admission | TASK-007 | Active | Planned |

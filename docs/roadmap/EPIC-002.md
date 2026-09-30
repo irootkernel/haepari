@@ -11,21 +11,41 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-007`, `HP-REQ-008`.
 
 #### Implement
-- [ ] Extend the TASK-033 production-path managed admission and mutation-receipt store; keep the slot ledger typed so later modes require an explicit schema decision.
-- [ ] Implement schema versioning, transactional jobs/events/leases/admissions, exclusive daemon lock, private Unix socket lifecycle and short database transactions. Apply the TASK-004 durability decision (darwin `fullfsync` and `checkpoint_fullfsync`) and the short socket-root rule.
+- [x] Extend the TASK-033 production-path managed admission and mutation-receipt store; keep the slot ledger typed so later modes require an explicit schema decision.
+- [x] Implement schema versioning, transactional jobs/events/leases/admissions, exclusive daemon lock, private Unix socket lifecycle and short database transactions. Apply the TASK-004 durability decision (darwin `fullfsync` and `checkpoint_fullfsync`) and the short socket-root rule.
 
 #### Do not
-- [ ] Do not hold transactions around runner or adapter effects or repair a live competing controller by deleting its socket.
+- [x] Do not hold transactions around runner or adapter effects or repair a live competing controller by deleting its socket.
 
 #### Verify
-- [ ] Inject crashes at transaction boundaries, race two controllers, validate schema-too-new rejection, and check file permissions and foreign keys.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Inject crashes at transaction boundaries, race two controllers, validate schema-too-new rejection, and check file permissions and foreign keys.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+
+### Implementation and verification
+
+The existing SQLite managed ledger remains the only lifecycle owner. Schema version 3 preserves typed managed slots, request identity, mutation receipts and event cursor ownership; newer versions are refused. Lifecycle commits return only after SQLite commit. Runner and adapter work occurs outside ledger transactions. The controller acquires `controller.lock` with nonblocking kernel exclusion before opening its database or inspecting its socket. The private lock inode is retained across exits; the socket identity is synced into the locked file before publication. A refused socket is recovered only under exclusive ownership and that matching identity. Reachable, unknown legacy, foreign and replaced paths are preserved; unknown ownership requires manual recovery after confirming the prior controller is stopped.
+
+Observed on 2026-09-30, macOS 27.0 build 26A428 arm64, Go 1.27.1 and SQLite module v1.59.0. Verification on this owner-operated host: `go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter='unit || integration' ./cmd/haepari ./internal/state ./internal/managed ./internal/controller ./internal/store/sqlite` passed 84 specs and exited 0. `go vet -tags=integration ./cmd/haepari ./internal/state ./internal/managed ./internal/controller ./internal/store/sqlite` exited 0; `make test-e2e` passed its real CLI case. The probes kill separate processes immediately before and after real admission, reservation, queued cancellation, phase transition, run-intent, terminal settlement and interruption-reconciliation commits, reopen the store, check atomic state and receipt recovery, and verify SQLite integrity/foreign keys. Ownership tests cover a live competitor, abrupt process death, reacquisition, private permissions and linked paths; controller tests cover simultaneous startup, refusal before effects, a live legacy listener with a full backlog, socket replacement and stale/live/foreign sockets; a real foreground daemon is killed and restarted through its recorded socket identity. Documentation validation `python3 docs/tools/validate_docs.py` exited 0. Candidate implementation and test input identities are listed below; generated documentation changes only regenerate their corresponding manifest entries. These checks do not qualify sudden power loss, installed-service recovery or real VM execution.
+
+Implementation/test baseline: commit `2a3894f99f51436d3cd2eda843f4fc6c79d2f683`; all other production, test and runner inputs are unchanged from that baseline. The changed inputs for this observation are the following Git blob identities. This is source evidence, not product or release qualification.
+
+| Input | Git blob |
+| --- | --- |
+| `cmd/haepari/main.go` | `7ca47fd66fd1d5b34ed4f66a0f612732d358e569` |
+| `cmd/haepari/main_integration_test.go` | `d781a042004b2cc61a13d62ee8442e88e68409a4` |
+| `internal/controller/run.go` | `b2f7db927ac6e21aad7aaa5c58e0c98dd0228f98` |
+| `internal/controller/run_integration_test.go` | `1edaab1851d417726ac2a8e3df38651ca0a0455c` |
+| `internal/managed/ledger.go` | `70d9e0eeeadf01b721f8ab64e95badf0868f94da` |
+| `internal/managed/local.go` | `09b75952c49b671c1219b12ac0600afb7722eb77` |
+| `internal/managed/durability_test.go` | `eaf3d15fc1aecf6867eed7ba940fd9a03c17c32e` |
+| `internal/state/ownership.go` | `3c9fe91b9ef6c8fa343691bb9e955f57ae2c7577` |
+| `internal/state/ownership_test.go` | `ae5d2a7eb3672f9d5f75f2dcb98a6a1e0f2ce8f4` |
 
 ## TASK-006
 

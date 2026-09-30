@@ -416,3 +416,107 @@ var _ = ginkgo.Describe("DaemonSIGHUPShutdown", ginkgo.Label("integration"), fun
 
 	})
 })
+
+var _ = ginkgo.Describe("ControllerOwnershipExitCode", ginkgo.Label("integration"), func() {
+	ginkgo.It("returns a deterministic refusal without effects", func() {
+		t := ginkgo.GinkgoT()
+		parent, err := os.MkdirTemp("/tmp", "hp-")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer os.RemoveAll(parent)
+		root, err := state.Resolve(filepath.Join(parent, "state"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(root.Prepare()).To(gomega.Succeed())
+		owner, err := root.AcquireController()
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer owner.Close()
+		t.Setenv("HAEPARI_HOME", root.Path)
+		var output, diagnostic bytes.Buffer
+		gomega.Expect(run([]string{"daemon", "run"}, &output, &diagnostic)).To(gomega.Equal(2))
+		gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring("owned by another controller"))
+		gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring(root.Path))
+		_, err = os.Lstat(root.DBPath)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+	})
+	ginkgo.It("recovers the recorded socket after killing a real foreground daemon", func() {
+		t := ginkgo.GinkgoT()
+		parent, err := os.MkdirTemp("/tmp", "hp-")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer os.RemoveAll(parent)
+		root, err := state.Resolve(filepath.Join(parent, "state"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		output, err := os.Create(filepath.Join(parent, "daemon.log"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer output.Close()
+		child := exec.Command(os.Args[0])
+		child.Env = append(os.Environ(), "HAEPARI_TEST_DAEMON=1", "HAEPARI_HOME="+root.Path)
+		child.Stdout = output
+		child.Stderr = output
+		gomega.Expect(child.Start()).To(gomega.Succeed())
+		waited := false
+		t.Cleanup(func() {
+			if !waited {
+				_ = child.Process.Kill()
+				_ = child.Wait()
+			}
+		})
+		ready := false
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Lstat(root.SocketPath); err == nil {
+				ready = true
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if !ready {
+			data, _ := os.ReadFile(output.Name())
+			t.Fatalf("daemon startup: %s", data)
+		}
+		original, err := os.Lstat(root.SocketPath)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(child.Process.Kill()).To(gomega.Succeed())
+		gomega.Expect(child.Wait()).To(gomega.HaveOccurred())
+		waited = true
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		done := make(chan error, 1)
+		go func() { done <- controller.Run(ctx, root) }()
+		recovered := false
+		deadline = time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if current, err := os.Lstat(root.SocketPath); err == nil && !os.SameFile(original, current) {
+				recovered = true
+				break
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("restart failed: %v", err)
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		gomega.Expect(recovered).To(gomega.BeTrue())
+		cancel()
+		gomega.Expect(<-done).To(gomega.Succeed())
+	})
+})
+
+var _ = ginkgo.Describe("InvalidControllerLockExitCode", ginkgo.Label("integration"), func() {
+	ginkgo.It("rejects an insecure lock before database creation", func() {
+		parent, err := os.MkdirTemp("/tmp", "hp-")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer os.RemoveAll(parent)
+		root, err := state.Resolve(filepath.Join(parent, "state"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(root.Prepare()).To(gomega.Succeed())
+		path := filepath.Join(root.Path, "controller.lock")
+		gomega.Expect(os.WriteFile(path, nil, 0644)).To(gomega.Succeed())
+		gomega.Expect(os.Chmod(path, 0644)).To(gomega.Succeed())
+		t := ginkgo.GinkgoT()
+		t.Setenv("HAEPARI_HOME", root.Path)
+		var output, diagnostic bytes.Buffer
+		gomega.Expect(run([]string{"daemon", "run"}, &output, &diagnostic)).To(gomega.Equal(2))
+		gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring(path))
+		_, err = os.Lstat(root.DBPath)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+	})
+})

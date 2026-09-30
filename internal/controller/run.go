@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -25,10 +27,13 @@ func Run(ctx context.Context, root state.Root) error {
 	if err := root.Prepare(); err != nil {
 		return err
 	}
-	if _, err := os.Lstat(root.SocketPath); err == nil {
-		return fmt.Errorf("%w: %s; see README stale-socket recovery", ErrSocketExists, root.SocketPath)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect control socket: %w", err)
+	ownership, err := root.AcquireController()
+	if err != nil {
+		return err
+	}
+	defer ownership.Close()
+	if err := recoverStaleSocket(root.SocketPath, ownership, os.Lstat); err != nil {
+		return err
 	}
 	db, err := sqlite.Open(root.DBPath)
 	if err != nil {
@@ -53,7 +58,7 @@ func Run(ctx context.Context, root state.Root) error {
 	}
 	listener, cleanup, err := listenPrivate(root.SocketPath, os.Lstat, func(path string) error {
 		return os.Chmod(path, 0600)
-	})
+	}, ownership)
 	if err != nil {
 		return err
 	}
@@ -80,7 +85,73 @@ func Run(ctx context.Context, root state.Root) error {
 	return fmt.Errorf("serve control socket: %w", err)
 }
 
-func listenPrivate(path string, inspect func(string) (os.FileInfo, error), protect func(string) error) (*net.UnixListener, func(), error) {
+type socketIdentity struct {
+	Schema     string `json:"schema"`
+	Device     uint64 `json:"device"`
+	Inode      uint64 `json:"inode"`
+	ModifiedNS int64  `json:"modified_ns"`
+}
+
+func identityOf(info os.FileInfo) socketIdentity {
+	stat := info.Sys().(*syscall.Stat_t)
+	return socketIdentity{Schema: "haepari.controller-socket/v1", Device: uint64(stat.Dev), Inode: uint64(stat.Ino), ModifiedNS: info.ModTime().UnixNano()}
+}
+
+// Record the bound inode before publication, while holding the controller lock.
+// Failure or partial writing prevents publication. A malformed record on restart
+// fails closed; it never authorizes deleting an unknown socket.
+func recordSocketOwnership(ownership *os.File, info os.FileInfo) error {
+	data, err := json.Marshal(identityOf(info))
+	if err != nil {
+		return err
+	}
+	if err := ownership.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := ownership.WriteAt(data, 0); err != nil {
+		return err
+	}
+	return ownership.Sync()
+}
+
+// A released kernel lock and its recorded inode prove that the prior cooperating
+// controller is gone. ECONNREFUSED alone is insufficient on Darwin: even a live
+// listener can refuse connections when its accept backlog is full.
+func recoverStaleSocket(path string, ownership *os.File, inspect func(string) (os.FileInfo, error)) error {
+	original, err := inspect(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect control socket: %w", err)
+	}
+	if original.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("%w: %s is a foreign non-socket path", ErrSocketExists, path)
+	}
+	data, err := io.ReadAll(io.NewSectionReader(ownership, 0, 4097))
+	var recorded socketIdentity
+	if err != nil || len(data) > 4096 || json.Unmarshal(data, &recorded) != nil || recorded != identityOf(original) {
+		return fmt.Errorf("%w: %s ownership is unknown; confirm the prior controller is stopped before manual recovery", ErrSocketExists, path)
+	}
+	connection, err := net.DialTimeout("unix", path, 100*time.Millisecond)
+	if err == nil {
+		_ = connection.Close()
+		return fmt.Errorf("%w: %s is reachable", ErrSocketExists, path)
+	}
+	if !errors.Is(err, syscall.ECONNREFUSED) {
+		return fmt.Errorf("%w: cannot establish stale socket: %v", ErrSocketExists, err)
+	}
+	current, err := inspect(path)
+	if err != nil || !os.SameFile(original, current) {
+		return fmt.Errorf("%w: socket changed during recovery", ErrSocketExists)
+	}
+	return os.Remove(path)
+}
+
+func listenPrivate(path string, inspect func(string) (os.FileInfo, error), protect func(string) error, ownership *os.File) (*net.UnixListener, func(), error) {
+	if ownership == nil {
+		return nil, nil, fmt.Errorf("controller ownership is required before socket publication")
+	}
 	var listener *net.UnixListener
 	var temporary string
 	for attempt := 0; attempt < 3; attempt++ {
@@ -124,6 +195,10 @@ func listenPrivate(path string, inspect func(string) (os.FileInfo, error), prote
 	if err := protect(temporary); err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("protect temporary control socket: %w", err)
+	}
+	if err := recordSocketOwnership(ownership, original); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("record control socket ownership: %w", err)
 	}
 	// Linking publishes the bound socket without replacing an existing path.
 	if err := os.Link(temporary, path); err != nil {

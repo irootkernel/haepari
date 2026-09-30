@@ -106,7 +106,7 @@ func (l *Ledger) RegisterOnlyLocal(data []byte) error {
 	if _, err := tx.Exec(`INSERT INTO managed_resources(id,kind,config_revision,capacity,vm_uuid,vm_mac,spec_json) VALUES(?,?,?,?,?,?,?)`, r.ID, r.Kind, r.Revision, r.Capacity, "", "", canonical); err != nil {
 		return fmt.Errorf("%w: resource registration: %v", ErrConflict, err)
 	}
-	return tx.Commit()
+	return l.commit(tx)
 }
 
 // AdvanceLocal records a phase receipt before the next external effect.
@@ -248,7 +248,7 @@ func (l *Ledger) ReconcileLocalFailure(jobID string) error {
 	if _, err := tx.Exec(`UPDATE managed_resources SET availability='quarantined',availability_reason='local_effect_uncertain',availability_revision=availability_revision+1 WHERE id=(SELECT resource_id FROM managed_jobs WHERE id=?) AND availability!='quarantined'`, jobID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return l.commit(tx)
 }
 
 // SettleLocal validates the result against the admitted spec and returns the
@@ -370,5 +370,5 @@ func (l *Ledger) MarkInterrupted() error {
 	if _, err := tx.Exec(`UPDATE managed_resources SET availability='quarantined',availability_reason='controller_restart_uncertain',availability_revision=availability_revision+1 WHERE availability!='quarantined' AND id IN (SELECT resource_id FROM managed_jobs WHERE state='reconciling')`); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return l.commit(tx)
 }

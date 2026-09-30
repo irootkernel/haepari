@@ -91,7 +91,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		defer stop()
 		if err := controller.Run(ctx, root); err != nil {
 			fmt.Fprintln(stderr, err)
-			if errors.Is(err, state.ErrInvalidRoot) || errors.Is(err, controller.ErrSocketExists) || errors.Is(err, sqlite.ErrInvalidStore) {
+			if errors.Is(err, state.ErrControllerOwned) || errors.Is(err, state.ErrInvalidRoot) || errors.Is(err, controller.ErrSocketExists) || errors.Is(err, sqlite.ErrInvalidStore) {
 				return 2
 			}
 			return 6

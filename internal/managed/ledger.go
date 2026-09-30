@@ -15,8 +15,22 @@ import (
 // Ledger is the durable managed-state owner. Callers must use the same SQLite
 // database as the controller; no other in-memory lifecycle state is kept.
 type Ledger struct {
-	db          *sql.DB
-	globalLimit int
+	db                  *sql.DB
+	globalLimit         int
+	transactionBoundary func(string) // nil in production; crash probes surround the real commit
+}
+
+func (l *Ledger) commit(tx *sql.Tx) error {
+	if l.transactionBoundary != nil {
+		l.transactionBoundary("before_commit")
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if l.transactionBoundary != nil {
+		l.transactionBoundary("after_commit")
+	}
+	return nil
 }
 
 type Receipt struct {
@@ -161,7 +175,7 @@ func (l *Ledger) PurgeEventsThrough(jobID string, through int64) error {
 	if _, err := addEvent(tx, jobID, "resync_checkpoint", map[string]any{"purged_through": through}); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return l.commit(tx)
 }
 
 // NoEffectProof is supplied from a reconciled adapter observation. The
@@ -377,7 +391,7 @@ func (l *Ledger) UpdateResource(data []byte, expectedConfigRevision, expectedAva
 	if err != nil {
 		return fmt.Errorf("%w: resource update: %v", ErrConflict, err)
 	}
-	return tx.Commit()
+	return l.commit(tx)
 }
 
 func (l *Ledger) Admit(data []byte, sealedDigest, requestKey, jobID string) (Receipt, error) {
@@ -453,7 +467,7 @@ func (l *Ledger) AdmitSealed(data []byte, sealedDigest, objectID, requestKey, jo
 	if err != nil {
 		return Receipt{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := l.commit(tx); err != nil {
 		return Receipt{}, err
 	}
 	return receipt, nil
@@ -928,7 +942,7 @@ func (l *Ledger) mutate(kind, key string, request any, do func(*sql.Tx) (Receipt
 	if _, err := tx.Exec(`INSERT INTO managed_mutations(mutation_key,digest,receipt_json) VALUES(?,?,?)`, key, digest, receiptJSON); err != nil {
 		return Receipt{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := l.commit(tx); err != nil {
 		return Receipt{}, err
 	}
 	return receipt, nil

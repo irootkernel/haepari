@@ -1,6 +1,6 @@
 # Follow-up candidates
 
-These items came from EPIC-001 cold validation. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
+These items came from EPIC-001 cold validation and TASK-005 review. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
 
 ## Structural TODO candidates
 
@@ -16,3 +16,5 @@ These items came from EPIC-001 cold validation. They are candidates, not accepte
 - Before TASK-009 relies on workload PATH resolution for more workloads, drive a bare-name command through `executeLocal`, including declared PATH wiring, relative slash resolution, and non-executable first candidates. Direct resolver coverage alone cannot detect controller wiring drift.
 - Before TASK-009 extends source admission, assert permission-denied source-root and selected-file classification as `PREREQUISITE_UNAVAILABLE` on a supported non-root fixture. The existing missing-source case covers only ENOENT.
 - Before TASK-009 exposes start failures as operator evidence, distinguish an unresolved workload executable from other process-start failures in the retained result or receipt without exposing unrestricted OS error text. The current generic `process_start_failed` reason slows diagnosis of workload PATH mistakes.
+
+- At TASK-012 startup/retention hardening, address private orphan `.h<nonce>` sockets left by process death between bind and publication/cleanup. They do not change controller exclusion or known-socket restart behavior, but repeated deaths can accumulate directory entries. Cleanup must prove ownership and preserve foreign, legacy and live listeners; never remove `.h*` paths by name pattern alone.
