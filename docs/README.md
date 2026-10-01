@@ -46,10 +46,10 @@ The Aquarium repository's `docs/roadmap/README.md` owns Aquarium IDs and status.
 
 Examples are illustrative design fixtures. They are not working scripts or production-ready configuration. Placeholder identities must be rejected by the implemented validators. No real credentials or current private runtime data are included.
 
-External facts are identified in [sources](sources.md). Architecture choices and acceptance criteria remain target contracts; TASK-001 through TASK-004 and TASK-033 implement their accepted slices. The package preserves the user's settled direction; any later material scope change needs a recorded decision.
+External facts are identified in [sources](sources.md). Architecture choices and acceptance criteria remain target contracts; the implemented slices are described above, and the canonical roadmap records their lifecycle states. The package preserves the user's settled direction; any later material scope change needs a recorded decision.
 
 Documentation check results are recorded in [package validation](package-validation.md) and reproducible with `docs/tools/validate_docs.py`. The Aquarium-owned inspector warning is tracked in [external requests](to-external.md) §1.3.
 
-EPIC-001 follow-up candidates are recorded in [TODO](TODO.md). They do not change roadmap task status or acceptance.
+Follow-up candidates from EPIC-001 cold validation and EPIC-002 task reviews are recorded in [TODO](TODO.md). They do not change roadmap task status or acceptance.
 
 The [Mulgae integration contract](integrations/mulgae-review.md) defines the managed VM adoption boundary and how ordinary reviews queue on the advisory lock. It is planned downstream behavior, not a Haepari dependency or a claim about the installed Mulgae release.
