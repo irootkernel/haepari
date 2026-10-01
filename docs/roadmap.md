@@ -33,6 +33,8 @@ Lifecycle status vocabulary:
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Planned |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
 
+EPIC-003 Detailed SOT: [execution dossier](TODO-EPIC-003.md). The dossier connects requirement, acceptance and handoff owners; this roadmap retains identity, prerequisites and lifecycle authority.
+
 ## Recommended task order and actual prerequisites
 
 | Task | Title | Actual prerequisites | Scope | Status |

@@ -4,6 +4,8 @@ Complete the ordinary command resource with safe termination, settlement, recove
 
 Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). These checklists define implementation acceptance only.
 
+Detailed SOT: [EPIC-003 execution dossier](../TODO-EPIC-003.md).
+
 ## TASK-009
 
 ### Implement the local per-job supervisor
