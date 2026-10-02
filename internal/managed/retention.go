@@ -238,12 +238,16 @@ func (l *Ledger) CompletePurge(q PurgeIntent) (PurgeReceipt, error) {
 		return PurgeReceipt{}, err
 	}
 	if !complete {
-		// Preserve the cursor ownership and floor while deleting event payloads.
-		// Native phase/result identities remain private recovery authority.
-		if _, err = tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=?`, q.JobID, r.EventCursor); err != nil {
+		// Public tombstones omit the cursor. Permanent ownership still defines
+		// the prefix; recovery bindings remain private replay authority.
+		var through int64
+		if err = tx.QueryRow(`SELECT COALESCE(MAX(cursor),0) FROM managed_event_owners WHERE job_id=?`, q.JobID).Scan(&through); err != nil {
 			return PurgeReceipt{}, err
 		}
-		if _, err = tx.Exec(`UPDATE managed_event_progress SET purged_through=MAX(purged_through,?) WHERE job_id=?`, r.EventCursor, q.JobID); err != nil {
+		if _, err = tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled')`, q.JobID, through); err != nil {
+			return PurgeReceipt{}, err
+		}
+		if _, err = tx.Exec(`UPDATE managed_event_progress SET purged_through=MAX(purged_through,?) WHERE job_id=?`, through, q.JobID); err != nil {
 			return PurgeReceipt{}, err
 		}
 		changed, err := tx.Exec(`UPDATE managed_purges SET complete=1 WHERE job_id=? AND complete=0`, q.JobID)

@@ -201,7 +201,9 @@ func (l *Ledger) PurgeEventsThrough(jobID string, through int64) error {
 	if through <= floor {
 		return nil
 	}
-	if _, err := tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=?`, jobID, through); err != nil {
+	// Recovery intents and compensations bind permanent replay/provenance;
+	// they remain private below the public resynchronization floor.
+	if _, err := tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled')`, jobID, through); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE managed_event_progress SET purged_through=? WHERE job_id=?`, through, jobID); err != nil {
