@@ -10,9 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -69,7 +67,7 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		if err := os.Mkdir(jobRoot, 0700); err != nil {
 			return err
 		}
-		if err := writeReceipt(jobRoot, "request.json", map[string]any{"job_id": receipt.JobID, "snapshot_object_id": objectID, "lease_generation": receipt.LeaseGeneration}); err != nil {
+		if err := writeReceipt(jobRoot, "input.json", map[string]any{"job_id": receipt.JobID, "snapshot_object_id": objectID, "lease_generation": receipt.LeaseGeneration}); err != nil {
 			return err
 		}
 		snap, err := s.store.Read(objectID)
@@ -123,137 +121,13 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 	}
 	c.receipt = receipt
 	c.identity.RunID = runID
-	if err := writeReceipt(jobRoot, "intent.json", map[string]any{"run_id": runID, "job_id": receipt.JobID, "lease_generation": receipt.LeaseGeneration}); err != nil {
-		c.mu.Unlock()
-		return err
-	}
-	logFile, err := os.OpenFile(filepath.Join(jobRoot, "output.log"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		c.mu.Unlock()
-		return err
-	}
-	defer logFile.Close()
-	if err := s.bindLocalLog(receipt, runID, logFile); err != nil {
-		c.mu.Unlock()
-		return err
-	}
-	runDeadline := time.Now().Add(time.Duration(job.Deadlines.RunSeconds) * time.Second)
-	c.deadline = runDeadline
-	workDir := filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD))
-	workPath := "/usr/bin:/bin"
-	if declared, ok := job.Workload.Environment["PATH"]; ok {
-		workPath = declared
-	}
-	commandPath, resolveErr := resolveWorkloadCommand(job.Workload.Argv[0], workDir, workPath)
-	cmd := &exec.Cmd{Path: commandPath, Args: job.Workload.Argv, Dir: workDir}
-	cmd.Env = []string{"PATH=" + workPath}
-	keys := make([]string, 0, len(job.Workload.Environment))
-	for key := range job.Workload.Environment {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if key != "PATH" && key != managed.ParentContextEnvironment {
-			cmd.Env = append(cmd.Env, key+"="+job.Workload.Environment[key])
-		}
-	}
-	chain, err := s.ledger.RunnerParentChain(s.installationID(), receipt.JobID, receipt.LeaseGeneration)
-	if err != nil {
-		c.mu.Unlock()
-		return err
-	}
-	chainJSON, err := json.Marshal(chain)
-	if err != nil {
-		c.mu.Unlock()
-		return err
-	}
-	cmd.Env = append(cmd.Env, managed.ParentContextEnvironment+"="+string(chainJSON))
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	startErr := resolveErr
-	if startErr == nil {
-		startErr = cmd.Start()
-	}
-	started := startErr == nil
-	c.cmd = cmd
-	if started {
-		go func() { err := cmd.Wait(); c.publishCompletion(nativeCompletion{err: err, at: time.Now()}) }()
-		if err := writeReceipt(jobRoot, "start.json", map[string]any{"run_id": runID, "pid": cmd.Process.Pid, "started_at": time.Now().UTC()}); err != nil {
-			c.mu.Unlock()
-			stopErr := terminateLocal(c, time.Duration(job.Deadlines.CleanupSeconds)*time.Second)
-			return errors.Join(err, stopErr)
-		}
-	} else {
-		receipt, err = s.ledger.RecordLocalOutcome(managed.LocalOutcomeRequest{Identity: c.identity, ExpectedRevision: receipt.JobRevision, Outcome: managed.LocalOutcome{Started: false, WorkloadOutcome: "inconclusive"}, MutationKey: "outcome-" + receipt.JobID})
-		c.receipt = receipt
-		c.observed = err == nil
-		if err != nil {
-			c.mu.Unlock()
-			return err
-		}
-	}
 	c.mu.Unlock()
-	c.phase("running")
-	treeStopped := false
-	if started {
-		timer := time.NewTimer(time.Until(runDeadline))
-		defer timer.Stop()
-		for {
-			changed := s.ledger.Changes()
-			c.mu.Lock()
-			if err = s.observeLocalCompletion(c); err != nil {
-				c.mu.Unlock()
-				return err
-			}
-			if c.observed {
-				c.mu.Unlock()
-				break
-			}
-			status, err = s.ledger.Cancellation(receipt.JobID)
-			if err != nil {
-				c.mu.Unlock()
-				return err
-			}
-			cancelNow := status.Requested || !time.Now().Before(runDeadline)
-			if cancelNow {
-				// Explicit cancellation already has an intent. Deadline termination is
-				// also journalled before signals, but cannot be mistaken for explicit cancel.
-				if !status.Requested {
-					var e error
-					c.receipt, e = s.ledger.BeginLocalDeadline(c.identity, c.receipt.JobRevision)
-					if e != nil {
-						c.mu.Unlock()
-						return e
-					}
-				}
-				c.mu.Unlock()
-				err = terminateLocal(c, time.Duration(job.Deadlines.CleanupSeconds)*time.Second)
-				c.mu.Lock()
-				if err == nil {
-					err = s.observeLocalCompletion(c)
-				}
-				c.mu.Unlock()
-				if err != nil {
-					return err
-				}
-				treeStopped = true
-				break
-			}
-			c.mu.Unlock()
-			select {
-			case <-c.completed:
-			case <-c.wake:
-			case <-changed:
-			case <-timer.C:
-			}
-		}
-		// A main-process exit is distinct from absence of every owned group member.
-		if !treeStopped {
-			if err = ensureGroupStopped(cmd.Process.Pid, time.Duration(job.Deadlines.CleanupSeconds)*time.Second); err != nil {
-				return err
-			}
-		}
+	started, logFile, err := s.runWithSupervisor(c, job, jobRoot, workspace, runID)
+	if logFile != nil {
+		defer logFile.Close()
+	}
+	if err != nil {
+		return err
 	}
 	c.mu.Lock()
 	receipt = c.receipt
@@ -272,9 +146,6 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 	nativeCode, signal := frozen.NativeExitCode, frozen.NativeSignal
 	timedOut := outcome == "timed_out"
 	if err = logFile.Sync(); err != nil {
-		return err
-	}
-	if err = writeReceipt(jobRoot, "exit.json", map[string]any{"run_id": runID, "started": started, "exit_code": nativeCode, "signal": signal, "timed_out": timedOut}); err != nil {
 		return err
 	}
 	c.phase("collecting")

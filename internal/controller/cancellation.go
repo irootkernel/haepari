@@ -10,28 +10,32 @@ import (
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/runner"
 )
 
 type nativeCompletion struct {
-	err error
-	at  time.Time
+	err     error
+	at      time.Time
+	outcome *managed.LocalOutcome
 }
 
 // The gate serializes spawn and observed native completion against public
 // cancellation. It is never held throughout preparation, collection or cleanup.
 type localRunControl struct {
-	mu           sync.Mutex
-	wake         chan struct{}
-	receipt      managed.Receipt
-	identity     managed.LocalIdentity
-	completionMu sync.Mutex
-	completed    chan struct{}
-	completion   *nativeCompletion
-	observed     bool
-	deadline     time.Time
-	cmd          *exec.Cmd
-	effects      bool
-	beforePhase  func(string) // deterministic integration barrier; nil in production
+	mu            sync.Mutex
+	wake          chan struct{}
+	receipt       managed.Receipt
+	identity      managed.LocalIdentity
+	completionMu  sync.Mutex
+	completed     chan struct{}
+	completion    *nativeCompletion
+	observed      bool
+	deadline      time.Time
+	cmd           *exec.Cmd
+	runnerRequest string
+	runnerExited  chan struct{}
+	effects       bool
+	beforePhase   func(string) // deterministic integration barrier; nil in production
 }
 
 func (c *localRunControl) phase(name string) {
@@ -133,8 +137,8 @@ func (s *runtimeServer) requestCancel(q managed.CancelRequest) (managed.CancelRe
 	return receipt, nil
 }
 
-// Only the Wait goroutine publishes completion. Readers never consume a
-// result channel; a closed notification is safe for arbitrarily many observers.
+// Completion publication is first-writer-wins under completionMu. Readers never
+// consume a result channel; closing the notification wakes every observer.
 func (c *localRunControl) publishCompletion(end nativeCompletion) {
 	c.completionMu.Lock()
 	defer c.completionMu.Unlock()
@@ -154,6 +158,11 @@ func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
 	if c.observed {
 		return nil
 	}
+	if c.runnerRequest != "" {
+		if _, err := s.importRunner(c); err != nil {
+			return err
+		}
+	}
 	end := c.nativeCompletion()
 	if end == nil {
 		return nil
@@ -169,6 +178,9 @@ func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
 }
 
 func nativeOutcome(cmd *exec.Cmd, end nativeCompletion, deadline time.Time) managed.LocalOutcome {
+	if end.outcome != nil {
+		return *end.outcome
+	}
 	out := managed.LocalOutcome{Started: true, WorkloadOutcome: "fail"}
 	if !deadline.IsZero() && end.at.After(deadline) {
 		out.WorkloadOutcome = "timed_out"
@@ -196,6 +208,36 @@ func terminateLocal(c *localRunControl, budget time.Duration) error {
 		return errors.New("missing termination budget")
 	}
 	deadline := time.Now().Add(budget)
+	if c.runnerRequest != "" {
+		if err := runner.Cancel(c.runnerRequest); err != nil {
+			return err
+		}
+		c.phase("termination_wait")
+		for time.Now().Before(deadline) {
+			view, err := runner.Inspect(c.runnerRequest)
+			if err != nil {
+				return err
+			}
+			if view.Exit != nil {
+				if view.Exit.TerminationProven {
+					return nil
+				}
+				return runner.ErrUnproven
+			}
+			select {
+			case <-c.runnerExited:
+				// Publication may race the preceding read; reread after native
+				// supervisor exit before declaring the receipt missing.
+				view, err := runner.Inspect(c.runnerRequest)
+				if err == nil && view.Exit != nil && view.Exit.TerminationProven {
+					return nil
+				}
+				return runner.ErrUnproven
+			case <-time.After(25 * time.Millisecond):
+			}
+		}
+		return runner.ErrUnproven
+	}
 	if c.cmd == nil || c.cmd.Process == nil {
 		return errors.New("missing owned process")
 	}

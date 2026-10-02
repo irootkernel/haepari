@@ -331,7 +331,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 7 {
+	if version > 8 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
 	if err := checkBaseSchemaTx(tx, version); err != nil {
@@ -349,6 +349,11 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	}
 	if version >= 7 {
 		if err := checkLockSchemaTx(tx); err != nil {
+			return nil, err
+		}
+	}
+	if version >= 8 {
+		if err := checkRunnerSchemaTx(tx); err != nil {
 			return nil, err
 		}
 	}
@@ -408,6 +413,9 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 		return nil, err
 	}
 	if err := initLockSchemaTx(tx, version); err != nil {
+		return nil, err
+	}
+	if err := initRunnerSchemaTx(tx, version); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

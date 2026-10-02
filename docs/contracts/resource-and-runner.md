@@ -56,7 +56,11 @@ The transient runner accepts an authenticated, contained run request and provide
 
 ## Runner receipts
 
-Local and guest runners keep receipts as files in an owned run directory: `request.json`, `intent.json` (spawn intent), `start.json`, `exit.json` and append-only output.
+Local and guest runners keep receipts as files in an owned run directory: `request.json`, `intent.json` (spawn intent), `start.json`, `outcome.json`, `exit.json` and append-only output. The implemented local runner also accepts an immutable `cancel.json` intent; cancellation acknowledgement alone proves no termination.
+
+TASK-009 implements the Darwin local boundary. The controller launches the same executable as `runner start --request <absolute-owned-path>/request.json` in a separate session. The runner holds an exclusive kernel `run.lock` until exit. Concurrent starts return the existing receipts; `prepared` can briefly describe a held claim before intent publication and is never proof that no supervisor exists. Every request binds Job/resource/configuration, zero-based slot, lease generation, run ID, nonce, boot-session UUID, explicit argv/environment, contained working directory, UTC deadline, bounded run/termination durations and output device/inode. Every subsequent receipt binds that exact identity and the SHA-256 of canonical request JSON. Internal receipt schemas are `haepari.runner-{request,intent,start,outcome,exit,cancel}/v1`; these remain provisional until F1.
+
+Receipt directories and files must belong to the current user, be private and have no symlink components; files must be regular with one link. Readers bound size to 2 MiB and reject duplicate, unknown and case-aliased keys. Intent/start identities include boot UUID, PID, birth seconds/microseconds, PGID, SID and UID. An exit must repeat the recorded workload outcome exactly. Missing or conflicting receipts retain uncertainty rather than authorize a new execution.
 
 **How each receipt is written:**
 
@@ -67,12 +71,19 @@ Local and guest runners keep receipts as files in an owned run directory: `reque
 
 **Order of events:**
 
-1. The controller commits the run claim and spawn intent to SQLite.
+1. The controller commits the exclusive run claim and exact request to SQLite before publishing the request or launching the supervisor.
 2. The runner writes `intent.json` before spawning.
-3. It writes `start.json` once the process identity is observed.
-4. It writes `exit.json` after termination.
+3. It starts a gated trampoline in its own session and writes `start.json` once that process identity is observed. Only then can the gate permit explicit workload `exec`; supervisor death before gate release causes EOF and prevents workload effects. The start receipt identifies the native execution container. `outcome.started=false` reports an explicit failure to enter workload exec; a released gate without that failure remains potentially effectful, including interruption around exec. An inherited close-on-exec status pipe distinguishes failed exec from an actual workload exit 126.
+4. It writes `outcome.json` after native completion, preserving exit code or signal independently of cleanup. A proven no-start result is `inconclusive` or `cancelled`, without an exit code or signal, even if the deadline expired before the gate opened; `timed_out` requires an entered workload.
+5. It writes `exit.json` after bounded descendant termination and output synchronization, with an explicit termination proof or unresolved reason. Controller collection, workspace cleanup and resource reuse remain separate.
+
+Stdout/stderr stream directly to the bound append-only `output.log`; there is no controller copy pipe whose EOF depends on descendants. The supervisor scans same-user native ancestry/session observations, retains discovered birth identities across reparenting or `setsid`, and rechecks the complete current identity before each TERM/KILL. TERM grace and escalation share one termination budget. Group absence alone is insufficient. Darwin descendant discovery remains best effort under the [TASK-004 host decision](../records/TASK-004-macos-supervision.md); an escaped process that was never observable cannot be ruled out by this mechanism, and the local backend is not a sandbox. An incomplete scan, identity conflict, supervisor loss or expired termination budget keeps occupancy and quarantines the resource.
+
+Cancellation writers serialize within the request's termination budget and accept an already durable, exact-bound cancellation from another writer. A conflicting cancellation or exhausted observation budget retains uncertainty. Runner receipts are immutable; the controller's earlier `input.json`, collection and cleanup files are separate phase receipts and currently use its replaceable publication path. TASK-010/012 own convergence of those phase guarantees.
 
 **How the controller uses them.** The controller imports receipts into SQLite. A missing later receipt is uncertainty, never success. After a restart, `intent.json` without `start.json` marks the ambiguous spawn window: resolve it through process evidence or leave it uncertain, and never spawn again.
+
+Schema 8 stores exact request/receipt bytes and digests in `managed_runner_receipts`, fences imports against the current run identity, and rejects conflicting replay or a missing predecessor. Import events do not change Job revisions or public cancellation replay identity. Migration creates no receipts for earlier runs and refuses a missing current-schema receipt table. TASK-011 owns startup reattachment and recovery; TASK-010 owns the broader common phase/settlement matrix.
 
 ## Recovery and fencing
 

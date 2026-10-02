@@ -20,6 +20,7 @@ import (
 	"github.com/irootkernel/haepari/internal/identity"
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
+	"github.com/irootkernel/haepari/internal/runner"
 	"github.com/irootkernel/haepari/internal/state"
 	"github.com/irootkernel/haepari/internal/store/sqlite"
 )
@@ -37,10 +38,12 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | resource register/inspect/pause/resume/update/remove/recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
+		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
 		return 2
 	}
 	switch args[0] {
+	case "runner":
+		return runner.Command(args[1:], stdout, stderr)
 	case "version":
 		if len(args) != 2 || args[1] != "--json" {
 			fmt.Fprintln(stderr, "usage: haepari version --json")

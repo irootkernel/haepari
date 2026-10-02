@@ -13,20 +13,20 @@ Detailed SOT: [EPIC-003 execution dossier](../TODO-EPIC-003.md).
 Requirement coverage: `HP-REQ-016`, `HP-REQ-017`.
 
 #### Implement
-- [ ] Add the local transient `runner` entrypoint, durable run claims, spawn-intent/start/exit receipts, explicit argv/env, process groups, streaming files, bounded termination/escalation and pipe cleanup.
+- [x] Add the local transient `runner` entrypoint, durable run claims, spawn-intent/start/exit receipts, explicit argv/env, process groups, streaming files, bounded termination/escalation and pipe cleanup.
 
 #### Do not
-- [ ] Do not silently shell-expand arguments or assume CommandContext kills all descendants.
+- [x] Do not silently shell-expand arguments or assume CommandContext kills all descendants.
 
 #### Verify
-- [ ] Run forking and output-heavy fixtures, intentional pipe inheritance, supervisor death, boot/PID identity cases and ambiguous spawn recovery.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Run forking and output-heavy fixtures, intentional pipe inheritance, supervisor death, boot/PID identity cases and ambiguous spawn recovery.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-010
 

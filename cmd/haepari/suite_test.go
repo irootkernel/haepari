@@ -9,6 +9,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "runner" {
+		os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	}
 	if os.Getenv("HAEPARI_TEST_DAEMON") == "1" {
 		os.Exit(run([]string{"daemon", "run"}, os.Stdout, os.Stderr))
 	}

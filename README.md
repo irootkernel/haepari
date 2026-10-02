@@ -1,6 +1,6 @@
 # Haepari
 
-Haepari is an independent Go CLI and local controller for managed command jobs and advisory named locks. TASK-033 connects the provisional managed ledger and selected-file store to a foreground local Job path. The [development package](docs/README.md) owns the planned contracts and roadmap.
+Haepari is an independent Go CLI and local controller for managed command jobs and advisory named locks. TASK-033 connects the provisional managed ledger and selected-file store to a foreground local Job path; TASK-009 moves workload supervision into an independent per-run process. The [development package](docs/README.md) owns the planned contracts and roadmap.
 
 ## Build and check
 
@@ -36,6 +36,8 @@ HAEPARI_HOME=/tmp/hp-example ./bin/haepari inspect job-id --json
 ```
 
 Persist the request key before submission. Reusing it with the same sealed input recovers the existing Job; any changed selected file still available conflicts, including when another selected file has been removed. `haepari run --spec local-job.json --request-key saved-key` submits and blocks through the same client path. `--json` emits admission and final NDJSON objects. The current local controller accepts multiple local resources with configured capacities and only auto Jobs with `development` evidence class. Its global active limit remains one, so raising resource capacity alone does not enable parallel execution. `resource inspect <id> --json` exposes availability/configuration revisions and the lease epoch; fenced `resource pause`/`resume` controls future dispatch. It retains and quarantines uncertain work and its slot for reconciliation after interruption. With the current global limit, an interrupted occupying Job blocks dispatch on all resources. Recovery commands are not implemented yet; preserve that state and evidence rather than deleting the database or automatically resubmitting. See the [current local recovery limit](docs/operations.md#current-local-controller-recovery-limit). Missing required output is preserved in the owned workspace and quarantines the resource until recovery. Native cancellation admission, bounded local cancellation, paged lists and event/log observers are available. Automated reattachment, manual Jobs, service supervision, and UTM execution remain with later tasks. Host power-loss durability and macOS service survival are not qualified by this slice.
+
+Each local workload now has an independent supervisor in its own session. Its private request, spawn/start/outcome/exit receipts bind the exact run and native boot/birth identities. Explicit argv and declared environment reach the workload without implicit shell expansion. Output streams to the owned file; bounded TERM/KILL handles the group and discovered descendants. Native discovery remains best effort and the local resource is not a sandbox. A missing termination receipt retains occupancy and quarantine. For read-only diagnosis, `bin/haepari runner inspect --request <absolute-owned-job-path>/request.json --json` reads those receipts; it does not recover or release the Job. See the [runner contract](docs/contracts/resource-and-runner.md#runner-receipts).
 
 Native observation and cancellation:
 
