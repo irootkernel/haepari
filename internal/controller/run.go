@@ -32,7 +32,12 @@ func Run(ctx context.Context, root state.Root) error {
 	if err != nil {
 		return err
 	}
-	defer ownership.Close()
+	releaseHere := true
+	defer func() {
+		if releaseHere {
+			_ = ownership.Close()
+		}
+	}()
 	if err := recoverStaleSocket(root.SocketPath, ownership, os.Lstat); err != nil {
 		return err
 	}
@@ -40,7 +45,11 @@ func Run(ctx context.Context, root state.Root) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if releaseHere {
+			_ = db.Close()
+		}
+	}()
 	ledger, err := managed.NewLedger(db, 1)
 	if err != nil {
 		return fmt.Errorf("initialize managed state: %w", err)
@@ -70,9 +79,35 @@ func Run(ctx context.Context, root state.Root) error {
 	if err != nil {
 		return fmt.Errorf("bind installation identity: %w", err)
 	}
+	// A graceful listener exit detaches observers, not the independent runner.
+	// Retain the kernel ownership lock and database until in-process workers
+	// actually stop, including a filesystem worker that outlived its observer.
+	workerCtx, stopWorkers := context.WithCancel(ctx)
+	releaseHere = false
+	defer func() {
+		runtime.detachWorkers()
+		stopWorkers()
+		stopped := make(chan struct{})
+		go func() { runtime.workers.Wait(); close(stopped) }()
+		// Ordinary scheduler/observer shutdown releases ownership before Run
+		// returns. A worker that cannot stop within this bounded observation
+		// keeps the database and kernel lock until it actually completes.
+		timer := time.NewTimer(100 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-stopped:
+			_ = db.Close()
+			_ = ownership.Close()
+		case <-timer.C:
+			go func() { <-stopped; _ = db.Close(); _ = ownership.Close() }()
+		}
+	}()
 	ledger.SetLockClock(platform.AdvisoryLockClock)
 	if err := ledger.LockStartup(); err != nil {
 		return fmt.Errorf("reconcile advisory locks: %w", err)
+	}
+	if err := runtime.reconcileStartup(); err != nil {
+		return fmt.Errorf("observe interrupted executions: %w", err)
 	}
 	server := &http.Server{Handler: runtime.routes(), ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan struct{})
@@ -84,8 +119,8 @@ func Run(ctx context.Context, root state.Root) error {
 		case <-done:
 		}
 	}()
-	go runtime.schedule(ctx)
-	go runtime.scheduleLocks(ctx)
+	runtime.startWorker(func() { runtime.schedule(workerCtx) })
+	runtime.startWorker(func() { runtime.scheduleLocks(workerCtx) })
 	err = server.Serve(listener)
 	if ctx.Err() != nil || errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
 		return nil

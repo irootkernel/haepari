@@ -30,6 +30,12 @@ type runtimeServer struct {
 	cancelMu     sync.Mutex
 	localRuns    map[string]*localRunControl
 	wake         chan struct{}
+	detached     chan struct{}
+	workerMu     sync.Mutex
+	jobWorkers   map[string]int
+	closing      bool
+	workers      sync.WaitGroup
+	recoveryKey  [32]byte
 	// Test barrier after a replay miss, before observing readiness. Nil in production.
 	beforeAvailabilityObservation func()
 	beforeWaitRead                func() // nil in production; subscribe/read race barrier
@@ -41,7 +47,11 @@ func newRuntime(root state.Root, ledger *managed.Ledger, store *snapshot.Store) 
 	if err != nil {
 		return nil, err
 	}
-	return &runtimeServer{root: root, ledger: ledger, store: store, installation: id, wake: make(chan struct{}, 1)}, nil
+	s := &runtimeServer{root: root, ledger: ledger, store: store, installation: id, wake: make(chan struct{}, 1), detached: make(chan struct{})}
+	if _, err := rand.Read(s.recoveryKey[:]); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 type response struct {
@@ -128,7 +138,7 @@ func reject(w http.ResponseWriter, op string, err error) {
 func (s *runtimeServer) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/hello", func(w http.ResponseWriter, r *http.Request) {
-		send(w, 200, "hello", map[string]any{"protocol": protocol, "protocol_version": 1, "capabilities": []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1"}, "installation_id": s.installationID()}, nil)
+		send(w, 200, "hello", map[string]any{"protocol": protocol, "protocol_version": 1, "capabilities": []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1", "managed-recovery/v1"}, "installation_id": s.installationID()}, nil)
 	})
 	mux.HandleFunc("POST /v1/resources", s.register)
 	mux.HandleFunc("GET /v1/resources", s.resourcesList)
@@ -136,6 +146,7 @@ func (s *runtimeServer) routes() http.Handler {
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.events)
 	mux.HandleFunc("GET /v1/jobs/{id}/logs", s.logs)
 	mux.HandleFunc("POST /v1/jobs/{id}/cancel", s.cancel)
+	mux.HandleFunc("POST /v1/jobs/{id}/recover", s.jobRecovery)
 	mux.HandleFunc("POST /v1/resources/{id}/{action}", s.resourceAvailability)
 	mux.HandleFunc("GET /v1/resources/{id}", s.resourceInspect)
 	mux.HandleFunc("POST /v1/jobs", s.submit)
@@ -522,12 +533,19 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 				}
 				break
 			}
-			go s.execute(ctx, r, queued.Spec, queued.ObjectID, time.Now().Add(time.Duration(queued.Spec.Deadlines.PrepareSeconds)*time.Second))
+			s.startWorker(func() {
+				s.execute(ctx, r, queued.Spec, queued.ObjectID, time.Now().Add(time.Duration(queued.Spec.Deadlines.PrepareSeconds)*time.Second))
+			})
 		}
 	}
 }
 
 func (s *runtimeServer) failed(id string, _ error) {
+	select {
+	case <-s.detached:
+		return
+	default:
+	}
 	// Completed preparation failures use the common bounded phase path.
 	// Unexpected errors cannot prove an owned worker stopped or cleanup safe.
 	_ = s.ledger.ReconcileLocalFailure(id)

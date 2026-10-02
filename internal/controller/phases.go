@@ -8,13 +8,30 @@ import (
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/platform"
 )
 
 func (s *runtimeServer) beginPhase(c *localRunControl, phase string, seconds int64, deadline time.Time) error {
+	select {
+	case <-s.detached:
+		return errControllerDetached
+	default:
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if prior, ok := c.phases[phase]; ok {
+		if c.recoveryEvidence == nil || prior.Completed && prior.Outcome != "unproven" {
+			return managed.ErrConflict
+		}
+		return nil // Resume consumer uses this original deadline, never a new one.
+	}
 	now := time.Now().UTC()
 	p := managed.LocalPhase{Schema: "haepari.phase-receipt/v1", Identity: c.identity, Phase: phase, BudgetSeconds: seconds, StartedAt: now, Deadline: deadline.UTC(), ObservedAt: now}
+	owner, err := platform.ObserveProcess(os.Getpid())
+	if err != nil {
+		return err
+	}
+	p.ControllerOwner = &owner.Identity
 	r, err := s.ledger.RecordLocalPhase(managed.LocalPhaseRequest{ExpectedRevision: c.receipt.JobRevision, Record: p, MutationKey: "phase-intent-" + phase + "-" + c.identity.JobID})
 	if err != nil {
 		return err
@@ -27,13 +44,27 @@ func (s *runtimeServer) beginPhase(c *localRunControl, phase string, seconds int
 }
 
 func (s *runtimeServer) endPhase(c *localRunControl, phase string, completion managed.LocalPhase) error {
+	select {
+	case <-s.detached:
+		return errControllerDetached
+	default:
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	p := c.phases[phase]
 	p.Completed, p.ObservedAt = true, time.Now().UTC()
 	p.Outcome, p.ProtectedEvidence = completion.Outcome, completion.ProtectedEvidence
 	p.Artifacts, p.EvidenceCompleteness = completion.Artifacts, completion.EvidenceCompleteness
-	r, err := s.ledger.RecordLocalPhase(managed.LocalPhaseRequest{ExpectedRevision: c.receipt.JobRevision, Record: p, MutationKey: "phase-observed-" + phase + "-" + c.identity.JobID})
+	var r managed.Receipt
+	var err error
+	if c.recoveryEvidence != nil {
+		if p.Outcome == "complete" && phase != "verify" && p.ObservedAt.After(p.Deadline) {
+			p.Outcome = "late"
+		}
+		r, err = s.ledger.ResolveLocalPhase(managed.PhaseResolutionRequest{ExpectedRevision: c.receipt.JobRevision, OriginalDigest: managed.RecoveryDigest(c.phases[phase]), Record: p, Evidence: *c.recoveryEvidence, MutationKey: "resolved-" + phase + "-" + c.identity.JobID})
+	} else {
+		r, err = s.ledger.RecordLocalPhase(managed.LocalPhaseRequest{ExpectedRevision: c.receipt.JobRevision, Record: p, MutationKey: "phase-observed-" + phase + "-" + c.identity.JobID})
+	}
 	if err != nil {
 		return err
 	}
@@ -89,6 +120,9 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	if noEffect {
 		return s.verifyLocalResult(c, managed.Result{WorkloadOutcome: outcome.WorkloadOutcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", ResourceAvailability: "available", Reason: reason}, true)
 	}
+	if _, exists := c.phases["collect"]; exists && c.recoveryEvidence != nil {
+		return s.resumeLocalSettlement(c, job, workspace, outcome, reason)
+	}
 	collectDeadline := time.Now().Add(time.Duration(job.Deadlines.CollectSeconds) * time.Second)
 	if err := s.beginPhase(c, "collect", job.Deadlines.CollectSeconds, collectDeadline); err != nil {
 		return err
@@ -100,7 +134,7 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	if !outcome.Started {
 		required = nil
 	}
-	collected, collectionStatus := boundedPhase(collectDeadline, func() collectionAttempt {
+	collected, collectionStatus := boundedOwnedPhase(s, collectDeadline, func() collectionAttempt {
 		if log != nil {
 			if err := log.Sync(); err != nil {
 				return collectionAttempt{}
@@ -153,7 +187,7 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 		cleanupErr = errors.New("required evidence retained")
 	} else {
 		var status phaseStatus
-		cleanupErr, status = boundedPhase(cleanupDeadline, func() error {
+		cleanupErr, status = boundedOwnedPhase(s, cleanupDeadline, func() error {
 			err := removeTreeUntil(workspace, cleanupDeadline)
 			if os.IsNotExist(err) {
 				return nil
@@ -207,18 +241,27 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 // verdict derivation and the exact proof-gated atomic capacity return.
 func (s *runtimeServer) verifyLocalResult(c *localRunControl, result managed.Result, noEffect bool) error {
 	c.phase("settling")
-	if err := s.beginPhase(c, "verify", 0, time.Time{}); err != nil {
-		return err
+	verified := c.phases["verify"].Completed && c.phases["verify"].Outcome == "complete"
+	if !verified {
+		if err := s.beginPhase(c, "verify", 0, time.Time{}); err != nil {
+			return err
+		}
 	}
-	verdict, err := managed.DeriveVerdict(managed.ResultFacts{WorkloadOutcome: result.WorkloadOutcome, EvidenceCompleteness: result.EvidenceCompleteness, CleanupOutcome: result.CleanupOutcome, ManualEligible: true, CancelledBeforeOutcome: result.WorkloadOutcome == "cancelled", TerminationProven: true, NoOwnedEffect: noEffect})
+	eligible := c.recoveryEvidence == nil || c.recoveryEvidence.Source != "operator-attested"
+	verdict, err := managed.DeriveVerdict(managed.ResultFacts{WorkloadOutcome: result.WorkloadOutcome, EvidenceCompleteness: result.EvidenceCompleteness, CleanupOutcome: result.CleanupOutcome, ManualEligible: eligible, CancelledBeforeOutcome: result.WorkloadOutcome == "cancelled", TerminationProven: true, NoOwnedEffect: noEffect})
 	if err != nil {
 		return err
 	}
 	result.Schema, result.JobID, result.ResourceID = "haepari.result/v1", c.identity.JobID, c.identity.ResourceID
 	result.ResourceRevision, result.LeaseGeneration = c.identity.ConfigRevision, c.identity.LeaseGeneration
 	result.JobState, result.FinalVerdict = "finished", verdict
-	if err := s.endPhase(c, "verify", managed.LocalPhase{Outcome: "complete", ProtectedEvidence: result.ProtectedEvidence}); err != nil {
-		return err
+	if c.recoveryEvidence != nil {
+		result.Observations = &managed.ResultObservations{Source: c.recoveryEvidence.Source, OperatorAttested: c.recoveryEvidence.Source == "operator-attested"}
+	}
+	if !verified {
+		if err := s.endPhase(c, "verify", managed.LocalPhase{Outcome: "complete", ProtectedEvidence: result.ProtectedEvidence}); err != nil {
+			return err
+		}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()

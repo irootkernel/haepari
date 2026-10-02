@@ -259,6 +259,9 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 				return Receipt{}, err
 			}
 		}
+		if err := validateRecoveryProvenanceTx(tx, jobID, result); err != nil {
+			return Receipt{}, err
+		}
 		if err := validateLocalOutcomeTx(tx, jobID, result); err != nil {
 			return Receipt{}, err
 		}
@@ -356,10 +359,18 @@ func (l *Ledger) MarkInterrupted() error {
 		return err
 	}
 	for _, id := range ids {
+		var priorState, resourceID string
+		if err := tx.QueryRow(`SELECT state,resource_id FROM managed_jobs WHERE id=?`, id).Scan(&priorState, &resourceID); err != nil {
+			return err
+		}
+		resource, err := resourceStatusTx(tx, resourceID)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='reconciling',revision=revision+1 WHERE id=?`, id); err != nil {
 			return err
 		}
-		if _, err := addEvent(tx, id, "interrupted", map[string]any{"reason": "controller_restart"}); err != nil {
+		if _, err := addEvent(tx, id, "interrupted", map[string]any{"reason": "controller_restart", "from": priorState, "resource": resource}); err != nil {
 			return err
 		}
 	}

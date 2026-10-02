@@ -12,6 +12,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) == 5 && os.Args[1] == "restart-phase-fixture" {
+		os.Exit(restartPhaseFixture(os.Args[2], os.Args[3], os.Args[4]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "runner" {
 		os.Exit(runner.Command(os.Args[2:], os.Stdout, os.Stderr))
 	}

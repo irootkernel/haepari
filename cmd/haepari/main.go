@@ -38,12 +38,14 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
+		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
 		return 2
 	}
 	switch args[0] {
 	case "runner":
 		return runner.Command(args[1:], stdout, stderr)
+	case "service":
+		return serviceCommand(args[1:], stdout, stderr)
 	case "version":
 		if len(args) != 2 || args[1] != "--json" {
 			fmt.Fprintln(stderr, "usage: haepari version --json")
@@ -65,7 +67,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			QualifiedBackends []string `json:"qualified_backends"`
 			Protocols         []string `json:"protocol_versions"`
 			Capabilities      []string `json:"capabilities"`
-		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1"}})
+		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1", "managed-recovery/v1"}})
 	case "daemon":
 		if len(args) < 2 || args[1] != "run" {
 			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local]")
@@ -105,10 +107,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "lock":
 		return lockCommand(args[1:], stdout, stderr)
+	case "job":
+		if len(args) > 1 && args[1] == "recover" {
+			return recoverJob(args[2:], stdout, stderr)
+		}
+		fmt.Fprintln(stderr, "usage: haepari job recover <id> --plan --json")
+		return 2
 	case "locks":
 		return locksList(args[1:], stdout, stderr)
 	case "resource":
-		if len(args) > 1 && (args[1] == "update" || args[1] == "remove" || args[1] == "recover") {
+		if len(args) > 1 && args[1] == "recover" {
+			return recoverManaged("resource", args[2:], stdout, stderr)
+		}
+		if len(args) > 1 && (args[1] == "update" || args[1] == "remove") {
 			return lockResourceCommand(args[1], args[2:], stdout, stderr)
 		}
 		if len(args) > 1 && args[1] == "inspect" {

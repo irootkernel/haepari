@@ -10,6 +10,17 @@ import (
 
 func (s *runtimeServer) resourceAvailability(w http.ResponseWriter, r *http.Request) {
 	op := "resource." + r.PathValue("action")
+	if r.PathValue("action") == "recover" {
+		status, err := s.ledger.ResourceStatus(r.PathValue("id"))
+		if err != nil {
+			reject(w, op, err)
+			return
+		}
+		if status.Kind != "lock" {
+			s.resourceRecovery(w, r)
+			return
+		}
+	}
 	if r.PathValue("action") == "update" || r.PathValue("action") == "remove" || r.PathValue("action") == "recover" {
 		s.lockResourceAction(w, r)
 		return

@@ -84,13 +84,13 @@ def _controller():
     daemon = None
     owned_jobs: list[str] = []
     cleanup_error = None
-    try:
-        with log_path.open("wb") as log:
+
+    def start_daemon():
+        nonlocal daemon
+        with log_path.open("ab") as log:
             daemon = subprocess.Popen(
                 [str(BINARY), "daemon", "run", "--backend", "local"],
-                env=env,
-                stdout=log,
-                stderr=subprocess.STDOUT,
+                env=env, stdout=log, stderr=subprocess.STDOUT,
             )
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline:
@@ -100,13 +100,26 @@ def _controller():
             if probe.returncode == 2:
                 try:
                     if json.loads(probe.stdout).get("error", {}).get("code") == "NOT_FOUND":
-                        break
+                        return
                 except json.JSONDecodeError:
                     pass
             time.sleep(0.05)
+        pytest.fail(f"controller readiness timed out: {log_path.read_text()[:4096]}", pytrace=False)
+
+    def restart_daemon(*, crash: bool):
+        assert daemon is not None and daemon.poll() is None
+        prior = daemon.pid
+        if crash:
+            daemon.kill()
         else:
-            pytest.fail(f"controller readiness timed out: {log_path.read_text()[:4096]}", pytrace=False)
-        yield parent, env, owned_jobs
+            daemon.terminate()
+        assert daemon.wait(timeout=5) == (-signal.SIGKILL if crash else 0)
+        start_daemon()
+        assert daemon.pid != prior
+
+    try:
+        start_daemon()
+        yield parent, env, owned_jobs, restart_daemon
     finally:
         if daemon is not None:
             if owned_jobs and daemon.poll() is not None:
@@ -153,8 +166,84 @@ def _controller():
             pytest.fail(f"{cleanup_error}; retained {parent}", pytrace=False)
 
 
+def _restart_job_fixture(parent: Path, env: dict[str, str], resource_id: str = "restart-local") -> tuple[Path, Path]:
+    source = parent / "input"
+    selected = source / "source" / "input.txt"
+    selected.parent.mkdir(parents=True)
+    selected.write_bytes(b"restart input\n")
+    selected.chmod(0o600)
+    marker = parent / "execution-count"
+    release = parent / "release"
+    resource_path = parent / "resource.json"
+    resource_path.write_text(json.dumps({
+        "schema": "haepari.resource/v1", "id": resource_id, "kind": "local",
+        "execution_mode": "managed", "capacity": 1, "revision": 1,
+        "adapter": {"qualification_reference": "isolated-restart"},
+        "cleanup": {"policy_reference": "owned-workspace"},
+    }))
+    _response(_run(BINARY, env, "resource", "register", "--file", str(resource_path), "--json"))
+    job = {
+        "schema": "haepari.job/v1", "execution_mode": "managed", "resource_id": resource_id,
+        "mode": "auto", "suite": "controller-restart",
+        "input": {"root": str(source), "inventory_digest": _tree_digest("source/input.txt", selected.read_bytes()), "selected_files": ["source/input.txt"]},
+        "environment": {"profile_id": "local", "profile_digest": DIGEST},
+        "workload": {
+            "argv": ["/bin/sh", "-c", 'printf once >> "$COUNT_PATH"; while [ ! -f "$RELEASE_PATH" ]; do /bin/sleep 0.05; done; mkdir -p ../results; cat input.txt > ../results/out.txt'],
+            "cwd": "source", "environment": {"COUNT_PATH": str(marker), "RELEASE_PATH": str(release)},
+            "required_outputs": ["results/out.txt"],
+        },
+        "deadlines": {"queue_seconds": 30, "prepare_seconds": 10, "run_seconds": 30, "collect_seconds": 5, "cleanup_seconds": 5},
+        "effects": {"mode": "offline", "authorization_reference": "isolated-restart"},
+        "provenance": {"candidate_digest": DIGEST, "tests_digest": DIGEST, "target_profile_digest": DIGEST, "evidence_class": "development"},
+    }
+    path = parent / "restart-job.json"
+    path.write_text(json.dumps(job))
+    return path, marker
+
+
+def test_controller_crash_and_graceful_restart_reattach_without_rerun():
+    with _controller() as (parent, env, owned_jobs, restart):
+        job_path, marker = _restart_job_fixture(parent, env)
+        submit = lambda: _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "restart-key", "--json"))["data"]
+        job_id = submit()["job_id"]
+        owned_jobs.append(job_id)
+        try:
+            request = parent / "state" / "jobs" / job_id / "request.json"
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if marker.exists() and marker.read_bytes() == b"once":
+                    view = _response(_run(BINARY, env, "runner", "inspect", "--request", str(request), "--json"))["data"]
+                    if view.get("start"):
+                        break
+                time.sleep(0.025)
+            else:
+                pytest.fail("owned runner did not reach its release barrier")
+            supervisor = view["intent"]["supervisor"]
+            assert supervisor["pid"] == supervisor["pgid"] == supervisor["sid"]
+            original_deadline = json.loads(request.read_text())["deadline"]
+            for crash in (True, False):
+                restart(crash=crash)
+                current = _response(_run(BINARY, env, "runner", "inspect", "--request", str(request), "--json"))["data"]
+                assert current["intent"]["supervisor"] == supervisor and "exit" not in current
+                status = _response(_run(BINARY, env, "inspect", job_id, "--json"))["data"]["receipt"]
+                assert status["job_state"] == "running" and status["resource_occupancy"] == 1
+                assert submit()["job_id"] == job_id
+                assert marker.read_bytes() == b"once"
+                assert json.loads(request.read_text())["deadline"] == original_deadline
+        finally:
+            (parent / "release").touch()
+        final = _response(_run(BINARY, env, "wait", job_id, "--timeout", "10s", "--json"))["data"]
+        assert final["final_verdict"] == "PASS" and final["cleanup_outcome"] == "verified"
+        assert marker.read_bytes() == b"once"
+        result_before = final
+        restart(crash=True)
+        result_after = _response(_run(BINARY, env, "inspect", job_id, "--json"))["data"]["result"]
+        assert result_after == result_before
+        assert submit()["job_id"] == job_id and marker.read_bytes() == b"once"
+
+
 def test_local_admission_result_replay_and_conflict():
-    with _controller() as (parent, env, owned_jobs):
+    with _controller() as (parent, env, owned_jobs, _):
         source = parent / "input"
         selected = source / "source" / "input.txt"
         selected.parent.mkdir(parents=True)
@@ -367,7 +456,7 @@ printf proved > ../results/out.txt
 
 
 def test_advisory_lock_cli_lifecycle() -> None:
-    with _controller() as (parent, env, _):
+    with _controller() as (parent, env, _, _):
         spec = {"schema": "haepari.resource/v1", "kind": "lock", "id": "advisory",
                 "liveness_seconds": 1, "max_hold_seconds": 2}
         path = parent / "lock.json"

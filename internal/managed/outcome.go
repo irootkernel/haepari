@@ -188,8 +188,15 @@ func DecodeResult(data []byte) (Result, error) {
 	if result.CleanupOutcome == "not_needed" && oneOf(string(result.WorkloadOutcome), "pass", "fail") {
 		return result, ErrInvalid
 	}
+	eligible := true
+	if o := result.Observations; o != nil {
+		if o.OperatorAttested != (o.Source == "operator-attested") {
+			return result, ErrInvalid
+		}
+		eligible = !o.OperatorAttested
+	}
 	derived, err := DeriveVerdict(ResultFacts{WorkloadOutcome: result.WorkloadOutcome, EvidenceCompleteness: result.EvidenceCompleteness,
-		CleanupOutcome: result.CleanupOutcome, ManualEligible: true, CancelledBeforeOutcome: result.WorkloadOutcome == "cancelled",
+		CleanupOutcome: result.CleanupOutcome, ManualEligible: eligible, CancelledBeforeOutcome: result.WorkloadOutcome == "cancelled",
 		TerminationProven: true, NoOwnedEffect: result.CleanupOutcome == "not_needed"})
 	if err != nil || derived != result.FinalVerdict {
 		return result, ErrInvalid
@@ -222,7 +229,7 @@ func DecodeResultForJob(data []byte, job JobSpec) (Result, error) {
 
 func noStartResult(result Result) bool {
 	return oneOf(result.Reason, "cancel_before_start", "prepare_failed", "prepare_deadline", "process_start_failed") &&
-		oneOf(string(result.WorkloadOutcome), "inconclusive", "cancelled") &&
+		oneOf(string(result.WorkloadOutcome), "inconclusive", "cancelled", "timed_out") &&
 		result.NativeExitCode == nil && result.NativeSignal == "" &&
 		(result.FinalVerdict == Cancelled || result.FinalVerdict == Incomplete)
 }

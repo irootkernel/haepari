@@ -24,38 +24,50 @@ func (s *runtimeServer) runWithSupervisor(c *localRunControl, job managed.JobSpe
 		return false, nil, err
 	}
 	terminationAllowance := time.Duration(job.Deadlines.CleanupSeconds) * time.Second
-	return observeWithinRunBudget(deadline, terminationAllowance, func() (bool, *os.File, error) {
+	return observeWithinRunBudgetWithWorker(deadline, terminationAllowance, s.startWorker, s.detached, func() (bool, *os.File, error) {
 		return s.observeSupervisor(c, job, jobRoot, workspace, runID, deadline)
 	})
 }
 
 func observeWithinRunBudget(deadline time.Time, terminationAllowance time.Duration, observer func() (bool, *os.File, error)) (bool, *os.File, error) {
+	return observeWithinRunBudgetWithWorker(deadline, terminationAllowance, func(work func()) bool { go work(); return true }, nil, observer)
+}
+
+func observeWithinRunBudgetWithWorker(deadline time.Time, terminationAllowance time.Duration, start func(func()) bool, detached <-chan struct{}, observer func() (bool, *os.File, error)) (bool, *os.File, error) {
 	type completion struct {
 		started bool
 		log     *os.File
 		err     error
 	}
 	done := make(chan completion, 1)
-	go func() {
+	if !start(func() {
 		started, log, err := observer()
 		done <- completion{started, log, err}
-	}()
+	}) {
+		return false, nil, errControllerDetached
+	}
 	// The run deadline starts before log/request publication. Termination has
 	// its own bounded observation allowance; a blocked setup or observer is
 	// uncertainty, never a stopped workload or permission to release the lease.
 	timer := time.NewTimer(time.Until(deadline) + terminationAllowance + supervisorObservationSlack)
 	defer timer.Stop()
-	select {
-	case result := <-done:
-		return result.started, result.log, result.err
-	case <-timer.C:
+	drain := func() {
 		go func() {
 			result := <-done
 			if result.log != nil {
 				_ = result.log.Close()
 			}
 		}()
+	}
+	select {
+	case result := <-done:
+		return result.started, result.log, result.err
+	case <-timer.C:
+		drain()
 		return false, nil, runner.ErrUnproven
+	case <-detached:
+		drain()
+		return false, nil, errControllerDetached
 	}
 }
 
@@ -135,6 +147,16 @@ func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpe
 	c.mu.Lock()
 	c.runnerRequest = filepath.Join(jobRoot, "request.json")
 	c.deadline = deadline
+	select {
+	case <-s.detached:
+		c.mu.Unlock()
+		return false, log, errControllerDetached
+	default:
+	}
+	if !time.Now().Before(deadline) {
+		c.mu.Unlock()
+		return false, log, runner.ErrUnproven
+	}
 	if err := cmd.Start(); err != nil {
 		c.mu.Unlock()
 		return false, log, err
@@ -143,11 +165,20 @@ func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpe
 	go func() { _ = cmd.Wait(); close(c.runnerExited) }()
 	c.mu.Unlock()
 	c.phase("running")
+	return s.watchSupervisor(c, job, log, deadline)
+}
+
+func (s *runtimeServer) watchSupervisor(c *localRunControl, job managed.JobSpec, log *os.File, deadline time.Time) (bool, *os.File, error) {
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
 	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
 	for {
+		select {
+		case <-s.detached:
+			return false, log, errControllerDetached
+		default:
+		}
 		changed := s.ledger.Changes()
 		c.mu.Lock()
 		view, err := s.importRunner(c)
@@ -171,7 +202,7 @@ func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpe
 			return false, log, err
 		}
 		if status.Requested || !time.Now().Before(deadline) {
-			if !status.Requested {
+			if !status.Requested && c.receipt.JobState != "cancelling" {
 				c.receipt, err = s.ledger.BeginLocalDeadline(c.identity, c.receipt.JobRevision)
 				if err != nil {
 					c.mu.Unlock()
@@ -198,6 +229,8 @@ func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpe
 		}
 		c.mu.Unlock()
 		select {
+		case <-s.detached:
+			return false, log, errControllerDetached
 		case <-c.runnerExited:
 			// The supervisor's native exit is never a workload/cleanup receipt.
 			view, err := runner.Inspect(c.runnerRequest)

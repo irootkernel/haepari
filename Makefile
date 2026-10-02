@@ -19,7 +19,7 @@ test-prepare:
 	$(GO) vet -tags=macos_supervision ./internal/platform
 	$(GO) build ./...
 	uv lock --check --offline
-	python3 -m compileall -q tests/e2e
+	python3 -m compileall -q tests/e2e tests/qualification
 	python3 docs/tools/validate_docs.py
 
 test-unit:

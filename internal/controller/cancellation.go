@@ -21,23 +21,24 @@ type nativeCompletion struct {
 // The gate serializes spawn and observed native completion against public
 // cancellation. It is never held throughout preparation, collection or cleanup.
 type localRunControl struct {
-	mu              sync.Mutex
-	wake            chan struct{}
-	receipt         managed.Receipt
-	identity        managed.LocalIdentity
-	completionMu    sync.Mutex
-	completed       chan struct{}
-	completion      *nativeCompletion
-	observed        bool
-	deadline        time.Time
-	cmd             *exec.Cmd
-	runnerRequest   string
-	runnerExited    chan struct{}
-	effects         bool
-	ownsJobRoot     bool
-	phases          map[string]managed.LocalPhase
-	beforePhase     func(string) // deterministic integration barrier; nil in production
-	beforeInputCopy func() error // stopped-worker fault injection after owned preparation; nil in production
+	mu               sync.Mutex
+	wake             chan struct{}
+	receipt          managed.Receipt
+	identity         managed.LocalIdentity
+	completionMu     sync.Mutex
+	completed        chan struct{}
+	completion       *nativeCompletion
+	observed         bool
+	deadline         time.Time
+	cmd              *exec.Cmd
+	runnerRequest    string
+	runnerExited     chan struct{}
+	effects          bool
+	ownsJobRoot      bool
+	phases           map[string]managed.LocalPhase
+	beforePhase      func(string) // deterministic integration barrier; nil in production
+	beforeInputCopy  func() error // stopped-worker fault injection after owned preparation; nil in production
+	recoveryEvidence *managed.RecoveryEvidence
 }
 
 func (c *localRunControl) phase(name string) {
@@ -169,8 +170,22 @@ func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
 	if end == nil {
 		return nil
 	}
+	if c.recoveryEvidence != nil {
+		if _, err := s.ledger.LocalOutcome(c.identity.JobID); err == nil {
+			// A prior controller may have frozen the outcome before its exit.
+			// Never replay its mutation key with a newly observed revision.
+			c.observed = true
+			return nil
+		} else if !errors.Is(err, managed.ErrNotFound) {
+			return err
+		}
+	}
 	out := nativeOutcome(c.cmd, *end, c.deadline)
-	r, err := s.ledger.RecordLocalOutcome(managed.LocalOutcomeRequest{Identity: c.identity, ExpectedRevision: c.receipt.JobRevision, Outcome: out, MutationKey: "outcome-" + c.identity.JobID})
+	key := "outcome-" + c.identity.JobID
+	if c.recoveryEvidence != nil {
+		key = "recovered-outcome-" + c.identity.JobID
+	}
+	r, err := s.ledger.RecordLocalOutcome(managed.LocalOutcomeRequest{Identity: c.identity, ExpectedRevision: c.receipt.JobRevision, Outcome: out, MutationKey: key})
 	if err != nil {
 		return err
 	}

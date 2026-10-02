@@ -3,25 +3,29 @@ package managed
 import (
 	"database/sql"
 	"encoding/json"
+	"reflect"
 	"slices"
 	"time"
+
+	"github.com/irootkernel/haepari/internal/platform"
 )
 
 // LocalPhase is an exact lease-bound intent or observation. Active event
 // payloads cannot be purged; terminal timings retain their useful projection.
 type LocalPhase struct {
-	Schema               string               `json:"schema"`
-	Identity             LocalIdentity        `json:"identity"`
-	Phase                string               `json:"phase"`
-	BudgetSeconds        int64                `json:"budget_seconds"`
-	StartedAt            time.Time            `json:"started_at"`
-	Deadline             time.Time            `json:"deadline"`
-	ObservedAt           time.Time            `json:"observed_at"`
-	Completed            bool                 `json:"completed"`
-	Outcome              string               `json:"outcome,omitempty"`
-	ProtectedEvidence    []ProtectedEvidence  `json:"protected_evidence,omitempty"`
-	Artifacts            []ResultArtifact     `json:"artifacts,omitempty"`
-	EvidenceCompleteness EvidenceCompleteness `json:"evidence_completeness,omitempty"`
+	Schema               string                    `json:"schema"`
+	Identity             LocalIdentity             `json:"identity"`
+	Phase                string                    `json:"phase"`
+	BudgetSeconds        int64                     `json:"budget_seconds"`
+	StartedAt            time.Time                 `json:"started_at"`
+	Deadline             time.Time                 `json:"deadline"`
+	ObservedAt           time.Time                 `json:"observed_at"`
+	Completed            bool                      `json:"completed"`
+	Outcome              string                    `json:"outcome,omitempty"`
+	ProtectedEvidence    []ProtectedEvidence       `json:"protected_evidence,omitempty"`
+	Artifacts            []ResultArtifact          `json:"artifacts,omitempty"`
+	EvidenceCompleteness EvidenceCompleteness      `json:"evidence_completeness,omitempty"`
+	ControllerOwner      *platform.ProcessIdentity `json:"controller_owner,omitempty"`
 }
 
 type LocalPhaseRequest struct {
@@ -94,6 +98,9 @@ func (l *Ledger) RecordLocalPhase(q LocalPhaseRequest) (Receipt, error) {
 }
 
 func validLocalPhase(p LocalPhase) bool {
+	if owner := p.ControllerOwner; owner != nil && (owner.BootID == "" || owner.PID <= 0 || owner.PGID <= 0 || owner.SID <= 0 || owner.StartedSeconds <= 0 || owner.StartedMicros < 0 || owner.StartedMicros >= 1000000) {
+		return false
+	}
 	if p.Schema != "haepari.phase-receipt/v1" ||
 		!oneOf(p.Phase, "prepare", "run", "collect", "cleanup", "verify") || p.StartedAt.IsZero() || p.ObservedAt.IsZero() ||
 		(p.Phase != "verify" && (p.BudgetSeconds <= 0 || p.Deadline.IsZero())) ||
@@ -123,7 +130,7 @@ func validLocalPhase(p LocalPhase) bool {
 }
 
 func samePhaseIntent(a, b LocalPhase) bool {
-	return a.Identity == b.Identity && a.BudgetSeconds == b.BudgetSeconds && a.StartedAt.Equal(b.StartedAt) && a.Deadline.Equal(b.Deadline)
+	return a.Identity == b.Identity && a.BudgetSeconds == b.BudgetSeconds && a.StartedAt.Equal(b.StartedAt) && a.Deadline.Equal(b.Deadline) && reflect.DeepEqual(a.ControllerOwner, b.ControllerOwner)
 }
 
 func localPhasesTx(tx *sql.Tx, jobID string) (map[string]LocalPhase, error) {
@@ -202,7 +209,7 @@ func resultTimingsTx(tx *sql.Tx, jobID string) (*ResultTimings, error) {
 		}
 		timings.ReservedAt = value.ReservedAt
 	}
-	phases, err := localPhasesTx(tx, jobID)
+	phases, err := effectiveLocalPhasesTx(tx, jobID)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +227,7 @@ func resultTimingsTx(tx *sql.Tx, jobID string) (*ResultTimings, error) {
 }
 
 func validatePhaseResultTx(tx *sql.Tx, jobID string, result Result) error {
-	phases, err := localPhasesTx(tx, jobID)
+	phases, err := effectiveLocalPhasesTx(tx, jobID)
 	if err != nil {
 		return err
 	}

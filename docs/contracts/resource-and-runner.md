@@ -83,7 +83,7 @@ Cancellation writers serialize within the request's termination budget and accep
 
 **How the controller uses them.** The controller imports receipts into SQLite. A missing later receipt is uncertainty, never success. After a restart, `intent.json` without `start.json` marks the ambiguous spawn window: resolve it through process evidence or leave it uncertain, and never spawn again.
 
-Schema 8 stores exact request/receipt bytes and digests in `managed_runner_receipts`, fences imports against the current run identity, and rejects conflicting replay or a missing predecessor. Import events do not change Job revisions or public cancellation replay identity. Migration creates no receipts for earlier runs and refuses a missing current-schema receipt table. TASK-011 owns startup reattachment and recovery; TASK-010 owns the broader common phase/settlement matrix.
+Schema 8 stores exact request/receipt bytes and digests in `managed_runner_receipts`, fences imports against the current run identity, and rejects conflicting replay or a missing predecessor. Import events do not change Job revisions or public cancellation replay identity. Migration creates no receipts for earlier runs and refuses a missing current-schema receipt table. TASK-011's current candidate reads these receipts during startup and reattaches only a freshly observed matching supervisor incarnation. A consistent stopped receipt resumes collection/cleanup/settlement without another workload start. Missing or conflicting observations remain occupied and quarantined; explicit recovery uses the revision-bound plan described in the CLI contract. TASK-010 owns the common phase/settlement matrix.
 
 ## Recovery and fencing
 

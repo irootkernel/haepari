@@ -284,6 +284,17 @@ func Inspect(path string) (Observation, error) {
 	return inspect(d, q)
 }
 
+// ReadRequest uses the same private, no-follow, closed-shape reader as the
+// supervisor. Recovery must not adopt an arbitrary historical request path.
+func ReadRequest(path string) (Request, error) {
+	d, q, err := readRequest(path)
+	if err != nil {
+		return q, err
+	}
+	defer d.close()
+	return q, nil
+}
+
 func Cancel(path string) error {
 	d, q, err := readRequest(path)
 	if err != nil {

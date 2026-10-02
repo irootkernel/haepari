@@ -62,7 +62,7 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		return managed.ErrConflict
 	}
 	c.mu.Unlock()
-	prepareErr := prepareLocal(prepareDeadline, func() error {
+	prepareErr := prepareOwnedLocal(s, prepareDeadline, func() error {
 		if !time.Now().Before(prepareDeadline) {
 			return context.DeadlineExceeded
 		}
@@ -131,6 +131,11 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		return err
 	}
 	c.phase("ready")
+	select {
+	case <-s.detached:
+		return errControllerDetached
+	default:
+	}
 	runID, err := randomID("run-")
 	if err != nil {
 		return err
@@ -219,6 +224,17 @@ func prepareLocal(deadline time.Time, work func() error) error {
 		return context.DeadlineExceeded
 	}
 	return prepareErr
+}
+
+func prepareOwnedLocal(s *runtimeServer, deadline time.Time, work func() error) error {
+	err, status := boundedOwnedPhase(s, deadline, work)
+	if status == phaseUnproven {
+		return errPrepareUnproven
+	}
+	if status == phaseLate {
+		return context.DeadlineExceeded
+	}
+	return err
 }
 
 type collectionAttempt struct {

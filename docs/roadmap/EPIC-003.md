@@ -61,25 +61,25 @@ Requirement coverage: `HP-REQ-018`, `HP-REQ-019`.
 Requirement coverage: `HP-REQ-020`, `HP-REQ-021`.
 
 #### Implement
-- [ ] On daemon restart reattach proven runs and receipts or enter a known interrupted-execution path; block affected resources, classify uncertainty, and implement revision-bound recovery plans/tokens with machine-observed versus operator-attested provenance.
-- [ ] Resume interrupted cleaning or settling from its durable intent. Refuse `resource recover` with `RECOVERY_BLOCKED` while a job still occupies the resource; job recovery comes first.
-- [ ] Provide the generic restart/recovery path for durable adapter intents and protected evidence references. TASK-013/TASK-015 bind VM power intents to exact VM/resource/operation generations and observed state; an issued `utmctl` command is not cancelled by a stale revision, and uncertain victims stay protected. Recovery plans must list any protected evidence loss before authorized disposal.
-- [ ] Install the development LaunchAgent decided in TASK-004 for isolated development instances only (`gui/<uid>`, `LimitLoadToSessionType=Aqua`, `AbandonProcessGroup=true`). No signing identity is required ([TASK-034 probe record](../records/TASK-034-utm-probe.md)). Prove that a runner in its own session survives controller exit and restart and is reattached. TASK-016 runs under this service.
+- [x] On daemon restart reattach proven runs and receipts or enter a known interrupted-execution path; block affected resources, classify uncertainty, and implement revision-bound recovery plans/tokens with machine-observed versus operator-attested provenance.
+- [x] Resume interrupted cleaning or settling from its durable intent. Refuse `resource recover` with `RECOVERY_BLOCKED` while a job still occupies the resource; job recovery comes first.
+- [x] Provide the generic restart/recovery path for durable adapter intents and protected evidence references. TASK-013/TASK-015 bind VM power intents to exact VM/resource/operation generations and observed state; an issued `utmctl` command is not cancelled by a stale revision, and uncertain victims stay protected. Recovery plans must list any protected evidence loss before authorized disposal.
+- [x] Install the development LaunchAgent decided in TASK-004 for isolated development instances only (`gui/<uid>`, `LimitLoadToSessionType=Aqua`, `AbandonProcessGroup=true`). No signing identity is required ([TASK-034 probe record](../records/TASK-034-utm-probe.md)). Prove that a runner in its own session survives controller exit and restart and is reattached. TASK-016 runs under this service.
 
 #### Do not
-- [ ] Do not apply managed-runner restart or VM cleanup assumptions to future external caller state. Preserve typed ownership for the later external recovery implementation.
-- [ ] Do not replay uncertain workloads, trust a bare PID, or let an old plan reset a newer lease.
+- [x] Do not apply managed-runner restart or VM cleanup assumptions to future external caller state. Preserve typed ownership for the later external recovery implementation.
+- [x] Do not replay uncertain workloads, trust a bare PID, or let an old plan reset a newer lease.
 
 #### Verify
-- [ ] Inject restart before/after spawn and exit receipt, conflicting controller observations, stale plans, and unidentifiable descendants.
-- [ ] Restart the development service while a runner works; assert reattachment, or a known interrupted path with retained occupancy, and no rerun.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Inject restart before/after spawn and exit receipt, conflicting controller observations, stale plans, and unidentifiable descendants.
+- [x] Restart the development service while a runner works; assert reattachment, or a known interrupted path with retained occupancy, and no rerun.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-012
 
