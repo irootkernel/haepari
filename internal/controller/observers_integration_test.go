@@ -36,7 +36,11 @@ func observerTestIdentity(path, runID string) {
 	st, err := privateLogStat(int(file.Fd()), false)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(file.Close()).To(gomega.Succeed())
-	gomega.Expect(writeReceipt(filepath.Dir(path), "output-identity.json", outputIdentity{Schema: "haepari.output-identity/v1", JobID: filepath.Base(filepath.Dir(path)), RunID: runID, Dev: uint64(st.Dev), Inode: st.Ino})).To(gomega.Succeed())
+	// These reader fixtures deliberately replace or corrupt bindings. They do
+	// not exercise the immutable production publisher.
+	raw, err := json.Marshal(outputIdentity{Schema: "haepari.output-identity/v1", JobID: filepath.Base(filepath.Dir(path)), RunID: runID, Dev: uint64(st.Dev), Inode: st.Ino})
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(os.WriteFile(filepath.Join(filepath.Dir(path), "output-identity.json"), raw, 0600)).To(gomega.Succeed())
 }
 
 func observerContext() (context.Context, context.CancelFunc) {

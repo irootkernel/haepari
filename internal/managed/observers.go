@@ -32,6 +32,9 @@ func (l *Ledger) LogObservation(jobID string) (LogObservation, error) {
 	if err != nil {
 		return o, err
 	}
+	if o.Snapshot.ResultStatus == "unavailable" {
+		return o, ErrResultUnavailable
+	}
 	var result []byte
 	if err = tx.QueryRow(`SELECT COALESCE(r.run_id,''),j.result_json FROM managed_jobs j LEFT JOIN managed_runs r ON r.job_id=j.id WHERE j.id=?`, jobID).Scan(&o.RunID, &result); err != nil {
 		return o, mapNoRows(err)

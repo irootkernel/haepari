@@ -78,7 +78,7 @@ func StartRun(path string) (Observation, error) {
 	if supervisor.Identity.BootID != q.BootID || supervisor.Identity.PGID != os.Getpid() || supervisor.Identity.SID != os.Getpid() {
 		return view, ErrInvalid
 	}
-	intent := Intent{Schema: "haepari.runner-intent/v1", Binding: q.Binding(), Supervisor: supervisor.Identity, RecordedAt: time.Now().UTC()}
+	intent := Intent{Schema: managed.RunnerSchema("intent"), Binding: q.Binding(), Supervisor: supervisor.Identity, RecordedAt: time.Now().UTC()}
 	if err := d.write("intent.json", intent); err != nil {
 		return view, err
 	}
@@ -117,13 +117,20 @@ func supervise(d *directory, q Request, path string) error {
 	}
 	defer status.Close()
 	defer statusWriter.Close()
+	logRead, logWrite, err := os.Pipe()
+	if err != nil {
+		gate.Close()
+		return err
+	}
+	defer logRead.Close()
+	defer logWrite.Close()
 	// This trampoline cannot execute project argv until its identity and start
 	// receipt are durable. EOF after supervisor death exits without a workload.
 	cmd := exec.Command(executable, "runner", "_exec", "--request", path)
 	cmd.Env = q.Environment
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.Stdout = log
-	cmd.Stderr = log
+	cmd.Stdout = logWrite
+	cmd.Stderr = logWrite
 	cmd.ExtraFiles = []*os.File{gate, statusWriter}
 	if err := cmd.Start(); err != nil {
 		gate.Close()
@@ -132,6 +139,16 @@ func supervise(d *directory, q Request, path string) error {
 	}
 	gate.Close()
 	statusWriter.Close()
+	logWrite.Close()
+	collector := newBoundedLog(log, q.LogLimitBytes)
+	collected := make(chan error, 1)
+	go func() {
+		_, err := io.CopyBuffer(collector, logRead, make([]byte, 64<<10))
+		logRead.Close()
+		collected <- err
+	}()
+	var logComplete bool
+	var logFailure error
 	boundary("after_spawn")
 	ended := make(chan nativeEnd, 1)
 	go func() { err := cmd.Wait(); ended <- nativeEnd{err, time.Now()} }()
@@ -142,7 +159,7 @@ func supervise(d *directory, q Request, path string) error {
 	if process.Identity.PGID != cmd.Process.Pid || process.Identity.SID != cmd.Process.Pid || process.Identity.BootID != q.BootID {
 		return ErrInvalid
 	}
-	if err := d.write("start.json", Start{Schema: "haepari.runner-start/v1", Binding: q.Binding(), Process: process.Identity, StartedAt: time.Now().UTC()}); err != nil {
+	if err := d.write("start.json", Start{Schema: managed.RunnerSchema("start"), Binding: q.Binding(), Process: process.Identity, StartedAt: time.Now().UTC()}); err != nil {
 		return err
 	}
 	boundary("after_start")
@@ -166,6 +183,13 @@ func supervise(d *directory, q Request, path string) error {
 	killed := false
 	var uncertainty error
 	for {
+		if !logComplete {
+			select {
+			case logFailure = <-collected:
+				logComplete = true
+			default:
+			}
+		}
 		// Import native completion before classifying cancellation. Exit is not
 		// termination proof; surviving group members must still be stopped.
 		if end == nil {
@@ -198,7 +222,7 @@ func supervise(d *directory, q Request, path string) error {
 				out.WorkloadOutcome = "cancelled"
 			}
 			outcome = &out
-			if err := d.write("outcome.json", Outcome{Schema: "haepari.runner-outcome/v1", Binding: q.Binding(), Outcome: out, ObservedAt: end.at.UTC()}); err != nil {
+			if err := d.write("outcome.json", Outcome{Schema: managed.RunnerSchema("outcome"), Binding: q.Binding(), Outcome: out, ObservedAt: end.at.UTC()}); err != nil {
 				return err
 			}
 			boundary("after_outcome")
@@ -220,16 +244,19 @@ func supervise(d *directory, q Request, path string) error {
 		if end != nil && len(alive) == 0 && scanErr == nil {
 			// Probe only; never signal an old PGID after reaping the leader.
 			groupErr := unix.Kill(-process.Identity.PGID, 0)
-			if errors.Is(groupErr, unix.ESRCH) {
+			if errors.Is(groupErr, unix.ESRCH) && logComplete {
+				if logFailure != nil && collector.gap == "" {
+					collector.gap = "log_read_failed"
+				}
 				if err := log.Sync(); err != nil {
 					return err
 				}
 				if uncertainty != nil {
-					return finish(d, q, *outcome, false, "native_observation_uncertain", end.at)
+					return finish(d, q, *outcome, false, "native_observation_uncertain", end.at, collector.manifest())
 				}
-				return finish(d, q, *outcome, true, "", end.at)
+				return finish(d, q, *outcome, true, "", end.at, collector.manifest())
 			}
-			if groupErr != nil && !errors.Is(groupErr, unix.EPERM) {
+			if groupErr != nil && !errors.Is(groupErr, unix.EPERM) && !errors.Is(groupErr, unix.ESRCH) {
 				uncertainty = groupErr
 			}
 		}
@@ -242,10 +269,13 @@ func supervise(d *directory, q Request, path string) error {
 				}
 			}
 			if time.Since(stopping) >= budget {
+				if !logComplete {
+					return ErrUnproven
+				}
 				if outcome == nil {
 					return ErrUnproven
 				}
-				return finish(d, q, *outcome, false, "termination_budget_expired", end.at)
+				return finish(d, q, *outcome, false, "termination_budget_expired", end.at, collector.manifest())
 			}
 		}
 		<-tick.C
@@ -259,22 +289,26 @@ func cancellation(d *directory, q Request) (bool, error) {
 	} else if err != nil {
 		return false, err
 	}
-	if cancel.Schema != "haepari.runner-cancel/v1" || cancel.Binding != q.Binding() || cancel.RequestedAt.IsZero() {
+	if cancel.Schema != managed.RunnerSchema("cancel") || cancel.Binding != q.Binding() || cancel.RequestedAt.IsZero() {
 		return false, ErrConflict
 	}
 	return true, nil
 }
 
-func finish(d *directory, q Request, out managed.LocalOutcome, proven bool, reason string, at time.Time) error {
+func finish(d *directory, q Request, out managed.LocalOutcome, proven bool, reason string, at time.Time, logs ...LogManifest) error {
 	var prior Outcome
 	if err := d.read("outcome.json", &prior); errors.Is(err, unix.ENOENT) {
-		if err := d.write("outcome.json", Outcome{Schema: "haepari.runner-outcome/v1", Binding: q.Binding(), Outcome: out, ObservedAt: at.UTC()}); err != nil {
+		if err := d.write("outcome.json", Outcome{Schema: managed.RunnerSchema("outcome"), Binding: q.Binding(), Outcome: out, ObservedAt: at.UTC()}); err != nil {
 			return err
 		}
 	} else if err != nil {
 		return err
 	}
-	return d.write("exit.json", Exit{Schema: "haepari.runner-exit/v1", Binding: q.Binding(), Outcome: out, TerminationProven: proven, Reason: reason, FinishedAt: time.Now().UTC()})
+	exit := Exit{Schema: managed.RunnerSchema("exit"), Binding: q.Binding(), Outcome: out, TerminationProven: proven, Reason: reason, FinishedAt: time.Now().UTC()}
+	if len(logs) > 0 {
+		exit.Log = &logs[0]
+	}
+	return d.write("exit.json", exit)
 }
 
 func nativeOutcome(cmd *exec.Cmd, end nativeEnd, deadline time.Time) managed.LocalOutcome {
@@ -423,7 +457,7 @@ func resolveCommand(name, workDir string, environment []string) (string, error) 
 	if strings.ContainsRune(name, filepath.Separator) {
 		return filepath.Join(workDir, name), nil
 	}
-	path := "/usr/bin:/bin"
+	path := managed.DefaultWorkloadPATH
 	for _, variable := range environment {
 		if key, value, ok := strings.Cut(variable, "="); ok && key == "PATH" {
 			path = value

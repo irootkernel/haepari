@@ -9,17 +9,21 @@ import (
 )
 
 type ResourceRecoveryJob struct {
-	JobID  string  `json:"job_id"`
-	Result *Result `json:"result,omitempty"`
+	JobID            string  `json:"job_id"`
+	Result           *Result `json:"result,omitempty"`
+	ResultStatus     string  `json:"result_status,omitempty"`
+	EvidenceResolved bool    `json:"evidence_resolved"`
 }
 
 type ResourceRecoverySnapshot struct {
-	Installation   string                  `json:"installation_id"`
-	Resource       ResourceStatus          `json:"resource"`
-	Jobs           []ResourceRecoveryJob   `json:"jobs"`
-	AdapterIntents []PowerIntent           `json:"adapter_intents"`
-	Pending        *ResourceRecoveryIntent `json:"pending_intent,omitempty"`
-	PendingStatus  *ResourceStatus         `json:"pending_status,omitempty"`
+	Installation    string                   `json:"installation_id"`
+	Resource        ResourceStatus           `json:"resource"`
+	Jobs            []ResourceRecoveryJob    `json:"jobs"`
+	AdapterIntents  []PowerIntent            `json:"adapter_intents"`
+	Pending         *ResourceRecoveryIntent  `json:"pending_intent,omitempty"`
+	PendingStatus   *ResourceStatus          `json:"pending_status,omitempty"`
+	EvidenceIntent  *EvidenceRecoveryIntent  `json:"evidence_intent,omitempty"`
+	EvidenceReceipt *EvidenceRecoveryReceipt `json:"evidence_receipt,omitempty"`
 }
 
 type ResourceRecoveryIntent struct {
@@ -57,14 +61,15 @@ func resourceRecoverySnapshotTx(tx *sql.Tx, id string) (ResourceRecoverySnapshot
 	if s.Resource.Occupancy != 0 {
 		return s, ErrBlocked
 	}
-	rows, err := tx.Query(`SELECT id,result_json FROM managed_jobs WHERE resource_id=? AND state='finished' ORDER BY id`, id)
+	rows, err := tx.Query(`SELECT j.id,j.result_json,a.retention_state FROM managed_jobs j JOIN managed_admissions a ON a.job_id=j.id WHERE j.resource_id=? AND j.state='finished' ORDER BY j.id`, id)
 	if err != nil {
 		return s, err
 	}
 	for rows.Next() {
 		var j ResourceRecoveryJob
 		var raw []byte
-		if err = rows.Scan(&j.JobID, &raw); err != nil {
+		var retention string
+		if err = rows.Scan(&j.JobID, &raw, &retention); err != nil {
 			rows.Close()
 			return s, err
 		}
@@ -77,6 +82,12 @@ func resourceRecoverySnapshotTx(tx *sql.Tx, id string) (ResourceRecoverySnapshot
 			rows.Close()
 			return s, err
 		}
+		if retention == "unavailable" {
+			j.ResultStatus = retention
+		} else if retention != "available" {
+			rows.Close()
+			return s, ErrBlocked
+		}
 		s.Jobs = append(s.Jobs, j)
 	}
 	err = rows.Err()
@@ -84,11 +95,44 @@ func resourceRecoverySnapshotTx(tx *sql.Tx, id string) (ResourceRecoverySnapshot
 	if err != nil {
 		return s, err
 	}
+	for i := range s.Jobs {
+		s.Jobs[i].EvidenceResolved, err = evidenceResolvedTx(tx, *s.Jobs[i].Result)
+		if err != nil {
+			return s, err
+		}
+		if s.Jobs[i].ResultStatus == "unavailable" {
+			if !s.Jobs[i].EvidenceResolved {
+				return s, ErrBlocked
+			}
+			// Purged results are private reconciliation authority. Recovery
+			// still needs their ownership and resolved-evidence projection.
+			s.Jobs[i].Result = nil
+		}
+	}
 	s.AdapterIntents, err = pendingRecoveryIntentsTx(tx, id)
 	if err != nil {
 		return s, err
 	}
 	if s.Resource.Availability == "recovering" {
+		var a, b []byte
+		err = tx.QueryRow(`SELECT request_json,receipt_json FROM managed_evidence_recovery WHERE resource_id=? AND (receipt_json IS NULL OR json_extract(receipt_json,'$.complete')=0)`, id).Scan(&a, &b)
+		if err == nil {
+			q := new(EvidenceRecoveryIntent)
+			if decodeClosed(a, q) != nil || !validEvidenceIntent(*q) || q.ResourceConfigRevision != s.Resource.ConfigRevision || q.ResourceAvailabilityRevision+1 != s.Resource.AvailabilityRevision {
+				return s, ErrBlocked
+			}
+			s.EvidenceIntent = q
+			if len(b) > 0 {
+				s.EvidenceReceipt = new(EvidenceRecoveryReceipt)
+				if decodeClosed(b, s.EvidenceReceipt) != nil || !validEvidenceReceipt(*q, *s.EvidenceReceipt) {
+					return s, ErrBlocked
+				}
+			}
+			return s, nil
+		}
+		if err != sql.ErrNoRows {
+			return s, err
+		}
 		rows, err = tx.Query(`SELECT request_json,status_json FROM managed_availability_receipts WHERE resource_id=? ORDER BY recorded_at_ns DESC`, id)
 		if err != nil {
 			return s, err
@@ -126,7 +170,7 @@ func resourceRecoverySnapshotTx(tx *sql.Tx, id string) (ResourceRecoverySnapshot
 }
 
 func (l *Ledger) RecoveringResources() ([]string, error) {
-	rows, err := l.db.Query(`SELECT id FROM managed_resources WHERE kind='local' AND availability='recovering' ORDER BY id`)
+	rows, err := l.db.Query(`SELECT id FROM managed_resources WHERE availability='recovering' ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -195,11 +239,11 @@ func (l *Ledger) BeginResourceRecovery(q ResourceRecoveryIntent) (ResourceStatus
 	if RecoveryDigest(s) != q.SnapshotDigest {
 		return ResourceStatus{}, ErrStale
 	}
-	if s.Resource.Kind != "local" || !oneOf(s.Resource.Availability, "quarantined", "recovering") || len(s.AdapterIntents) > 0 {
+	if !oneOf(s.Resource.Availability, "quarantined", "recovering") || len(s.AdapterIntents) > 0 {
 		return ResourceStatus{}, ErrBlocked
 	}
 	for _, j := range s.Jobs {
-		if len(j.Result.ProtectedEvidence) > 0 || !oneOf(string(j.Result.CleanupOutcome), "verified", "not_needed") {
+		if !j.EvidenceResolved {
 			return ResourceStatus{}, ErrBlocked
 		}
 	}
@@ -244,7 +288,7 @@ func (l *Ledger) CompleteResourceRecovery(expected ResourceStatus, key, digest s
 		return ResourceStatus{}, ErrStale
 	}
 	for _, j := range s.Jobs {
-		if len(j.Result.ProtectedEvidence) > 0 || !oneOf(string(j.Result.CleanupOutcome), "verified", "not_needed") {
+		if !j.EvidenceResolved {
 			return ResourceStatus{}, ErrBlocked
 		}
 	}

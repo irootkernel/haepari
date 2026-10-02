@@ -58,7 +58,7 @@ var _ = ginkgo.Describe("Task008ClientProtocol", ginkgo.Label("integration"), fu
 		defer ranged.Close()
 		gomega.Expect(ranged.Hello.Version).To(gomega.Equal(1))
 		gomega.Expect(ranged.Hello.InstallationID).To(gomega.Equal(c.Hello.InstallationID))
-		gomega.Expect(ranged.Hello.Capabilities).To(gomega.ContainElement("durable-observation/v1"))
+		gomega.Expect(ranged.Hello.Capabilities).To(gomega.ConsistOf("managed-execution/v1", "durable-observation/v1", "advisory-lock/v1", "managed-recovery/v1", "artifact-delivery/v1", "evidence-retention/v1"))
 		_, e = client.ConnectRange(context.Background(), s.root, 2, 3)
 		var issue *client.Issue
 		gomega.Expect(errors.As(e, &issue)).To(gomega.BeTrue())

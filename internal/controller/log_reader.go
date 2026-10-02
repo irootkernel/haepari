@@ -311,5 +311,13 @@ func (l *logReader) read(after int64, identity string, observation managed.LogOb
 	}
 	p.NextOffset += int64(read)
 	p.More = p.NextOffset < p.Size
+	if !p.More && observation.Result != nil && len(observation.Result.EvidenceGaps) > 0 {
+		for _, gap := range observation.Result.EvidenceGaps {
+			if gap.Path == "output.log" {
+				p.Gap = &logGap{Reason: gap.Reason, RequestedOffset: after, ResumeOffset: p.NextOffset, PreviousIdentity: p.Identity}
+				break
+			}
+		}
+	}
 	return p, nil
 }

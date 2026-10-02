@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -190,42 +189,6 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 	return s.settleLocalPhases(c, job, jobRoot, workspace, frozen, false, reason, logFile)
 }
 
-func resolveWorkloadCommand(name, workDir, pathEnv string) (string, error) {
-	if filepath.IsAbs(name) {
-		return name, nil
-	}
-	if strings.ContainsRune(name, filepath.Separator) {
-		return filepath.Join(workDir, name), nil
-	}
-	for _, directory := range filepath.SplitList(pathEnv) {
-		if !filepath.IsAbs(directory) {
-			directory = filepath.Join(workDir, directory)
-		}
-		candidate := filepath.Join(directory, name)
-		info, err := os.Stat(candidate)
-		if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0 {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("workload executable %q unavailable in its PATH", name)
-}
-
-func prepareLocal(deadline time.Time, work func() error) error {
-	if !time.Now().Before(deadline) {
-		return context.DeadlineExceeded
-	}
-	prepareErr, prepareStatus := boundedPhase(deadline, work)
-	if prepareStatus == phaseUnproven {
-		// The worker may still write the owned workspace. It cannot claim a
-		// run; retain occupancy and evidence until reconciliation proves stop.
-		return errPrepareUnproven
-	}
-	if prepareStatus == phaseLate || !time.Now().Before(deadline) {
-		return context.DeadlineExceeded
-	}
-	return prepareErr
-}
-
 func prepareOwnedLocal(s *runtimeServer, deadline time.Time, work func() error) error {
 	err, status := boundedOwnedPhase(s, deadline, work)
 	if status == phaseUnproven {
@@ -254,36 +217,6 @@ const (
 type phaseCompletion[T any] struct {
 	value      T
 	finishedAt time.Time
-}
-
-// boundedPhase bounds controller observation, not an uninterruptible kernel
-// call. On timeout the caller must retain ownership and reconcile the worker.
-// A completed operation carries its actual finish time so scheduler delay or
-// a timer race cannot turn late cleanup into verified cleanup.
-func boundedPhase[T any](deadline time.Time, work func() T) (T, phaseStatus) {
-	if !time.Now().Before(deadline) {
-		var zero T
-		return zero, phaseLate
-	}
-	done := make(chan phaseCompletion[T], 1)
-	go func() {
-		value := work()
-		done <- phaseCompletion[T]{value: value, finishedAt: time.Now()}
-	}()
-	timer := time.NewTimer(time.Until(deadline))
-	defer timer.Stop()
-	select {
-	case result := <-done:
-		return result.value, completionStatus(result.finishedAt, deadline)
-	case <-timer.C:
-		select {
-		case result := <-done:
-			return result.value, completionStatus(result.finishedAt, deadline)
-		default:
-			var zero T
-			return zero, phaseUnproven
-		}
-	}
 }
 
 func completionStatus(finishedAt, deadline time.Time) phaseStatus {
@@ -360,34 +293,6 @@ func copyInputWithCancel(snap snapshot.Snapshot, destination string, deadline ti
 	return nil
 }
 
-func ensureGroupStopped(pgid int, budget time.Duration) error {
-	if pgid <= 0 {
-		return errors.New("missing process group identity")
-	}
-	if budget <= 0 {
-		return errors.New("missing cleanup budget")
-	}
-	deadline := time.Now().Add(budget)
-	termAt := time.Now()
-	_ = syscall.Kill(-pgid, syscall.SIGTERM)
-	killed := false
-	for time.Now().Before(deadline) {
-		err := syscall.Kill(-pgid, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			return nil
-		}
-		if err != nil && !errors.Is(err, syscall.EPERM) {
-			return fmt.Errorf("inspect process group: %w", err)
-		}
-		if !killed && time.Since(termAt) >= 2*time.Second {
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-			killed = true
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	return errors.New("owned process group termination unproven")
-}
-
 func openContainedOutput(root, name string) (*os.File, os.FileInfo, error) {
 	fd, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -432,17 +337,34 @@ func openContainedOutput(root, name string) (*os.File, os.FileInfo, error) {
 }
 
 func collectOutputs(workspace, artifactRoot string, required []string, deadline time.Time) ([]managed.ResultArtifact, bool, bool) {
+	return collectOutputsBounded(workspace, artifactRoot, required, deadline, 1<<30, 1000)
+}
+
+func collectOutputsBounded(workspace, artifactRoot string, required []string, deadline time.Time, byteLimit int64, countLimit int) ([]managed.ResultArtifact, bool, bool) {
+	return collectOutputsWithCopy(workspace, artifactRoot, required, deadline, byteLimit, countLimit, copyUntil)
+}
+
+func collectOutputsWithCopy(workspace, artifactRoot string, required []string, deadline time.Time, byteLimit int64, countLimit int, copyFile func(io.Writer, io.Reader, time.Time) (int64, error)) ([]managed.ResultArtifact, bool, bool) {
+	if byteLimit <= 0 || countLimit <= 0 || len(required) > countLimit {
+		return nil, false, false
+	}
 	if err := os.Mkdir(artifactRoot, 0700); err != nil {
 		return nil, false, false
 	}
 	artifacts := make([]managed.ResultArtifact, 0, len(required))
 	complete := true
+	var collectedBytes int64
 	for _, name := range required {
 		if !time.Now().Before(deadline) {
 			return artifacts, false, true
 		}
 		input, info, err := openContainedOutput(workspace, name)
 		if err != nil {
+			complete = false
+			continue
+		}
+		if info.Size() > byteLimit-collectedBytes {
+			input.Close()
 			complete = false
 			continue
 		}
@@ -459,7 +381,8 @@ func collectOutputs(workspace, artifactRoot string, required []string, deadline 
 			continue
 		}
 		h := sha256.New()
-		size, copyErr := copyUntil(io.MultiWriter(output, h), input, deadline)
+		// Read one extra byte to detect growth without allowing an unbounded copy.
+		size, copyErr := copyFile(io.MultiWriter(output, h), io.LimitReader(input, info.Size()+1), deadline)
 		after, statErr := input.Stat()
 		closeIn := input.Close()
 		syncErr := output.Sync()
@@ -473,6 +396,7 @@ func collectOutputs(workspace, artifactRoot string, required []string, deadline 
 			continue
 		}
 		artifacts = append(artifacts, managed.ResultArtifact{Path: name, SizeBytes: size, SHA256: hex.EncodeToString(h.Sum(nil))})
+		collectedBytes += size
 	}
 	if !time.Now().Before(deadline) {
 		return artifacts, false, true
@@ -556,46 +480,6 @@ func removeEntryUntil(parent int, name string, deadline time.Time) error {
 		return context.DeadlineExceeded
 	}
 	return unix.Unlinkat(parent, name, unix.AT_REMOVEDIR)
-}
-
-func writeReceipt(root, name string, value any) error {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	temp, err := os.CreateTemp(root, ".receipt-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(temp.Name())
-	if err := temp.Chmod(0600); err != nil {
-		temp.Close()
-		return err
-	}
-	if _, err := temp.Write(encoded); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temp.Name(), filepath.Join(root, name)); err != nil {
-		return err
-	}
-	dir, err := os.Open(root)
-	if err != nil {
-		return err
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil {
-		return syncErr
-	}
-	return closeErr
 }
 
 // Both startup and resume use the same no-symlink private-directory predicate.

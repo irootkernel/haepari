@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/runner"
 	"github.com/irootkernel/haepari/internal/snapshot"
 	"github.com/irootkernel/haepari/internal/state"
 	"github.com/irootkernel/haepari/internal/store/sqlite"
@@ -16,7 +17,6 @@ import (
 	"github.com/onsi/gomega"
 	"golang.org/x/sys/unix"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -70,34 +70,6 @@ var _ = ginkgo.Describe("CopyInputRevalidatesSealedBytes", ginkgo.Label("integra
 		}
 		if err := copyInput(snap, filepath.Join(parent, "expired"), time.Now().Add(-time.Second)); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expired preparation accepted: %v", err)
-		}
-
-	})
-})
-
-var _ = ginkgo.Describe("ResolveWorkloadCommandUsesDeclaredPath", ginkgo.Label("integration"), func() {
-	ginkgo.It("ResolveWorkloadCommandUsesDeclaredPath", func() {
-		t := ginkgo.GinkgoT()
-		workDir := t.TempDir()
-		bin := filepath.Join(workDir, "bin")
-		if err := os.Mkdir(bin, 0700); err != nil {
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		tool := filepath.Join(bin, "selected-tool")
-		if err := os.WriteFile(tool, []byte("#!/bin/sh\nprintf declared-path"), 0700); err != nil {
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		t.Setenv("PATH", "/usr/bin:/bin")
-		resolved, err := resolveWorkloadCommand("selected-tool", workDir, "bin")
-		if err != nil || resolved != tool {
-			t.Fatalf("workload PATH resolution: %q %v", resolved, err)
-		}
-		output, err := (&exec.Cmd{Path: resolved, Args: []string{"selected-tool"}, Dir: workDir, Env: []string{"PATH=bin"}}).Output()
-		if err != nil || string(output) != "declared-path" {
-			t.Fatalf("resolved workload execution: %q %v", output, err)
-		}
-		if _, err := resolveWorkloadCommand("selected-tool", workDir, "/usr/bin:/bin"); err == nil {
-			t.Fatal("controller-only executable path was accepted")
 		}
 
 	})
@@ -172,7 +144,7 @@ var _ = ginkgo.Describe("PreparationDeadlineAndUnprovenWorkerKeepCorrectOwnershi
 						}
 					}()
 					workspace := filepath.Join(root.Path, "jobs", reserved.JobID, "workspace")
-					cause = prepareLocal(time.Now().Add(200*time.Millisecond), func() error {
+					cause = prepareOwnedLocal(s, time.Now().Add(200*time.Millisecond), func() error {
 						defer close(finished)
 						if err := os.MkdirAll(workspace, 0700); err != nil {
 							return err
@@ -258,21 +230,15 @@ var _ = ginkgo.Describe("CollectorRejectsSymlinkedOutput", ginkgo.Label("integra
 var _ = ginkgo.Describe("OwnedBackgroundGroupIsStopped", ginkgo.Label("integration"), func() {
 	ginkgo.It("OwnedBackgroundGroupIsStopped", func() {
 		t := ginkgo.GinkgoT()
-		cmd := exec.Command("/bin/sh", "-c", "sleep 30 >/dev/null 2>&1 &")
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		if err := cmd.Start(); err != nil {
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		pgid := cmd.Process.Pid
-		if err := cmd.Wait(); err != nil {
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		if err := ensureGroupStopped(pgid, 5*time.Second); err != nil {
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		if err := syscall.Kill(-pgid, 0); !errors.Is(err, syscall.ESRCH) {
-			t.Fatalf("owned group still present: %v", err)
-		}
+		_, s, r, job, object := cancellationRuntime(t, "mkdir -p ../results; printf done > ../results/output.txt; /bin/sleep 30 >/dev/null 2>&1 &")
+		gomega.Expect(s.executeLocal(r, job, object, time.Now().Add(5*time.Second))).To(gomega.Succeed())
+		view, err := runner.Inspect(filepath.Join(s.root.Path, "jobs", r.JobID, "request.json"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(view.Exit.TerminationProven).To(gomega.BeTrue())
+		gomega.Expect(errors.Is(syscall.Kill(-view.Start.Process.PGID, 0), syscall.ESRCH)).To(gomega.BeTrue())
+		result, err := s.ledger.Result(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Pass))
 
 	})
 })
@@ -342,7 +308,16 @@ var _ = ginkgo.Describe("BlockedPhaseReturnsUnprovenAtDeadline", ginkgo.Label("i
 		blocked := make(chan struct{})
 		finished := make(chan struct{})
 		start := time.Now()
-		_, status := boundedPhase(start.Add(20*time.Millisecond), func() error {
+		s := &runtimeServer{}
+		defer func() {
+			select {
+			case <-blocked:
+			default:
+				close(blocked)
+			}
+			s.workers.Wait()
+		}()
+		_, status := boundedOwnedPhase(s, start.Add(20*time.Millisecond), func() error {
 			<-blocked
 			close(finished)
 			return nil

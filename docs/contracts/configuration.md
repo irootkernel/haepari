@@ -81,3 +81,7 @@ A failed validation keeps the old effective configuration and refuses startup. R
 - **Changing VM identity or adapter** requires zero active reservations. Queued requests pinned to the old revision need explicit handling: keep the old immutable definition until they drain, or cancel them with explicit receipts. Never retarget silently.
 - **Removal** requires an idle resource, no queued or pinned requests and no retained recovery reference. Removing a registration never deletes a VM package.
 - **VM registration** checks that UTM lists the UUID, that no other resource names the same UUID or MAC address, and that the SSH host key pin is present. It never creates, clones, boots or deletes a VM.
+
+## TASK-012 implementation boundary
+
+The current local controller uses the default 256 MiB combined stdout/stderr log prefix, 1 GiB and 1000 required outputs per collection, and 64 KiB delivery pages. Truncation and write failures become explicit immutable evidence gaps. Required outputs exceeding a bound remain protected and cannot produce complete evidence. This implements default resource protection, not the full operator configuration parser. The table's configurable retention days do not authorize automatic deletion: only explicit revision-bound purge and protected-evidence recovery are implemented. TASK-023 owns effective configuration and performance qualification; changing a frozen managed schema requires the F1 contract decision process.

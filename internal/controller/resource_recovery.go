@@ -12,6 +12,7 @@ import (
 
 type resourceRecoveryPlan struct {
 	Schema       string                           `json:"schema"`
+	Action       string                           `json:"action,omitempty"`
 	Snapshot     managed.ResourceRecoverySnapshot `json:"snapshot"`
 	Observation  any                              `json:"observation"`
 	ObservedAt   time.Time                        `json:"observed_at"`
@@ -27,16 +28,27 @@ func (s *runtimeServer) resumeResourceRecovery(id string) error {
 	if err != nil {
 		return err
 	}
-	if snap.Resource.Kind != "local" || snap.Pending == nil || snap.PendingStatus == nil {
+	if snap.EvidenceIntent != nil {
+		return s.resumeEvidenceRecovery(*snap.EvidenceIntent)
+	}
+	if _, err = s.evidenceBackendFor(snap.Resource.Kind, id); err != nil || snap.Pending == nil || snap.PendingStatus == nil {
 		return managed.ErrBlocked
 	}
 	facts, healthy := s.observeResourceRecovery(snap)
-	evidence := recoveryObservation("local-resource-recovery-verification", facts, "resource:"+id)
+	evidence := recoveryObservation("resource-recovery-verification", facts, "resource:"+id)
 	_, err = s.ledger.CompleteResourceRecovery(*snap.PendingStatus, snap.Pending.MutationKey+"-complete", snap.Pending.ClientDigest, evidence, healthy)
 	return err
 }
 
 func (s *runtimeServer) observeResourceRecovery(snap managed.ResourceRecoverySnapshot) (any, bool) {
+	backend, err := s.evidenceBackendFor(snap.Resource.Kind, snap.Resource.ID)
+	if err != nil {
+		return map[string]any{"backend_available": false}, false
+	}
+	return backend.Health(snap)
+}
+
+func (s *runtimeServer) observeLocalResourceRecovery(snap managed.ResourceRecoverySnapshot) (any, bool) {
 	fd, err := unix.Open(filepath.Join(s.root.Path, "jobs"), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return map[string]any{"jobs_root_valid": false}, false
@@ -79,9 +91,11 @@ func (s *runtimeServer) planResourceRecovery(id string) (resourceRecoveryPlan, e
 		return resourceRecoveryPlan{}, err
 	}
 	p := resourceRecoveryPlan{Schema: "haepari.recovery-plan/v1", Snapshot: snap, ObservedAt: time.Now().UTC(), Unknowns: []string{}, Effects: []string{}, EvidenceLoss: []managed.ProtectedEvidence{}}
-	if snap.Resource.Kind != "local" {
+	if _, err := s.evidenceBackendFor(snap.Resource.Kind, id); err != nil {
 		for _, j := range snap.Jobs {
-			p.EvidenceLoss = append(p.EvidenceLoss, j.Result.ProtectedEvidence...)
+			if j.Result != nil {
+				p.EvidenceLoss = append(p.EvidenceLoss, j.Result.ProtectedEvidence...)
+			}
 		}
 		p.Observation = map[string]any{"ownership_kind": snap.Resource.Kind, "adapter_intents": snap.AdapterIntents}
 		p.Unknowns = append(p.Unknowns, "generation-bound backend observation and evidence-preserving cleanup are required")
@@ -91,8 +105,8 @@ func (s *runtimeServer) planResourceRecovery(id string) (resourceRecoveryPlan, e
 		return p, managed.ErrBlocked
 	}
 	for _, j := range snap.Jobs {
-		p.EvidenceLoss = append(p.EvidenceLoss, j.Result.ProtectedEvidence...)
-		if len(j.Result.ProtectedEvidence) > 0 || j.Result.CleanupOutcome == "failed" || j.Result.CleanupOutcome == "unknown" {
+		if !j.EvidenceResolved {
+			p.EvidenceLoss = append(p.EvidenceLoss, j.Result.ProtectedEvidence...)
 			p.Unknowns = append(p.Unknowns, "job:"+j.JobID+" requires evidence-preserving collection or disposal before reuse")
 		}
 	}
@@ -120,7 +134,7 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	if q.Action != "" || q.Evidence != nil {
+	if q.Evidence != nil || q.Action != "" && (!q.Plan || q.Action != "recollect" && q.Action != "dispose") {
 		reject(w, op, managed.ErrInvalid)
 		return
 	}
@@ -129,7 +143,13 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 			reject(w, op, managed.ErrInvalid)
 			return
 		}
-		plan, err := s.planResourceRecovery(id)
+		var plan resourceRecoveryPlan
+		var err error
+		if q.Action != "" {
+			plan, err = s.planEvidenceRecovery(id, q.Action)
+		} else {
+			plan, err = s.planResourceRecovery(id)
+		}
 		if err != nil {
 			reject(w, op, err)
 			return
@@ -142,6 +162,29 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	key := "resource-recovery-" + q.MutationKey
+	// Permanent evidence-operation replay survives token expiry and restart.
+	if prior, receipt, found, err := s.ledger.EvidenceRecovery("evidence-recovery-"+q.MutationKey, managed.RecoveryDigest(struct {
+		ResourceID string
+		Request    managed.RecoveryRequest
+	}{id, q})); found || err != nil {
+		if err != nil {
+			reject(w, op, err)
+			return
+		}
+		if receipt == nil || !receipt.Complete {
+			if err = s.resumeEvidenceRecovery(prior); err != nil {
+				reject(w, op, err)
+				return
+			}
+			_, receipt, _, err = s.ledger.EvidenceRecovery(prior.MutationKey, prior.ClientDigest)
+			if err != nil {
+				reject(w, op, err)
+				return
+			}
+		}
+		send(w, 200, op, receipt, nil)
+		return
+	}
 	digest := managed.RecoveryDigest(struct {
 		ResourceID string                  `json:"resource_id"`
 		Request    managed.RecoveryRequest `json:"request"`
@@ -159,6 +202,10 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		reject(w, op, err)
 		return
 	}
+	if token.Action == "recollect" || token.Action == "dispose" {
+		s.applyEvidenceRecovery(w, r, id, q, token)
+		return
+	}
 	if token.JobID != "resource:"+id || token.Action != "reconcile" || !time.Now().Before(token.ExpiresAt) {
 		reject(w, op, managed.ErrStale)
 		return
@@ -172,7 +219,7 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		reject(w, op, managed.ErrStale)
 		return
 	}
-	evidence := recoveryObservation("local-resource-readiness", plan.Observation, "resource:"+id)
+	evidence := recoveryObservation("resource-readiness", plan.Observation, "resource:"+id)
 	intent := managed.ResourceRecoveryIntent{Schema: "haepari.resource-recovery-intent/v1", ResourceID: id, SnapshotDigest: token.SnapshotDigest, ClientDigest: digest, MutationKey: key, Evidence: evidence}
 	started, err := s.ledger.BeginResourceRecovery(intent)
 	if err != nil {
@@ -180,7 +227,7 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	facts, healthy := s.observeResourceRecovery(plan.Snapshot)
-	evidence = recoveryObservation("local-resource-recovery-verification", facts, "resource:"+id)
+	evidence = recoveryObservation("resource-recovery-verification", facts, "resource:"+id)
 	_, err = s.ledger.CompleteResourceRecovery(started, key+"-complete", digest, evidence, healthy)
 	if err != nil {
 		reject(w, op, err)

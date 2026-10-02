@@ -104,9 +104,6 @@ func (l *Ledger) EventsAfter(jobID string, after int64, limit int) (EventBatch, 
 	if err != nil {
 		return EventBatch{}, err
 	}
-	if snapshot.ResultStatus == "unavailable" {
-		return EventBatch{}, ErrResultUnavailable
-	}
 	var current int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(cursor),0) FROM managed_event_owners WHERE job_id=?`, jobID).Scan(&current); err != nil {
 		return EventBatch{}, err
@@ -123,6 +120,9 @@ func (l *Ledger) EventsAfter(jobID string, after int64, limit int) (EventBatch, 
 		if owner != jobID {
 			return EventBatch{}, ErrInvalid
 		}
+	}
+	if snapshot.ResultStatus == "unavailable" {
+		return EventBatch{}, ErrResultUnavailable
 	}
 	var purgedThrough int64
 	if err := tx.QueryRow(`SELECT purged_through FROM managed_event_progress WHERE job_id=?`, jobID).Scan(&purgedThrough); err != nil {
@@ -331,7 +331,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 8 {
+	if version > 9 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
 	if err := checkBaseSchemaTx(tx, version); err != nil {
@@ -354,6 +354,11 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	}
 	if version >= 8 {
 		if err := checkRunnerSchemaTx(tx); err != nil {
+			return nil, err
+		}
+	}
+	if version >= 9 {
+		if err := checkRetentionSchemaTx(tx); err != nil {
 			return nil, err
 		}
 	}
@@ -416,6 +421,9 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 		return nil, err
 	}
 	if err := initRunnerSchemaTx(tx, version); err != nil {
+		return nil, err
+	}
+	if err := initRetentionSchemaTx(tx, version); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

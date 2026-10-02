@@ -55,6 +55,7 @@ func (s *runtimeServer) endPhase(c *localRunControl, phase string, completion ma
 	p.Completed, p.ObservedAt = true, time.Now().UTC()
 	p.Outcome, p.ProtectedEvidence = completion.Outcome, completion.ProtectedEvidence
 	p.Artifacts, p.EvidenceCompleteness = completion.Artifacts, completion.EvidenceCompleteness
+	p.Logs, p.EvidenceGaps = completion.Logs, completion.EvidenceGaps
 	var r managed.Receipt
 	var err error
 	if c.recoveryEvidence != nil {
@@ -144,6 +145,24 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 		return collectionAttempt{artifacts: artifacts, complete: complete, expired: expired}
 	})
 	protected := []managed.ProtectedEvidence{}
+	logs, gaps, err := s.ledger.LocalLogManifest(c.identity.JobID)
+	if err != nil {
+		return err
+	}
+	if len(gaps) > 0 {
+		collected.complete = false
+	}
+	if !collected.complete {
+		present := map[string]bool{}
+		for _, a := range collected.artifacts {
+			present[a.Path] = true
+		}
+		for _, name := range required {
+			if !present[name] {
+				gaps = append(gaps, managed.EvidenceGap{Path: name, Reason: "required_output_uncollected"})
+			}
+		}
+	}
 	collectionOutcome := "complete"
 	if collectionStatus == phaseLate {
 		collected.complete, collected.expired = false, true
@@ -166,7 +185,7 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	if !collected.complete {
 		evidence = "partial"
 	}
-	if err := s.endPhase(c, "collect", managed.LocalPhase{Outcome: collectionOutcome, ProtectedEvidence: protected, Artifacts: collected.artifacts, EvidenceCompleteness: evidence}); err != nil {
+	if err := s.endPhase(c, "collect", managed.LocalPhase{Outcome: collectionOutcome, ProtectedEvidence: protected, Artifacts: collected.artifacts, Logs: logs, EvidenceGaps: gaps, EvidenceCompleteness: evidence}); err != nil {
 		return err
 	}
 	if collectionStatus == phaseUnproven {
@@ -223,6 +242,7 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 		return err
 	}
 	result := managed.Result{ResourceAvailability: "available", WorkloadOutcome: outcome.WorkloadOutcome, EvidenceCompleteness: evidence, CleanupOutcome: cleanup, NativeExitCode: outcome.NativeExitCode, NativeSignal: outcome.NativeSignal, Artifacts: collected.artifacts, ProtectedEvidence: protected, Reason: reason}
+	result.Logs, result.EvidenceGaps = logs, gaps
 	if cleanup == "failed" {
 		result.ResourceAvailability = "quarantined"
 	}

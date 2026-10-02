@@ -164,9 +164,10 @@ func (c *Client) Submit(ctx context.Context, spec []byte, key string) (managed.R
 }
 
 type Inspection struct {
-	Receipt      managed.Receipt       `json:"receipt"`
-	Result       *managed.Result       `json:"result,omitempty"`
-	QueueBlocker *managed.QueueBlocker `json:"queue_blocker,omitempty"`
+	Receipt       managed.Receipt                   `json:"receipt"`
+	Result        *managed.Result                   `json:"result,omitempty"`
+	QueueBlocker  *managed.QueueBlocker             `json:"queue_blocker,omitempty"`
+	Supplementary []managed.EvidenceRecoveryOutcome `json:"supplementary,omitempty"`
 }
 
 func (c *Client) Inspect(ctx context.Context, id string) (Inspection, Envelope, error) {

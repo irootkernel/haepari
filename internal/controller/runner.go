@@ -29,10 +29,6 @@ func (s *runtimeServer) runWithSupervisor(c *localRunControl, job managed.JobSpe
 	})
 }
 
-func observeWithinRunBudget(deadline time.Time, terminationAllowance time.Duration, observer func() (bool, *os.File, error)) (bool, *os.File, error) {
-	return observeWithinRunBudgetWithWorker(deadline, terminationAllowance, func(work func()) bool { go work(); return true }, nil, observer)
-}
-
 func observeWithinRunBudgetWithWorker(deadline time.Time, terminationAllowance time.Duration, start func(func()) bool, detached <-chan struct{}, observer func() (bool, *os.File, error)) (bool, *os.File, error) {
 	type completion struct {
 		started bool
@@ -94,7 +90,7 @@ func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpe
 	if err != nil {
 		return false, log, err
 	}
-	workPath := "/usr/bin:/bin"
+	workPath := managed.DefaultWorkloadPATH
 	if declared, ok := job.Workload.Environment["PATH"]; ok {
 		workPath = declared
 	}
@@ -114,7 +110,7 @@ func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpe
 	if err := unix.Fstat(int(log.Fd()), &st); err != nil {
 		return false, log, err
 	}
-	q := runner.Request{Schema: "haepari.runner-request/v1", Identity: c.identity, BootID: boot, WorkDir: filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: environment, Deadline: deadline.UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds, LogDevice: uint64(st.Dev), LogInode: uint64(st.Ino)}
+	q := runner.Request{Schema: managed.RunnerSchema("request"), Identity: c.identity, BootID: boot, WorkDir: filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: environment, Deadline: deadline.UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds, LogDevice: uint64(st.Dev), LogInode: uint64(st.Ino)}
 	if err := q.Validate(jobRoot); err != nil {
 		return false, log, err
 	}

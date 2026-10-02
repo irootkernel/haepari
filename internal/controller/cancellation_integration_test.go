@@ -9,12 +9,10 @@ import (
 	"errors"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -26,6 +24,10 @@ import (
 )
 
 func cancellationRuntime(t ginkgo.GinkgoTInterface, script string, options ...func(*managed.JobSpec)) (*sql.DB, *runtimeServer, managed.Receipt, managed.JobSpec, string) {
+	return cancellationRuntimeKind(t, script, "local", options...)
+}
+
+func cancellationRuntimeKind(t ginkgo.GinkgoTInterface, script, kind string, options ...func(*managed.JobSpec)) (*sql.DB, *runtimeServer, managed.Receipt, managed.JobSpec, string) {
 	t.Helper()
 	root, err := state.Resolve(filepath.Join(t.TempDir(), "state"))
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -41,6 +43,13 @@ func cancellationRuntime(t ginkgo.GinkgoTInterface, script string, options ...fu
 	s, err := newRuntime(root, l, store)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	resource := managed.ResourceSpec{Schema: "haepari.resource/v1", ID: "local-cancel", Kind: "local", ExecutionMode: "managed", Capacity: 1, Revision: 1, Adapter: managed.Adapter{QualificationReference: "isolated-development"}, Cleanup: &managed.CleanupPolicy{PolicyReference: "owned-workspace"}}
+	if kind == "utm-macos" {
+		resource.Kind = kind
+		resource.Cleanup = nil
+		resource.Adapter.UTMCtl = "/fixture/utmctl-not-invoked"
+		resource.VM = &managed.VM{UTMVMUUID: fakeGuestUUID, MACAddress: "aa:bb:cc:dd:ee:ff", AddressDiscovery: "dhcp-lease-by-mac", GuestJobRoot: "/var/haepari/jobs"}
+		resource.Guest = &managed.Guest{ConnectionReference: "fixture-ssh-not-invoked", KnownHostsReference: "fixture-key"}
+	}
 	raw, _ := json.Marshal(resource)
 	gomega.Expect(l.RegisterResource(raw)).To(gomega.Succeed())
 	source := filepath.Join(t.TempDir(), "input")
@@ -56,7 +65,13 @@ func cancellationRuntime(t ginkgo.GinkgoTInterface, script string, options ...fu
 	raw, _ = json.Marshal(job)
 	admitted, err := l.AdmitSealed(raw, job.Input.InventoryDigest, sealed.ObjectID, "cancel-key", "cancel-job")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	r, err := l.Reserve(managed.ReserveRequest{JobID: admitted.JobID, ExpectedJobRevision: admitted.JobRevision, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "reserve-cancel"})
+	reserve := managed.ReserveRequest{JobID: admitted.JobID, ExpectedJobRevision: admitted.JobRevision, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "reserve-cancel"}
+	if kind == "utm-macos" {
+		revision, err := l.ObserveVM(managed.VMObservation{ResourceID: resource.ID, ConfigRevision: 1, VMUUID: fakeGuestUUID, Power: "started", EvidenceDigest: digest})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		reserve.VMGuard = &managed.VMReservationGuard{HostLimit: 1, ObservationRevisions: map[string]int64{resource.ID: revision}}
+	}
+	r, err := l.Reserve(reserve)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return db, s, r, job, sealed.ObjectID
 }
@@ -298,7 +313,8 @@ var _ = ginkgo.Describe("Task008CancellationController", ginkgo.Label("integrati
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		defer s.unregisterLocal(c)
 		c.identity.RunID = "run-fixture"
-		c.publishCompletion(nativeCompletion{err: errors.New("observed exit 7"), at: time.Now()})
+		code := 7
+		c.publishCompletion(nativeCompletion{outcome: &managed.LocalOutcome{Started: true, WorkloadOutcome: "fail", NativeExitCode: &code}, at: time.Now()})
 		_, err = s.requestCancel(managed.CancelRequest{JobID: r.JobID, ExpectedRevision: r.JobRevision, MutationKey: "native-first"})
 		gomega.Expect(errors.Is(err, managed.ErrStale)).To(gomega.BeTrue())
 		outcome, err := s.ledger.LocalOutcome(r.JobID)
@@ -339,29 +355,6 @@ var _ = ginkgo.Describe("Task008CancellationController", ginkgo.Label("integrati
 		gomega.Expect(current.ResourceAvailability).To(gomega.Equal("quarantined"))
 		_, err = os.Stat(filepath.Join(s.root.Path, "jobs", r.JobID, "workspace", "source", "input.txt"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	})
-	ginkgo.It("retains ownership when the bounded termination observer never receives Wait completion", func() {
-		t := ginkgo.GinkgoT()
-		_, s, r, _, _ := cancellationRuntime(t, "exit 0")
-		r, err := s.ledger.AdvanceLocal(r.JobID, r.JobRevision, "preparing", "ready", "ready-fixture")
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		r, err = s.ledger.StartLocal(r.JobID, r.JobRevision, "run-fixture")
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		cmd := exec.Command("/bin/sleep", "30")
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		gomega.Expect(cmd.Start()).To(gomega.Succeed())
-		reaped := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(reaped) }()
-		defer func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); <-reaped }()
-		c := &localRunControl{cmd: cmd, completed: make(chan struct{}), wake: make(chan struct{}, 1)}
-		err = terminateLocal(c, 100*time.Millisecond)
-		gomega.Expect(err).To(gomega.HaveOccurred())
-		gomega.Expect(s.ledger.ReconcileLocalFailure(r.JobID)).To(gomega.Succeed())
-		current, err := s.ledger.Snapshot(r.JobID)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(current.JobState).To(gomega.Equal("reconciling"))
-		gomega.Expect(current.GlobalOccupancy).To(gomega.Equal(1))
-		gomega.Expect(current.ResourceAvailability).To(gomega.Equal("quarantined"))
 	})
 	ginkgo.It("validates cancellation route identity and returns an ACK independent of terminal success", func() {
 		t := ginkgo.GinkgoT()

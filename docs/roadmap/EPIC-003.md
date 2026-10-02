@@ -88,22 +88,22 @@ Requirement coverage: `HP-REQ-020`, `HP-REQ-021`.
 Requirement coverage: `HP-REQ-022`, `HP-REQ-023`, `HP-REQ-062` (freeze gate F1).
 
 #### Implement
-- [ ] Collect declared logs/results with size/digest manifests, stream large files, expose exact offsets, export to explicit paths and purge finished bulk data with retained admissions.
-- [ ] Protect recoverable required evidence after collection failure: persist owned paths, gaps and reason; prevent cleanup/purge/GC from deleting it until bounded re-collection or explicit disposal is recorded. Keep supplementary evidence separate from immutable results.
-- [ ] Freeze gate F1: freeze the managed core contract. It covers job, resource, result, event and envelope schemas; lifecycle/outcome enums; error codes; CLI exit codes; canonicalization; cursor semantics; and the advisory lock contract from TASK-035. The manual result format freezes later at F3 (TASK-020). Record every change since TASK-002 and its evidence. Later changes need a recorded contract decision and a schema version change.
+- [x] Collect declared logs/results with size/digest manifests, stream large files, expose exact offsets, export to explicit paths and purge finished bulk data with retained admissions.
+- [x] Protect recoverable required evidence after collection failure: persist owned paths, gaps and reason; prevent cleanup/purge/GC from deleting it until bounded re-collection or explicit disposal is recorded. Keep supplementary evidence separate from immutable results.
+- [x] Freeze gate F1: freeze the managed core contract. It covers job, resource, result, event and envelope schemas; lifecycle/outcome enums; error codes; CLI exit codes; canonicalization; cursor semantics; and the advisory lock contract from TASK-035. The manual result format freezes later at F3 (TASK-020). Record every change since TASK-002 and its evidence. Later changes need a recorded contract decision and a schema version change.
 
 #### Do not
-- [ ] Do not discard required uncollected evidence during cleanup, silently truncate required results, or delete active/foreign paths.
+- [x] Do not discard required uncollected evidence during cleanup, silently truncate required results, or delete active/foreign paths.
 
 #### Verify
-- [ ] Test missing outputs, partial copies, exhausted disk, checksum mismatch, retained VM inspection and purge/retry interactions. Include controller restart with protected guest evidence, authorized disposal and an unproven collector.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Test missing outputs, partial copies, exhausted disk, checksum mismatch, retained VM inspection and purge/retry interactions. Include controller restart with protected guest evidence, authorized disposal and an unproven collector.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## Epic acceptance
 

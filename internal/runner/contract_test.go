@@ -29,6 +29,31 @@ func requestFixture(root string) Request {
 }
 
 var _ = ginkgo.Describe("Runner request and receipt boundaries", ginkgo.Label("unit"), func() {
+	ginkgo.It("refuses omitted or null required zero-valued identity fields", func() {
+		for _, value := range []string{"omit", "null"} {
+			root := privateFixtureDirectory()
+			defer os.RemoveAll(root)
+			q := requestFixture(root)
+			raw, err := json.Marshal(q)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			var fields map[string]json.RawMessage
+			gomega.Expect(json.Unmarshal(raw, &fields)).To(gomega.Succeed())
+			var identity map[string]json.RawMessage
+			gomega.Expect(json.Unmarshal(fields["identity"], &identity)).To(gomega.Succeed())
+			if value == "omit" {
+				delete(identity, "Slot")
+			} else {
+				identity["Slot"] = json.RawMessage("null")
+			}
+			fields["identity"], err = json.Marshal(identity)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			raw, err = json.Marshal(fields)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(os.WriteFile(filepath.Join(root, "request.json"), raw, 0600)).To(gomega.Succeed())
+			_, err = Inspect(filepath.Join(root, "request.json"))
+			gomega.Expect(errors.Is(err, ErrInvalid)).To(gomega.BeTrue())
+		}
+	})
 	ginkgo.It("keeps recovery guidance when joined errors also contain invalid or conflicting evidence", func() {
 		for _, blocked := range []error{ErrAmbiguous, ErrUnproven} {
 			for _, other := range []error{ErrInvalid, ErrConflict} {

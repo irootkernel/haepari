@@ -114,7 +114,7 @@ func canonicalKeys(raw, canonical []byte) bool {
 		switch value := a.(type) {
 		case map[string]any:
 			object, ok := b.(map[string]any)
-			if !ok {
+			if !ok || len(value) != len(object) {
 				return false
 			}
 			for key, child := range value {
@@ -133,6 +133,17 @@ func canonicalKeys(raw, canonical []byte) bool {
 					return false
 				}
 			}
+		case nil:
+			return b == nil
+		case bool:
+			_, ok := b.(bool)
+			return ok
+		case string:
+			_, ok := b.(string)
+			return ok
+		case float64:
+			_, ok := b.(float64)
+			return ok
 		}
 		return true
 	}
@@ -175,7 +186,7 @@ func (d *directory) write(name string, value any) error {
 	if err := errors.Join(writeErr, syncErr, closeErr); err != nil {
 		return err
 	}
-	if err := publishExclusive(int(d.file.Fd()), temporary, name); errors.Is(err, unix.EEXIST) {
+	if err := platform.PublishExclusive(int(d.file.Fd()), temporary, name); errors.Is(err, unix.EEXIST) {
 		// Another exact writer may win. Compare its immutable bytes; never
 		// overwrite a different claim through a check-then-rename race.
 		prior, e := d.open(name, unix.O_RDONLY)
@@ -237,10 +248,10 @@ func inspect(d *directory, q Request) (Observation, error) {
 		binding      *Binding
 		attach       func()
 	}{
-		{"intent.json", "haepari.runner-intent/v1", intent, &intent.Binding, func() { view.Intent = intent; view.State = "spawning" }},
-		{"start.json", "haepari.runner-start/v1", start, &start.Binding, func() { view.Start = start; view.State = "running" }},
-		{"outcome.json", "haepari.runner-outcome/v1", outcome, &outcome.Binding, func() { view.Outcome = outcome; view.State = "terminating" }},
-		{"exit.json", "haepari.runner-exit/v1", exit, &exit.Binding, func() { view.Exit = exit; view.State = "exited" }},
+		{"intent.json", managed.RunnerSchema("intent"), intent, &intent.Binding, func() { view.Intent = intent; view.State = "spawning" }},
+		{"start.json", managed.RunnerSchema("start"), start, &start.Binding, func() { view.Start = start; view.State = "running" }},
+		{"outcome.json", managed.RunnerSchema("outcome"), outcome, &outcome.Binding, func() { view.Outcome = outcome; view.State = "terminating" }},
+		{"exit.json", managed.RunnerSchema("exit"), exit, &exit.Binding, func() { view.Exit = exit; view.State = "exited" }},
 	} {
 		if err := d.read(item.name, item.value); errors.Is(err, unix.ENOENT) {
 			continue
@@ -270,6 +281,9 @@ func inspect(d *directory, q Request) (Observation, error) {
 		return view, ErrInvalid
 	}
 	if view.Exit != nil && (view.Outcome == nil || view.Exit.FinishedAt.IsZero() || !reflect.DeepEqual(view.Exit.Outcome, view.Outcome.Outcome) || (!view.Exit.TerminationProven && view.Exit.Reason == "")) {
+		return view, ErrInvalid
+	}
+	if view.Exit != nil && view.Exit.Log != nil && !validLogManifest(*view.Exit.Log, q) {
 		return view, ErrInvalid
 	}
 	return view, nil
@@ -325,5 +339,5 @@ func Cancel(path string) error {
 	if present, err := cancellation(d, q); err != nil || present {
 		return err
 	}
-	return d.write("cancel.json", Cancellation{Schema: "haepari.runner-cancel/v1", Binding: q.Binding(), RequestedAt: time.Now().UTC()})
+	return d.write("cancel.json", Cancellation{Schema: managed.RunnerSchema("cancel"), Binding: q.Binding(), RequestedAt: time.Now().UTC()})
 }

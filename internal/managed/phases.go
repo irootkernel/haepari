@@ -24,6 +24,8 @@ type LocalPhase struct {
 	Outcome              string                    `json:"outcome,omitempty"`
 	ProtectedEvidence    []ProtectedEvidence       `json:"protected_evidence,omitempty"`
 	Artifacts            []ResultArtifact          `json:"artifacts,omitempty"`
+	Logs                 []ResultArtifact          `json:"logs,omitempty"`
+	EvidenceGaps         []EvidenceGap             `json:"evidence_gaps,omitempty"`
 	EvidenceCompleteness EvidenceCompleteness      `json:"evidence_completeness,omitempty"`
 	ControllerOwner      *platform.ProcessIdentity `json:"controller_owner,omitempty"`
 }
@@ -98,6 +100,25 @@ func (l *Ledger) RecordLocalPhase(q LocalPhaseRequest) (Receipt, error) {
 }
 
 func validLocalPhase(p LocalPhase) bool {
+	if (p.Phase != "collect" || !p.Completed) && (len(p.Logs) > 0 || len(p.EvidenceGaps) > 0) {
+		return false
+	}
+	if len(p.EvidenceGaps) > 0 && p.EvidenceCompleteness == "complete" {
+		return false
+	}
+	if len(p.Logs) > 1 {
+		return false
+	}
+	for _, a := range p.Logs {
+		if a.Path != "output.log" || a.SizeBytes < 0 || !validDigest(a.SHA256) {
+			return false
+		}
+	}
+	for _, g := range p.EvidenceGaps {
+		if !ValidArtifactPath(g.Path) || g.Reason == "" || g.Offset < 0 || g.DroppedBytes < 0 {
+			return false
+		}
+	}
 	if owner := p.ControllerOwner; owner != nil && (owner.BootID == "" || owner.PID <= 0 || owner.PGID <= 0 || owner.SID <= 0 || owner.StartedSeconds <= 0 || owner.StartedMicros < 0 || owner.StartedMicros >= 1000000) {
 		return false
 	}
@@ -249,6 +270,7 @@ func validatePhaseResultTx(tx *sql.Tx, jobID string, result Result) error {
 	}
 	collect, cleanup := phases["collect"], phases["cleanup"]
 	if result.EvidenceCompleteness != collect.EvidenceCompleteness || !slices.Equal(result.Artifacts, collect.Artifacts) ||
+		!slices.Equal(result.Logs, collect.Logs) || !slices.Equal(result.EvidenceGaps, collect.EvidenceGaps) ||
 		!slices.Equal(result.ProtectedEvidence, cleanup.ProtectedEvidence) {
 		return ErrInvalid
 	}

@@ -45,7 +45,7 @@ func (l *Ledger) RecordRunnerReceipt(identity LocalIdentity, kind string, payloa
 		Schema        string        `json:"schema"`
 		RequestDigest string        `json:"request_digest"`
 	}
-	if ValidateUniqueJSONKeys(payload) != nil || json.Unmarshal(payload, &header) != nil || header.Identity != identity || header.Schema != "haepari.runner-"+kind+"/v1" {
+	if ValidateUniqueJSONKeys(payload) != nil || json.Unmarshal(payload, &header) != nil || header.Identity != identity || header.Schema != RunnerSchema(kind) {
 		return ErrInvalid
 	}
 	sum := sha256.Sum256(payload)

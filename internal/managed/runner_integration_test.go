@@ -17,7 +17,7 @@ var _ = ginkgo.Describe("Task009RunnerReceiptLedger", ginkgo.Label("integration"
 	ginkgo.It("migrates schema 7 without manufacturing evidence for its existing run", func() {
 		db, l, admission := cancellationFixture(ginkgo.GinkgoT())
 		r, id := cancellationRunning(ginkgo.GinkgoT(), l, admission)
-		_, err := db.Exec(`DROP TABLE managed_runner_receipts; DELETE FROM schema_migrations WHERE version=8; PRAGMA user_version=7`)
+		_, err := db.Exec(`DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DELETE FROM schema_migrations WHERE version=9; DROP TABLE managed_runner_receipts; DELETE FROM schema_migrations WHERE version=8; PRAGMA user_version=7`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		l, err = NewLedger(db, 2)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

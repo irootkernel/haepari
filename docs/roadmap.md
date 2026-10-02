@@ -53,7 +53,7 @@ EPIC-003 Detailed SOT: [execution dossier](TODO-EPIC-003.md). The dossier connec
 | [TASK-009](roadmap/EPIC-003.md#task-009) | Implement the local per-job supervisor | TASK-033, TASK-007, TASK-004 | Active | Accepted |
 | [TASK-010](roadmap/EPIC-003.md#task-010) | Implement phase settlement and safe resource return | TASK-009 | Active | Accepted |
 | [TASK-011](roadmap/EPIC-003.md#task-011) | Implement crash reconciliation, explicit recovery and the development service | TASK-010, TASK-004 | Active | Accepted |
-| [TASK-012](roadmap/EPIC-003.md#task-012) | Implement artifact delivery and retention; freeze the managed core contract | TASK-010, TASK-011, TASK-035 | Active | Planned |
+| [TASK-012](roadmap/EPIC-003.md#task-012) | Implement artifact delivery and retention; freeze the managed core contract | TASK-010, TASK-011, TASK-035 | Active | Accepted |
 | [TASK-013](roadmap/EPIC-004.md#task-013) | Implement persistent VM registration and UTM control | TASK-007, TASK-003 | Active | Planned |
 | [TASK-014](roadmap/EPIC-004.md#task-014) | Implement authenticated SSH and guest runner continuity | TASK-013, TASK-009 | Active | Planned |
 | [TASK-015](roadmap/EPIC-004.md#task-015) | Integrate VM collection, job cleanup and recovery | TASK-014, TASK-010, TASK-011, TASK-012 | Active | Planned |
@@ -81,7 +81,7 @@ Every active task other than TASK-028 is an actual prerequisite of a later activ
 
 TASK-002 defines provisional schemas; it does not freeze them. Three gates freeze the consumer contract, each after the evidence it depends on:
 
-- **F1, managed core contract (TASK-012).** Covers job, resource, result, event and envelope schemas; lifecycle/outcome enums; error codes; CLI exit codes; canonicalization; cursor semantics; and the advisory lock contract. It freezes after local failure and crash evidence (TASK-010, TASK-011, TASK-012). TASK-017 builds the project Make contract on F1.
+- **F1, managed core contract (TASK-012).** Covers job, resource, result, event and envelope schemas; lifecycle/outcome enums; error codes; CLI exit codes; canonicalization; cursor semantics; and the advisory lock contract. It freezes after local failure and crash evidence (TASK-010, TASK-011, TASK-012), as defined in the [F1 decision record](records/TASK-012-managed-core-freeze.md); canonical TASK-012 acceptance makes that decision effective. TASK-017 builds the project Make contract on F1.
 - **F2, VM contract fields (TASK-016).** Covers `utm-macos` resource fields, guest runner protocol, host-session identity fields and the VM-specific job and result fields. They freeze after real UTM qualification.
 - **F3, consumer integration contract (TASK-020).** Covers the project Make and guest entrypoint conventions, `haepari.environment-lock/v1`, installation inventories, the manual result format and migration evidence fields. It freezes after TASK-017 through TASK-020.
 

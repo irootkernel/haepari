@@ -204,6 +204,15 @@ func (s *Store) Seal(ctx context.Context, sourceRoot string, selected []string, 
 // Read verifies the manifest identity and every selected file before returning
 // the owned root. Consumers should reverify immediately before execution.
 func (s *Store) Read(id string) (Snapshot, error) {
+	return s.ReadContext(context.Background(), id)
+}
+
+// ReadContext uses the caller's fixed budget for inventory and payload
+// verification, including each bounded hash read.
+func (s *Store) ReadContext(ctx context.Context, id string) (Snapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
 	if !validDigest(id) {
 		return Snapshot{}, fmt.Errorf("%w: object ID", ErrInvalid)
 	}
@@ -224,10 +233,13 @@ func (s *Store) Read(id string) (Snapshot, error) {
 		objectRoot.Close()
 		return Snapshot{}, ErrCorrupt
 	}
-	encoded, err := io.ReadAll(io.LimitReader(manifestFile, 1<<20+1))
+	encoded, err := io.ReadAll(contextReader{ctx, io.LimitReader(manifestFile, 1<<20+1)})
 	after, statErr := sourceVersionOf(manifestFile)
 	closeErr := manifestFile.Close()
 	objectRoot.Close()
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
 	if err != nil || statErr != nil || closeErr != nil || version != after || len(encoded) > 1<<20 || "sha256:"+digest(encoded) != id {
 		return Snapshot{}, ErrCorrupt
 	}
@@ -242,20 +254,26 @@ func (s *Store) Read(id string) (Snapshot, error) {
 	}
 	defer root.Close()
 	for _, entry := range manifest.Entries {
+		if err := ctx.Err(); err != nil {
+			return Snapshot{}, err
+		}
 		file, before, err := root.openRegular(entry.Path)
 		if err != nil {
 			return Snapshot{}, ErrCorrupt
 		}
 		h := sha256.New()
-		size, copyErr := io.Copy(h, file)
+		size, copyErr := io.CopyBuffer(h, contextReader{ctx, io.LimitReader(file, entry.Size+1)}, make([]byte, 64<<10))
 		after, statErr := sourceVersionOf(file)
 		closeErr := file.Close()
+		if err := ctx.Err(); err != nil {
+			return Snapshot{}, err
+		}
 		if copyErr != nil || statErr != nil || closeErr != nil || before != after || size != entry.Size ||
 			"sha256:"+hex.EncodeToString(h.Sum(nil)) != entry.SHA256 || before.executable != entry.Executable {
 			return Snapshot{}, ErrCorrupt
 		}
 	}
-	if err := verifyInventory(files, manifest.Entries); err != nil {
+	if err := verifyInventory(ctx, files, manifest.Entries); err != nil {
 		return Snapshot{}, ErrCorrupt
 	}
 	return Snapshot{ObjectID: id, Root: files, Manifest: manifest}, nil
@@ -278,7 +296,7 @@ func DecodeInventory(encoded []byte, objectID string) (Manifest, error) {
 	return manifest, nil
 }
 
-func verifyInventory(files string, entries []Entry) error {
+func verifyInventory(ctx context.Context, files string, entries []Entry) error {
 	wantedFiles := make(map[string]bool, len(entries))
 	wantedDirs := map[string]bool{".": true}
 	for _, entry := range entries {
@@ -288,6 +306,9 @@ func verifyInventory(files string, entries []Entry) error {
 		}
 	}
 	return filepath.WalkDir(files, func(name string, item os.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}

@@ -35,12 +35,10 @@ type Request struct {
 	TerminationSeconds int64                 `json:"termination_seconds"`
 	LogDevice          uint64                `json:"log_device"`
 	LogInode           uint64                `json:"log_inode"`
+	LogLimitBytes      int64                 `json:"log_limit_bytes,omitempty"`
 }
 
-type Binding struct {
-	Identity      managed.LocalIdentity `json:"identity"`
-	RequestDigest string                `json:"request_digest"`
-}
+type Binding = managed.RunnerBinding
 
 type Intent struct {
 	Schema string `json:"schema"`
@@ -67,6 +65,7 @@ type Exit struct {
 	TerminationProven bool                 `json:"termination_proven"`
 	Reason            string               `json:"reason,omitempty"`
 	FinishedAt        time.Time            `json:"finished_at"`
+	Log               *LogManifest         `json:"log,omitempty"`
 }
 type Cancellation struct {
 	Schema string `json:"schema"`
@@ -82,8 +81,11 @@ type Observation struct {
 }
 
 func (q Request) Validate(root string) error {
+	if q.LogLimitBytes < 0 || q.LogLimitBytes > DefaultLogBytes {
+		return ErrInvalid
+	}
 	id := q.Identity
-	if q.Schema != "haepari.runner-request/v1" || !managed.ValidRequestKey(id.JobID) || !managed.ValidRequestKey(id.ResourceID) || !managed.ValidRequestKey(id.RunID) || id.ConfigRevision <= 0 || id.LeaseGeneration <= 0 || id.Slot < 0 || id.Nonce == "" || q.BootID == "" || q.Deadline.IsZero() || q.RunSeconds <= 0 || q.RunSeconds > (1<<63-1)/int64(time.Second) || q.TerminationSeconds <= 0 || q.TerminationSeconds > (1<<63-1)/int64(time.Second) || q.LogInode == 0 {
+	if q.Schema != managed.RunnerSchema("request") || !managed.ValidRequestKey(id.JobID) || !managed.ValidRequestKey(id.ResourceID) || !managed.ValidRequestKey(id.RunID) || id.ConfigRevision <= 0 || id.LeaseGeneration <= 0 || id.Slot < 0 || id.Nonce == "" || q.BootID == "" || q.Deadline.IsZero() || q.RunSeconds <= 0 || q.RunSeconds > (1<<63-1)/int64(time.Second) || q.TerminationSeconds <= 0 || q.TerminationSeconds > (1<<63-1)/int64(time.Second) || q.LogInode == 0 {
 		return ErrInvalid
 	}
 	workspace := filepath.Join(root, "workspace")
@@ -112,7 +114,7 @@ func (q Request) Validate(root string) error {
 func (q Request) Binding() Binding {
 	data, _ := json.Marshal(q)
 	sum := sha256.Sum256(data)
-	return Binding{q.Identity, "sha256:" + hex.EncodeToString(sum[:])}
+	return Binding{Identity: q.Identity, RequestDigest: "sha256:" + hex.EncodeToString(sum[:])}
 }
 
 func validOutcome(out managed.LocalOutcome) bool {

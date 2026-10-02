@@ -36,6 +36,9 @@ type runtimeServer struct {
 	closing      bool
 	workers      sync.WaitGroup
 	recoveryKey  [32]byte
+	// Serialize finished evidence reads/deletion and sealing through admission.
+	evidenceMu      sync.RWMutex
+	backendEvidence func(kind, id string) (evidenceBackend, error)
 	// Test barrier after a replay miss, before observing readiness. Nil in production.
 	beforeAvailabilityObservation func()
 	beforeWaitRead                func() // nil in production; subscribe/read race barrier
@@ -138,13 +141,15 @@ func reject(w http.ResponseWriter, op string, err error) {
 func (s *runtimeServer) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/hello", func(w http.ResponseWriter, r *http.Request) {
-		send(w, 200, "hello", map[string]any{"protocol": protocol, "protocol_version": 1, "capabilities": []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1", "managed-recovery/v1"}, "installation_id": s.installationID()}, nil)
+		send(w, 200, "hello", map[string]any{"protocol": protocol, "protocol_version": 1, "capabilities": managed.Capabilities(), "installation_id": s.installationID()}, nil)
 	})
 	mux.HandleFunc("POST /v1/resources", s.register)
 	mux.HandleFunc("GET /v1/resources", s.resourcesList)
 	mux.HandleFunc("GET /v1/jobs", s.jobsList)
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.events)
 	mux.HandleFunc("GET /v1/jobs/{id}/logs", s.logs)
+	mux.HandleFunc("GET /v1/jobs/{id}/artifacts", s.artifacts)
+	mux.HandleFunc("POST /v1/jobs/{id}/purge", s.purge)
 	mux.HandleFunc("POST /v1/jobs/{id}/cancel", s.cancel)
 	mux.HandleFunc("POST /v1/jobs/{id}/recover", s.jobRecovery)
 	mux.HandleFunc("POST /v1/resources/{id}/{action}", s.resourceAvailability)
@@ -230,6 +235,8 @@ func (s *runtimeServer) register(w http.ResponseWriter, r *http.Request) {
 	send(w, 200, "resource.register", map[string]any{"resource_id": spec.ID, "revision": spec.Revision}, nil)
 }
 func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
+	s.evidenceMu.Lock()
+	defer s.evidenceMu.Unlock()
 	chain, err := managed.DecodeParentChain(r.Header.Get(managed.ParentContextHeader))
 	if err != nil {
 		reject(w, "submit", err)
@@ -387,6 +394,14 @@ func (s *runtimeServer) inspect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data["result"] = result
+		supplementary, err := s.ledger.SupplementaryEvidence(id)
+		if err != nil {
+			reject(w, "inspect", err)
+			return
+		}
+		if len(supplementary) > 0 {
+			data["supplementary"] = supplementary
+		}
 	}
 	send(w, 200, "inspect", data, nil)
 }

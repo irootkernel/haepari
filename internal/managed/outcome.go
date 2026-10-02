@@ -90,6 +90,8 @@ type Result struct {
 	NativeSignal         string               `json:"native_signal,omitempty"`
 	Timings              *ResultTimings       `json:"timings,omitempty"`
 	Artifacts            []ResultArtifact     `json:"artifacts,omitempty"`
+	Logs                 []ResultArtifact     `json:"logs,omitempty"`
+	EvidenceGaps         []EvidenceGap        `json:"evidence_gaps,omitempty"`
 	Observations         *ResultObservations  `json:"observations,omitempty"`
 	ProtectedEvidence    []ProtectedEvidence  `json:"protected_evidence,omitempty"`
 }
@@ -112,6 +114,12 @@ type ResultArtifact struct {
 	Path      string `json:"path"`
 	SizeBytes int64  `json:"size_bytes"`
 	SHA256    string `json:"sha256"`
+}
+type EvidenceGap struct {
+	Path         string `json:"path"`
+	Reason       string `json:"reason"`
+	Offset       int64  `json:"offset"`
+	DroppedBytes int64  `json:"dropped_bytes"`
 }
 type ResultObservations struct {
 	Source           string `json:"source"`
@@ -152,6 +160,19 @@ func DecodeResult(data []byte) (Result, error) {
 	}
 	for _, a := range result.Artifacts {
 		if !relativePath(a.Path) || a.SizeBytes < 0 || !validDigest(a.SHA256) {
+			return result, ErrInvalid
+		}
+	}
+	for _, a := range result.Logs {
+		if a.Path != "output.log" || a.SizeBytes < 0 || !validDigest(a.SHA256) {
+			return result, ErrInvalid
+		}
+	}
+	if len(result.Logs) > 1 || len(result.EvidenceGaps) > 0 && result.EvidenceCompleteness == "complete" {
+		return result, ErrInvalid
+	}
+	for _, g := range result.EvidenceGaps {
+		if !ValidArtifactPath(g.Path) || g.Reason == "" || g.Offset < 0 || g.DroppedBytes < 0 {
 			return result, ErrInvalid
 		}
 	}

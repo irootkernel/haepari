@@ -16,6 +16,11 @@ func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.Jo
 	if !collect.Completed || collect.Outcome == "unproven" {
 		collect.Completed, collect.Outcome = true, "failed"
 		collect.EvidenceCompleteness = "partial"
+		var err error
+		collect.Logs, collect.EvidenceGaps, err = s.ledger.LocalLogManifest(c.identity.JobID)
+		if err != nil {
+			return err
+		}
 		collect.ProtectedEvidence = []managed.ProtectedEvidence{{Path: "workspace", Reason: "collection_interrupted", RecoveryReference: "job:" + c.identity.JobID}}
 		if err := s.endPhase(c, "collect", collect); err != nil {
 			return err
@@ -81,6 +86,7 @@ func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.Jo
 		}
 	}
 	result := managed.Result{WorkloadOutcome: out.WorkloadOutcome, NativeExitCode: out.NativeExitCode, NativeSignal: out.NativeSignal, EvidenceCompleteness: collect.EvidenceCompleteness, Artifacts: collect.Artifacts, ProtectedEvidence: cleanup.ProtectedEvidence, CleanupOutcome: "verified", Reason: reason, ResourceAvailability: "available"}
+	result.Logs, result.EvidenceGaps = collect.Logs, collect.EvidenceGaps
 	if cleanup.Outcome != "complete" {
 		result.CleanupOutcome, result.ResourceAvailability = "failed", "quarantined"
 		if cleanup.Outcome == "late" {

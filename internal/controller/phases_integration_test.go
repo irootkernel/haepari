@@ -82,11 +82,12 @@ var _ = ginkgo.Describe("Task010PhaseSettlement", ginkgo.Label("integration"), f
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		defer log.Close()
 		release := make(chan struct{})
-		defer close(release)
+		s := &runtimeServer{}
+		defer func() { close(release); s.workers.Wait() }()
 		entered := make(chan struct{})
 		result := make(chan error, 1)
 		go func() {
-			_, returnedLog, err := observeWithinRunBudget(time.Now().Add(-supervisorObservationSlack+20*time.Millisecond), 0, func() (bool, *os.File, error) {
+			_, returnedLog, err := observeWithinRunBudgetWithWorker(time.Now().Add(-supervisorObservationSlack+20*time.Millisecond), 0, s.startWorker, s.detached, func() (bool, *os.File, error) {
 				close(entered)
 				<-release
 				return true, log, nil
@@ -242,7 +243,8 @@ var _ = ginkgo.Describe("Task010PhaseSettlement", ginkgo.Label("integration"), f
 
 	ginkgo.It("does not start a filesystem worker after its phase deadline", func() {
 		called := false
-		_, status := boundedPhase(time.Now().Add(-time.Second), func() error { called = true; return nil })
+		s := &runtimeServer{}
+		_, status := boundedOwnedPhase(s, time.Now().Add(-time.Second), func() error { called = true; return nil })
 		gomega.Expect(status).To(gomega.Equal(phaseLate))
 		gomega.Expect(called).To(gomega.BeFalse())
 	})

@@ -3,9 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
-	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -13,7 +11,6 @@ import (
 )
 
 type nativeCompletion struct {
-	err     error
 	at      time.Time
 	outcome *managed.LocalOutcome
 }
@@ -30,7 +27,6 @@ type localRunControl struct {
 	completion       *nativeCompletion
 	observed         bool
 	deadline         time.Time
-	cmd              *exec.Cmd
 	runnerRequest    string
 	runnerExited     chan struct{}
 	effects          bool
@@ -156,7 +152,7 @@ func (c *localRunControl) nativeCompletion() *nativeCompletion {
 	return c.completion
 }
 
-// Called with c.mu held. Only Wait owns cmd.ProcessState until publication.
+// Called with c.mu held. Native receipt import owns outcome publication.
 func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
 	if c.observed {
 		return nil
@@ -180,7 +176,10 @@ func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
 			return err
 		}
 	}
-	out := nativeOutcome(c.cmd, *end, c.deadline)
+	if end.outcome == nil {
+		return managed.ErrBlocked
+	}
+	out := *end.outcome
 	key := "outcome-" + c.identity.JobID
 	if c.recoveryEvidence != nil {
 		key = "recovered-outcome-" + c.identity.JobID
@@ -194,32 +193,7 @@ func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
 	return nil
 }
 
-func nativeOutcome(cmd *exec.Cmd, end nativeCompletion, deadline time.Time) managed.LocalOutcome {
-	if end.outcome != nil {
-		return *end.outcome
-	}
-	out := managed.LocalOutcome{Started: true, WorkloadOutcome: "fail"}
-	if !deadline.IsZero() && end.at.After(deadline) {
-		out.WorkloadOutcome = "timed_out"
-	} else if end.err == nil {
-		out.WorkloadOutcome = "pass"
-	}
-	if cmd != nil && cmd.ProcessState != nil {
-		code := cmd.ProcessState.ExitCode()
-		if code >= 0 && code <= 255 {
-			out.NativeExitCode = &code
-		}
-		if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-			out.NativeExitCode = nil
-			out.NativeSignal = status.Signal().String()
-		}
-	}
-	return out
-}
-
-// Every wait, including after SIGKILL and receipt-write failure, is bounded.
-// Only the current live command handle can be signalled; no historical PID is
-// reattached here (TASK009 owns restart/process identity qualification).
+// Observe only the durable runner request under a bounded termination budget.
 func terminateLocal(c *localRunControl, budget time.Duration) error {
 	if budget <= 0 {
 		return errors.New("missing termination budget")
@@ -255,29 +229,7 @@ func terminateLocal(c *localRunControl, budget time.Duration) error {
 		}
 		return runner.ErrUnproven
 	}
-	if c.cmd == nil || c.cmd.Process == nil {
-		return errors.New("missing owned process")
-	}
-	pid := c.cmd.Process.Pid
-	_ = syscall.Kill(-pid, syscall.SIGTERM)
-	c.phase("termination_wait")
-	grace := time.NewTimer(min(2*time.Second, budget/2))
-	defer grace.Stop()
-	timer := time.NewTimer(time.Until(deadline))
-	defer timer.Stop()
-	for {
-		if c.nativeCompletion() != nil {
-			break
-		}
-		select {
-		case <-c.completed:
-		case <-grace.C:
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
-		case <-timer.C:
-			return errors.New("owned workload termination unproven")
-		}
-	}
-	return ensureGroupStopped(pid, time.Until(deadline))
+	return errors.New("missing durable runner request")
 }
 
 // Called only after the preparation worker stopped, or before it was allowed

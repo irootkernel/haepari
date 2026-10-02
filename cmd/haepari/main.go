@@ -38,10 +38,12 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari version --json | capabilities --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel")
+		fmt.Fprintln(stderr, "usage: haepari help --json | version --json | capabilities --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel | export | purge")
 		return 2
 	}
 	switch args[0] {
+	case "help":
+		return helpCommand(args[1:], stdout, stderr)
 	case "runner":
 		return runner.Command(args[1:], stdout, stderr)
 	case "service":
@@ -67,7 +69,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			QualifiedBackends []string `json:"qualified_backends"`
 			Protocols         []string `json:"protocol_versions"`
 			Capabilities      []string `json:"capabilities"`
-		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, []string{"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1", "managed-recovery/v1"}})
+		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, managed.Capabilities()})
 	case "daemon":
 		if len(args) < 2 || args[1] != "run" {
 			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local]")
@@ -147,6 +149,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return observe(args[0], args[1:], stdout, stderr)
 	case "cancel":
 		return cancelJob(args[1:], stdout, stderr)
+	case "export":
+		return exportJob(args[1:], stdout, stderr)
+	case "purge":
+		return purgeJob(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unsupported command %q\n", args[0])
 		return 2

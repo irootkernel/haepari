@@ -83,6 +83,21 @@ func awaitFixture(root string, done <-chan error, expectCrash bool) Observation 
 }
 
 var _ = ginkgo.Describe("Independent native runner", ginkgo.Label("integration"), func() {
+	ginkgo.It("Task012 bounds the log prefix and records dropped bytes without changing native success", func() {
+		root, _ := nativeFixture("printf 0123456789abcdef; printf tail >&2", func(q *Request) { q.LogLimitBytes = 8 })
+		defer os.RemoveAll(root)
+		_, done := launchFixture(root, "")
+		view := awaitFixture(root, done, false)
+		gomega.Expect(view.Exit.TerminationProven).To(gomega.BeTrue())
+		gomega.Expect(view.Exit.Outcome.WorkloadOutcome).To(gomega.Equal(managed.WorkloadOutcome("pass")))
+		gomega.Expect(view.Exit.Log).NotTo(gomega.BeNil())
+		gomega.Expect(view.Exit.Log.Artifact.SizeBytes).To(gomega.Equal(int64(8)))
+		gomega.Expect(view.Exit.Log.DroppedBytes).To(gomega.Equal(int64(12)))
+		gomega.Expect(view.Exit.Log.Gap).To(gomega.Equal("log_limit"))
+		data, err := os.ReadFile(filepath.Join(root, "output.log"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(string(data)).To(gomega.Equal("01234567"))
+	})
 	ginkgo.It("proves cancellation before gate release without entering or replaying workload exec", func() {
 		root, _ := nativeFixture("printf unwanted > effect.txt")
 		defer os.RemoveAll(root)

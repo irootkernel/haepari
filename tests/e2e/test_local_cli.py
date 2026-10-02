@@ -579,3 +579,96 @@ def test_advisory_lock_cli_lifecycle() -> None:
         assert _run(BINARY, uncertain_env, "locks", "list", "--json").returncode == 6
         malformed_env = dict(env, HAEPARI_LOCK_GRANT="not-json")
         assert _run(BINARY, malformed_env, "locks", "list", "--json").returncode == 2
+
+
+def test_artifact_export_purge_and_permanent_replay():
+    with _controller() as (parent, env, owned_jobs, restart):
+        job_path, marker = _restart_job_fixture(parent, env)
+        (parent / "release").touch()
+        job = json.loads(job_path.read_text())
+        job["workload"]["argv"] = ["/bin/sh", "-c", 'mkdir -p ../results; /usr/bin/head -c 150123 /dev/zero > ../results/out.txt; printf exported; printf once >> "$COUNT_PATH"']
+        job_path.write_text(json.dumps(job))
+        submitted = _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "retention-key", "--json"))["data"]
+        job_id = submitted["job_id"]
+        owned_jobs.append(job_id)
+        result = _response(_run(BINARY, env, "wait", job_id, "--timeout", "10s", "--json"))["data"]
+        assert result["cleanup_outcome"] == "verified"
+        destination = parent / "exported"
+        receipt = _response(_run(BINARY, env, "export", job_id, "--to", str(destination), "--json"))["data"]
+        assert receipt["job_id"] == job_id
+        assert (destination / "artifacts/results/out.txt").read_bytes() == bytes(150123)
+        assert (destination / "output.log").read_bytes() == b"exported"
+        assert json.loads((destination / "result.json").read_text()) == result
+        rejected = _run(BINARY, env, "export", job_id, "--to", str(destination), "--json")
+        assert rejected.returncode != 0
+        assert (destination / "artifacts/results/out.txt").read_bytes() == bytes(150123)
+        finished = _response(_run(BINARY, env, "inspect", job_id, "--json"))["data"]["receipt"]
+        cancel_args = ("cancel", job_id, "--expected-revision", str(finished["job_revision"]), "--request-key", "retention-cancel", "--json")
+        cancellation = _response(_run(BINARY, env, *cancel_args))["data"]
+        purge_args = ("purge", job_id, "--expected-revision", str(finished["job_revision"]), "--json")
+        purged = _response(_run(BINARY, env, *purge_args))["data"]
+        assert purged["complete"]
+        assert not (parent / "state/jobs" / job_id / "workspace").exists()
+        assert not (parent / "state/jobs" / job_id / "artifacts").exists()
+        assert not (parent / "state/jobs" / job_id / "output.log").exists()
+        # The original result proved cleanup before retention, and the public
+        # purge receipt plus exact absence above proves the owned bulk is gone.
+        owned_jobs.remove(job_id)
+        restart(crash=True)
+        assert _response(_run(BINARY, env, *purge_args))["data"] == purged
+        replay = _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "retention-key", "--json"))["data"]
+        assert replay["job_id"] == job_id and replay["result_status"] == "unavailable"
+        rerun = _run(BINARY, env, "run", "--spec", str(job_path), "--request-key", "retention-key", "--json")
+        assert rerun.returncode == 2 and json.loads(rerun.stdout)["data"]["job_id"] == job_id
+        for operation in ("wait", "events", "logs"):
+            unavailable = _response(_run(BINARY, env, operation, job_id, "--json"), 2)
+            assert unavailable["error"]["code"] == "RESULT_UNAVAILABLE"
+        assert _response(_run(BINARY, env, *cancel_args))["data"]["mutation"] == cancellation["mutation"]
+        assert marker.read_bytes() == b"once"
+        help_data = _response(_run(BINARY, env, "help", "--json"))["data"]
+        assert help_data["schema"] == "haepari.help/v1"
+        assert {c["name"] for c in help_data["commands"]} >= {"export", "purge", "resource recover", "lock acquire"}
+        assert help_data["error_exits"]["RESULT_UNAVAILABLE"] == 2
+        assert help_data["limits"]["artifact_page_bytes"] == 65536
+
+
+@pytest.mark.parametrize("action", ["recollect", "dispose"])
+def test_explicit_evidence_recovery_keeps_original_result(action):
+    with _controller() as (parent, env, owned_jobs, restart):
+        job_path, _ = _restart_job_fixture(parent, env)
+        job = json.loads(job_path.read_text())
+        job["workload"]["argv"] = ["/bin/sh", "-c", "mkdir -p ../results; printf retained > ../results/other.txt"]
+        job_path.write_text(json.dumps(job))
+        submitted = _response(_run(BINARY, env, "submit", "--spec", str(job_path), "--request-key", "protected-key", "--json"))["data"]
+        job_id = submitted["job_id"]
+        owned_jobs.append(job_id)
+        original = _response(_run(BINARY, env, "wait", job_id, "--timeout", "10s", "--json"), 3)["data"]
+        assert original["protected_evidence"] and original["evidence_gaps"]
+        workspace = parent / "state/jobs" / job_id / "workspace"
+        assert (workspace / "results/other.txt").read_bytes() == b"retained"
+        restart(crash=True)
+        plan = _response(_run(BINARY, env, "resource", "recover", "restart-local", "--plan", "--action", action, "--json"))["data"]
+        if action == "dispose":
+            assert plan["evidence_loss"] == original["protected_evidence"]
+        apply_args = ("resource", "recover", "restart-local", "--plan-token", plan["plan_token"], "--request-key", "explicit-evidence", "--json")
+        receipt = _response(_run(BINARY, env, *apply_args))["data"]
+        assert receipt["complete"]
+        if action == "recollect":
+            assert receipt["jobs"][0]["stage"] == "failed" and workspace.exists()
+            # Missing required bytes must stay protected. The subsequent
+            # separate disposal plan explicitly names that same evidence loss.
+            plan = _response(_run(BINARY, env, "resource", "recover", "restart-local", "--plan", "--action", "dispose", "--json"))["data"]
+            assert plan["evidence_loss"] == original["protected_evidence"]
+            apply_args = ("resource", "recover", "restart-local", "--plan-token", plan["plan_token"], "--request-key", "explicit-disposal", "--json")
+            receipt = _response(_run(BINARY, env, *apply_args))["data"]
+        assert receipt["jobs"][0]["stage"] == "resolved" and not workspace.exists()
+        health = _response(_run(BINARY, env, "resource", "recover", "restart-local", "--plan", "--json"))["data"]
+        _response(_run(BINARY, env, "resource", "recover", "restart-local", "--plan-token", health["plan_token"], "--request-key", "verified-health", "--json"))
+        status = _response(_run(BINARY, env, "resource", "inspect", "restart-local", "--json"))["data"]
+        assert status["availability"] == "available" and status["occupancy"] == 0
+        current = _response(_run(BINARY, env, "inspect", job_id, "--json"))["data"]["result"]
+        assert current == original
+        assert _response(_run(BINARY, env, *apply_args))["data"] == receipt
+        # Supplementary resolution and separate observed health establish safe
+        # fixture cleanup without replacing the immutable failed cleanup fact.
+        owned_jobs.remove(job_id)
