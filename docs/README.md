@@ -50,6 +50,6 @@ External facts are identified in [sources](sources.md). Architecture choices and
 
 Documentation check results are recorded in [package validation](package-validation.md) and reproducible with `docs/tools/validate_docs.py`. The Aquarium-owned inspector warning is tracked in [external requests](to-external.md) §1.3.
 
-Follow-up candidates from EPIC-001 cold validation and EPIC-002 task reviews are recorded in [TODO](TODO.md). That index also registers temporary execution dossiers, including the [EPIC-003 dossier](TODO-EPIC-003.md). These documents do not change roadmap task status or acceptance.
+Follow-up candidates from EPIC-001 cold validation and EPIC-002 task reviews are recorded in [TODO](TODO.md). These documents do not change roadmap task status or acceptance.
 
 The [Mulgae integration contract](integrations/mulgae-review.md) defines the managed VM adoption boundary and how ordinary reviews queue on the advisory lock. It is planned downstream behavior, not a Haepari dependency or a claim about the installed Mulgae release.

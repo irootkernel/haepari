@@ -4,7 +4,7 @@
   "revision_date": "2026-09-28",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 81,
+    "package_files_excluding_manifest": 80,
     "requirements": {
       "total": 81,
       "active": 64,
@@ -30,15 +30,15 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 67,
+    "markdown_documents": 66,
     "json_templates": 11,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 10920,
-      "sha256": "6c86d9d15a09f3186bece4cf5f1c11a3c1912f813bac0335cf2b4b47c31093ec"
+      "bytes": 10812,
+      "sha256": "82cc7f4e74b86e7da7af97c574f3e0b960aca907e693786d8bb8249d3158a902"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -46,14 +46,9 @@
       "sha256": "ba770d9a876671f2d13d6aeaa3219c247cae7958f6121db87772223caabeb72a"
     },
     {
-      "path": "TODO-EPIC-003.md",
-      "bytes": 14579,
-      "sha256": "118b6b5c732a87e18c91a51f8c11d52abc5483ccf18beb95c8d0742d82d61068"
-    },
-    {
       "path": "TODO.md",
-      "bytes": 19381,
-      "sha256": "28b86082c91f501f0542d11ae0c453ef9f511d8c2eee92a3943f42efb5d8574d"
+      "bytes": 19093,
+      "sha256": "320a5a1d4162c87e0ae0a8b9278d814a8280329cce26d8169e445c8bd64c3868"
     },
     {
       "path": "aquarium-adoption.md",
@@ -163,7 +158,7 @@
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "3ce80a6bfe948f4e4e4aa588c5a6aa9016eba52b73876b9e7e9a956de80c4cff"
+      "sha256": "e1558f831059d28f557abbfff895e36af2a2f73179d3a02e359450e66950f4f6"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -298,7 +293,7 @@
     {
       "path": "package-validation.md",
       "bytes": 8686,
-      "sha256": "90a1f81ec3eda9867360e9f8f9a1838296b70715e8c87c492d7dcdb27bc1565c"
+      "sha256": "b5304a78978ca247520334b9f81c1b6947e57be0f0b4c8556e19f8a61ad21d7a"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -327,8 +322,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11437,
-      "sha256": "56fc6be8a07f25dc34bc25c52cd67f755c1b843fc0a6ee687c64fc2abef09a4f"
+      "bytes": 11490,
+      "sha256": "dde483141df5b685e7515de8cf81c155bc6242c9ba0732106bb893533898f115"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -342,8 +337,8 @@
     },
     {
       "path": "roadmap/EPIC-003.md",
-      "bytes": 9743,
-      "sha256": "edf38c1d9202e430b33aecef773a2c2130d2fdbc471bb72f6eb36236e5acb86d"
+      "bytes": 9934,
+      "sha256": "b2b5ba8c17c8234634d4cf7f45333d612c3de3a6c42ee1291286daf1b507b13a"
     },
     {
       "path": "roadmap/EPIC-004.md",

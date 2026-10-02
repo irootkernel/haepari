@@ -4,7 +4,7 @@ Complete the ordinary command resource with safe termination, settlement, recove
 
 Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). These checklists define implementation acceptance only.
 
-Detailed SOT: [EPIC-003 execution dossier](../TODO-EPIC-003.md).
+Canonical Outcomes: [managed core freeze](../records/TASK-012-managed-core-freeze.md), [managed transitions](../contracts/managed-transitions.md), [artifact delivery and retention](../contracts/artifact-and-profile.md), and [operations](../operations.md).
 
 ## TASK-009
 
@@ -107,7 +107,7 @@ Requirement coverage: `HP-REQ-022`, `HP-REQ-023`, `HP-REQ-062` (freeze gate F1).
 
 ## Epic acceptance
 
-- [ ] TASK-009 through TASK-012 meet their individual acceptance criteria.
-- [ ] The epic goal is demonstrated through a bounded integrated scenario, including a relevant failure and recovery path.
-- [ ] Every changed public contract is documented and no downstream task relies on an unstated capability.
-- [ ] An explicit epic acceptance updates only the canonical roadmap; task checkboxes alone do not complete the epic.
+- [x] TASK-009 through TASK-012 meet their individual acceptance criteria.
+- [x] The epic goal is demonstrated through a bounded integrated scenario, including a relevant failure and recovery path.
+- [x] Every changed public contract is documented and no downstream task relies on an unstated capability.
+- [x] An explicit epic acceptance updates only the canonical roadmap; task checkboxes alone do not complete the epic.

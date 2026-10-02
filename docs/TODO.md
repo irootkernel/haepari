@@ -2,10 +2,6 @@
 
 These items came from EPIC-001 cold validation and TASK-005/006/007/008/009/010/011 review. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
 
-## Active execution dossiers
-
-- [EPIC-003 execution dossier](TODO-EPIC-003.md) connects existing task, requirement, verification and handoff owners for [EPIC-003](roadmap/EPIC-003.md). It owns no lifecycle status. Maintain it during delivery and follow its last-consumer closeout rules.
-
 ## Structural TODO candidates
 
 - TASK-009 establishes `internal/runner` as the local executor boundary; the controller owns admission, scheduling, collection and cleanup. Before TASK-013 adds another backend, decide whether the remaining `internal/managed` ledger schema and queries, `internal/store/sqlite` connection setup, and `internal/controller` application/transport wiring need explicit application and store seams. Preserve the production `Ledger.Input` consumer in recovery-root inspection when evaluating that boundary. Include the SQLite-specific admission error classifier when evaluating the store boundary; a future driver change must preserve UNIQUE/PRIMARY KEY conflicts and keep trigger, I/O and connection failures as storage uncertainty. Include the same-key replay sequence when evaluating a shared application entry point; another transport must preserve digest, original inventory binding and surviving-source comparison together. The remaining consolidation makes backend changes touch transport and persistence together.

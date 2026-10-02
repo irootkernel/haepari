@@ -26,14 +26,14 @@ Lifecycle status vocabulary:
 | --- | --- | --- | --- | --- |
 | [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | Accepted |
 | [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | Accepted |
-| [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | In progress |
+| [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Accepted |
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Planned |
 | [EPIC-005](roadmap/EPIC-005.md) | Project, skill, manual and migration integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Planned |
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Planned |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Planned |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
 
-EPIC-003 Detailed SOT: [execution dossier](TODO-EPIC-003.md). The dossier connects requirement, acceptance and handoff owners; this roadmap retains identity, prerequisites and lifecycle authority.
+EPIC-003 Canonical Outcomes: [managed core freeze](records/TASK-012-managed-core-freeze.md), [managed transitions](contracts/managed-transitions.md), [artifact delivery and retention](contracts/artifact-and-profile.md), and [operations](operations.md).
 
 ## Recommended task order and actual prerequisites
 
