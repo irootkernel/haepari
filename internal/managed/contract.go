@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -325,7 +326,7 @@ func rejectNoncanonicalKeys(data []byte, typ reflect.Type) error {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	if typ == reflect.TypeOf(json.RawMessage{}) {
+	if typ == reflect.TypeOf(json.RawMessage{}) || typ == reflect.TypeOf(time.Time{}) {
 		return nil
 	}
 	switch typ.Kind() {

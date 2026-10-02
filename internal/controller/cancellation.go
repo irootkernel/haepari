@@ -3,7 +3,6 @@ package controller
 import (
 	"errors"
 	"net/http"
-	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -22,20 +21,23 @@ type nativeCompletion struct {
 // The gate serializes spawn and observed native completion against public
 // cancellation. It is never held throughout preparation, collection or cleanup.
 type localRunControl struct {
-	mu            sync.Mutex
-	wake          chan struct{}
-	receipt       managed.Receipt
-	identity      managed.LocalIdentity
-	completionMu  sync.Mutex
-	completed     chan struct{}
-	completion    *nativeCompletion
-	observed      bool
-	deadline      time.Time
-	cmd           *exec.Cmd
-	runnerRequest string
-	runnerExited  chan struct{}
-	effects       bool
-	beforePhase   func(string) // deterministic integration barrier; nil in production
+	mu              sync.Mutex
+	wake            chan struct{}
+	receipt         managed.Receipt
+	identity        managed.LocalIdentity
+	completionMu    sync.Mutex
+	completed       chan struct{}
+	completion      *nativeCompletion
+	observed        bool
+	deadline        time.Time
+	cmd             *exec.Cmd
+	runnerRequest   string
+	runnerExited    chan struct{}
+	effects         bool
+	ownsJobRoot     bool
+	phases          map[string]managed.LocalPhase
+	beforePhase     func(string) // deterministic integration barrier; nil in production
+	beforeInputCopy func() error // stopped-worker fault injection after owned preparation; nil in production
 }
 
 func (c *localRunControl) phase(name string) {
@@ -266,59 +268,5 @@ func terminateLocal(c *localRunControl, budget time.Duration) error {
 // Called only after the preparation worker stopped, or before it was allowed
 // any filesystem effect. Never called for an ambiguous preparation timeout.
 func (s *runtimeServer) settleCancelledPreparation(c *localRunControl, job managed.JobSpec, jobRoot, workspace string) error {
-	c.mu.Lock()
-	current, err := s.ledger.RecordLocalOutcome(managed.LocalOutcomeRequest{Identity: c.identity, ExpectedRevision: c.receipt.JobRevision, Outcome: managed.LocalOutcome{Started: false, WorkloadOutcome: "cancelled"}, MutationKey: "outcome-" + c.identity.JobID})
-	if err == nil {
-		current, err = s.ledger.CompleteLocalRun(managed.LocalTerminationRequest{Identity: c.identity, ExpectedRevision: current.JobRevision, NoOwnedEffect: !c.effects, MutationKey: "termination-" + c.identity.JobID})
-	}
-	c.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	c.phase("collecting")
-	current, err = s.ledger.AdvanceLocal(current.JobID, current.JobRevision, "collecting", "cleaning", "collected-"+current.JobID)
-	if err != nil {
-		return err
-	}
-	c.phase("cleaning")
-	cleanup := managed.CleanupOutcome("not_needed")
-	var protected []managed.ProtectedEvidence
-	if c.effects {
-		deadline := time.Now().Add(time.Duration(job.Deadlines.CleanupSeconds) * time.Second)
-		cleanupErr, status := boundedPhase(deadline, func() error {
-			err := removeTreeUntil(workspace, deadline)
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		})
-		if status == phaseUnproven {
-			return errors.New("cancelled preparation cleanup termination unproven")
-		}
-		cleanup = "verified"
-		if cleanupErr != nil || status == phaseLate {
-			cleanup = "failed"
-			protected = append(protected, managed.ProtectedEvidence{Path: "workspace", Reason: "cleanup_incomplete", RecoveryReference: "job:" + current.JobID})
-		}
-		if err = writeReceipt(jobRoot, "cancel-no-start.json", map[string]any{"no_start": true, "cleanup": cleanup}); err != nil {
-			return err
-		}
-	}
-	current, err = s.ledger.AdvanceLocal(current.JobID, current.JobRevision, "cleaning", "settling", "cleaned-"+current.JobID)
-	if err != nil {
-		return err
-	}
-	c.phase("settling")
-	verdict, err := managed.DeriveVerdict(managed.ResultFacts{WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: cleanup, ManualEligible: true, CancelledBeforeOutcome: true, TerminationProven: true, NoOwnedEffect: !c.effects})
-	if err != nil {
-		return err
-	}
-	result := managed.Result{Schema: "haepari.result/v1", JobID: current.JobID, ResourceID: current.ResourceID, ResourceRevision: current.ResourceConfigRevision, LeaseGeneration: current.LeaseGeneration, JobState: "finished", ResourceAvailability: current.ResourceAvailability, WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: cleanup, FinalVerdict: verdict, Reason: "cancel_before_start", ProtectedEvidence: protected}
-	if cleanup == "failed" {
-		result.ResourceAvailability = "quarantined"
-	}
-	if _, err = s.ledger.SettleLocal(current.JobID, current.JobRevision, result); err != nil {
-		return err
-	}
-	return nil
+	return s.finishPreparation(c, job, jobRoot, workspace, "cancel_before_start")
 }

@@ -1,6 +1,7 @@
 """Black-box checks for the local Haepari binary and foreground controller."""
 
 from contextlib import contextmanager
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -237,6 +238,14 @@ def test_local_admission_result_replay_and_conflict():
         assert final["evidence_completeness"] == "complete"
         assert final["cleanup_outcome"] == "verified"
         assert final["job_id"] == first
+        timings = final["timings"]
+        assert [phase["phase"] for phase in timings["phases"]] == ["prepare", "run", "collect", "cleanup", "verify"]
+        assert timings["admitted_at"] and timings["reserved_at"]
+        assert timings["adapter_steps"] == []
+        for phase in timings["phases"]:
+            start = datetime.fromisoformat(phase["started_at"].replace("Z", "+00:00"))
+            end = datetime.fromisoformat(phase["ended_at"].replace("Z", "+00:00"))
+            assert end >= start
         artifact = next(a for a in final["artifacts"] if a["path"] == "results/out.txt")
         assert artifact["sha256"] == hashlib.sha256(b"isolated input\n").hexdigest()
         assert submit()["data"]["job_id"] == first

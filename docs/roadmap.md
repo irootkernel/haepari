@@ -51,7 +51,7 @@ EPIC-003 Detailed SOT: [execution dossier](TODO-EPIC-003.md). The dossier connec
 | [TASK-008](roadmap/EPIC-002.md#task-008) | Implement client waits, events and cancellation admission | TASK-007 | Active | Accepted |
 | [TASK-035](roadmap/EPIC-002.md#task-035) | Implement advisory named locks | TASK-008 | Active | Accepted |
 | [TASK-009](roadmap/EPIC-003.md#task-009) | Implement the local per-job supervisor | TASK-033, TASK-007, TASK-004 | Active | Accepted |
-| [TASK-010](roadmap/EPIC-003.md#task-010) | Implement phase settlement and safe resource return | TASK-009 | Active | Planned |
+| [TASK-010](roadmap/EPIC-003.md#task-010) | Implement phase settlement and safe resource return | TASK-009 | Active | Accepted |
 | [TASK-011](roadmap/EPIC-003.md#task-011) | Implement crash reconciliation, explicit recovery and the development service | TASK-010, TASK-004 | Active | Planned |
 | [TASK-012](roadmap/EPIC-003.md#task-012) | Implement artifact delivery and retention; freeze the managed core contract | TASK-010, TASK-011, TASK-035 | Active | Planned |
 | [TASK-013](roadmap/EPIC-004.md#task-013) | Implement persistent VM registration and UTM control | TASK-007, TASK-003 | Active | Planned |

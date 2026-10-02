@@ -16,7 +16,50 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const supervisorObservationSlack = time.Second
+
 func (s *runtimeServer) runWithSupervisor(c *localRunControl, job managed.JobSpec, jobRoot, workspace, runID string) (bool, *os.File, error) {
+	deadline := time.Now().Add(time.Duration(job.Deadlines.RunSeconds) * time.Second)
+	if err := s.beginPhase(c, "run", job.Deadlines.RunSeconds, deadline); err != nil {
+		return false, nil, err
+	}
+	terminationAllowance := time.Duration(job.Deadlines.CleanupSeconds) * time.Second
+	return observeWithinRunBudget(deadline, terminationAllowance, func() (bool, *os.File, error) {
+		return s.observeSupervisor(c, job, jobRoot, workspace, runID, deadline)
+	})
+}
+
+func observeWithinRunBudget(deadline time.Time, terminationAllowance time.Duration, observer func() (bool, *os.File, error)) (bool, *os.File, error) {
+	type completion struct {
+		started bool
+		log     *os.File
+		err     error
+	}
+	done := make(chan completion, 1)
+	go func() {
+		started, log, err := observer()
+		done <- completion{started, log, err}
+	}()
+	// The run deadline starts before log/request publication. Termination has
+	// its own bounded observation allowance; a blocked setup or observer is
+	// uncertainty, never a stopped workload or permission to release the lease.
+	timer := time.NewTimer(time.Until(deadline) + terminationAllowance + supervisorObservationSlack)
+	defer timer.Stop()
+	select {
+	case result := <-done:
+		return result.started, result.log, result.err
+	case <-timer.C:
+		go func() {
+			result := <-done
+			if result.log != nil {
+				_ = result.log.Close()
+			}
+		}()
+		return false, nil, runner.ErrUnproven
+	}
+}
+
+func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpec, jobRoot, workspace, runID string, deadline time.Time) (bool, *os.File, error) {
 	c.mu.Lock()
 	receipt := c.receipt
 	c.mu.Unlock()
@@ -59,7 +102,6 @@ func (s *runtimeServer) runWithSupervisor(c *localRunControl, job managed.JobSpe
 	if err := unix.Fstat(int(log.Fd()), &st); err != nil {
 		return false, log, err
 	}
-	deadline := time.Now().Add(time.Duration(job.Deadlines.RunSeconds) * time.Second)
 	q := runner.Request{Schema: "haepari.runner-request/v1", Identity: c.identity, BootID: boot, WorkDir: filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: environment, Deadline: deadline.UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds, LogDevice: uint64(st.Dev), LogInode: uint64(st.Ino)}
 	if err := q.Validate(jobRoot); err != nil {
 		return false, log, err

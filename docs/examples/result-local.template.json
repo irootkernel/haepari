@@ -15,22 +15,27 @@
     "reserved_at": "<utc-timestamp>",
     "phases": [
       {
-        "phase": "preparing",
+        "phase": "prepare",
         "started_at": "<utc-timestamp>",
         "ended_at": "<utc-timestamp>"
       },
       {
-        "phase": "running",
+        "phase": "run",
         "started_at": "<utc-timestamp>",
         "ended_at": "<utc-timestamp>"
       },
       {
-        "phase": "collecting",
+        "phase": "collect",
         "started_at": "<utc-timestamp>",
         "ended_at": "<utc-timestamp>"
       },
       {
-        "phase": "cleaning",
+        "phase": "cleanup",
+        "started_at": "<utc-timestamp>",
+        "ended_at": "<utc-timestamp>"
+      },
+      {
+        "phase": "verify",
         "started_at": "<utc-timestamp>",
         "ended_at": "<utc-timestamp>"
       }

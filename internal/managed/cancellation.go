@@ -197,7 +197,15 @@ func (l *Ledger) Cancel(q CancelRequest) (CancelReceipt, error) {
 				if err = json.Unmarshal(identity, &owner); err != nil {
 					return CancelReceipt{}, err
 				}
-				result := Result{Schema: "haepari.result/v1", JobID: q.JobID, ResourceID: current.ResourceID, ResourceRevision: owner.ConfigRevision, JobState: "finished", ResourceAvailability: current.ResourceAvailability, WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: Cancelled, Reason: "cancelled"}
+				verdict, err := DeriveVerdict(ResultFacts{WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", ManualEligible: true, CancelledBeforeOutcome: true, TerminationProven: true, NoOwnedEffect: true})
+				if err != nil {
+					return CancelReceipt{}, err
+				}
+				timings, err := resultTimingsTx(tx, q.JobID)
+				if err != nil {
+					return CancelReceipt{}, err
+				}
+				result := Result{Schema: "haepari.result/v1", JobID: q.JobID, ResourceID: current.ResourceID, ResourceRevision: owner.ConfigRevision, JobState: "finished", ResourceAvailability: current.ResourceAvailability, WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict, Reason: "cancelled", Timings: timings}
 				data, _ := json.Marshal(result)
 				if _, err = tx.Exec(`UPDATE managed_jobs SET result_json=? WHERE id=?`, data, q.JobID); err != nil {
 					return CancelReceipt{}, err
@@ -439,6 +447,82 @@ type LocalTerminationRequest struct {
 	MutationKey      string
 }
 
+type LocalPreparationStopRequest struct {
+	Identity         LocalIdentity
+	ExpectedRevision int64
+	Reason           string
+	NoOwnedEffect    bool
+	MutationKey      string
+}
+
+// RecordLocalPreparationStop records a completed local preparer, not a timed
+// out observer. No run claim can exist, and the controller must have observed
+// the worker stop before classifying its owned filesystem effects.
+func (l *Ledger) RecordLocalPreparationStop(q LocalPreparationStopRequest) (Receipt, error) {
+	if q.ExpectedRevision <= 0 || q.Identity.RunID != "" || !oneOf(q.Reason, "prepare_failed", "prepare_deadline", "cancel_before_start") {
+		return Receipt{}, ErrInvalid
+	}
+	return l.mutate("local_preparation_stop", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
+		if err := matchLocalIdentityTx(tx, q.Identity); err != nil {
+			return Receipt{}, err
+		}
+		current, err := l.snapshotTx(tx, q.Identity.JobID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		if !oneOf(current.JobState, "preparing", "ready", "collecting") {
+			return Receipt{}, ErrConflict
+		}
+		if _, err := localRevisionTx(tx, q.Identity.JobID, q.ExpectedRevision, current.JobState); err != nil {
+			return Receipt{}, err
+		}
+		var kind string
+		if err := tx.QueryRow(`SELECT kind FROM managed_resources WHERE id=?`, q.Identity.ResourceID).Scan(&kind); err != nil {
+			return Receipt{}, err
+		}
+		if kind != "local" {
+			return Receipt{}, ErrUnsupported
+		}
+		var claims int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM managed_runs WHERE job_id=?`, q.Identity.JobID).Scan(&claims); err != nil {
+			return Receipt{}, err
+		}
+		if claims != 0 {
+			return Receipt{}, ErrBlocked
+		}
+		status, err := cancellationStatusTx(tx, q.Identity.JobID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		outcome := LocalOutcome{WorkloadOutcome: "inconclusive"}
+		if status.Requested && status.BeforeOutcome {
+			outcome.WorkloadOutcome = "cancelled"
+		} else if q.Reason == "cancel_before_start" {
+			return Receipt{}, ErrConflict
+		}
+		identity, _ := json.Marshal(q.Identity)
+		data, _ := json.Marshal(outcome)
+		proof, _ := json.Marshal(LocalTerminationRequest{Identity: q.Identity, ExpectedRevision: q.ExpectedRevision, NoOwnedEffect: q.NoOwnedEffect, MutationKey: q.MutationKey})
+		if _, err := tx.Exec(`INSERT INTO managed_local_outcomes(job_id,identity_json,outcome_json,proof_json) VALUES(?,?,?,?)`, q.Identity.JobID, identity, data, proof); err != nil {
+			return Receipt{}, err
+		}
+		next := "collecting"
+		if q.NoOwnedEffect {
+			next = "settling"
+		}
+		if _, err := tx.Exec(`UPDATE managed_jobs SET state=?,revision=revision+1 WHERE id=?`, next, q.Identity.JobID); err != nil {
+			return Receipt{}, err
+		}
+		cursor, err := addEvent(tx, q.Identity.JobID, "preparation_stopped", map[string]any{"reason": q.Reason, "outcome": outcome, "no_owned_effect": q.NoOwnedEffect, "identity": q.Identity})
+		if err != nil {
+			return Receipt{}, err
+		}
+		r, err := l.snapshotTx(tx, q.Identity.JobID)
+		r.EventCursor = cursor
+		return r, err
+	})
+}
+
 func (l *Ledger) CompleteLocalRun(q LocalTerminationRequest) (Receipt, error) {
 	if q.ExpectedRevision <= 0 {
 		return Receipt{}, ErrInvalid
@@ -496,11 +580,8 @@ func validateLocalOutcomeTx(tx *sql.Tx, jobID string, result Result) error {
 	var data, proof, identity []byte
 	err := tx.QueryRow(`SELECT outcome_json,proof_json,identity_json FROM managed_local_outcomes WHERE job_id=?`, jobID).Scan(&data, &proof, &identity)
 	if errors.Is(err, sql.ErrNoRows) {
-		if result.Reason == "cancel_before_start" {
-			return ErrBlocked
-		}
-		return nil
-	} // existing non-cancellation execution paths
+		return ErrBlocked
+	}
 	if err != nil {
 		return err
 	}
@@ -514,6 +595,9 @@ func validateLocalOutcomeTx(tx *sql.Tx, jobID string, result Result) error {
 	a, _ := json.Marshal(out.NativeExitCode)
 	b, _ := json.Marshal(result.NativeExitCode)
 	if out.WorkloadOutcome != result.WorkloadOutcome || string(a) != string(b) || out.NativeSignal != result.NativeSignal {
+		return ErrInvalid
+	}
+	if noStartResult(result) && out.Started {
 		return ErrInvalid
 	}
 	if result.Reason == "cancel_before_start" && (out.Started || out.WorkloadOutcome != "cancelled" || out.NativeExitCode != nil || out.NativeSignal != "") {

@@ -280,6 +280,7 @@ var _ = ginkgo.Describe("Task008CancellationController", ginkgo.Label("integrati
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Cancelled))
 		gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("not_needed")))
+		expectPhaseTimings(result, "prepare", "verify")
 		_, err = os.Stat(filepath.Join(s.root.Path, "jobs", r.JobID))
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 		var count int
@@ -312,8 +313,12 @@ var _ = ginkgo.Describe("Task008CancellationController", ginkgo.Label("integrati
 	})
 	ginkgo.It("bounds active cancellation, retains missing output evidence and quarantines after proven stop", func() {
 		t := ginkgo.GinkgoT()
-		_, s, r, job, object := cancellationRuntime(t, "exec /bin/sleep 30")
+		_, s, r, job, object := cancellationRuntime(t, "printf started > started.txt; exec /bin/sleep 30")
 		_, release, done := cancellationBarrier(t, s, r, job, object, "running")
+		gomega.Eventually(func() string {
+			data, _ := os.ReadFile(filepath.Join(s.root.Path, "jobs", r.JobID, "workspace/source/started.txt"))
+			return string(data)
+		}, 5*time.Second, 10*time.Millisecond).Should(gomega.Equal("started"))
 		current, err := s.ledger.Snapshot(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		ack, err := s.requestCancel(managed.CancelRequest{JobID: r.JobID, ExpectedRevision: current.JobRevision, MutationKey: "active-cancel"})
@@ -445,7 +450,7 @@ var _ = ginkgo.Describe("Task008CancellationMutationNamespace", ginkgo.Label("in
 				gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_mutations WHERE mutation_key=?`, "cancel:"+q.MutationKey).Scan(&count)).To(gomega.Succeed())
 				gomega.Expect(count).To(gomega.Equal(1))
 				gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_mutations WHERE mutation_key=?`, q.MutationKey).Scan(&count)).To(gomega.Succeed())
-				if q.MutationKey == "start-"+r.JobID && phase != "running" {
+				if phase != "running" && q.MutationKey != "settle-"+r.JobID {
 					gomega.Expect(count).To(gomega.BeZero())
 				} else {
 					gomega.Expect(count).To(gomega.Equal(1))

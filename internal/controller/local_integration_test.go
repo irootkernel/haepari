@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -159,8 +158,8 @@ var _ = ginkgo.Describe("PreparationDeadlineAndUnprovenWorkerKeepCorrectOwnershi
 				cause := tc.cause
 				var release, finished chan struct{}
 				if tc.name == "expired" {
-					if err := s.executeLocal(reserved, job, "", time.Now().Add(-time.Second)); !errors.Is(err, context.DeadlineExceeded) {
-						t.Fatalf("expired prepare reached store or run claim: %v", err)
+					if err := s.executeLocal(reserved, job, "", time.Now().Add(-time.Second)); err != nil {
+						t.Fatalf("expired preparation settlement failed: %v", err)
 					}
 				} else {
 					release = make(chan struct{})
@@ -197,10 +196,13 @@ var _ = ginkgo.Describe("PreparationDeadlineAndUnprovenWorkerKeepCorrectOwnershi
 					t.Fatalf("preparation ownership: %+v", got)
 				}
 				if tc.wantReason != "" {
-					failure, err := os.ReadFile(filepath.Join(root.Path, "jobs", reserved.JobID, "prepare-failure.json"))
-					if err != nil || !json.Valid(failure) || !strings.Contains(string(failure), tc.wantReason) {
-						t.Fatalf("deadline reason missing: %q %v", failure, err)
-					}
+					result, err := ledger.Result(reserved.JobID)
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					gomega.Expect(result.Reason).To(gomega.Equal(tc.wantReason))
+					gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Incomplete))
+					gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("not_needed")))
+					_, err = os.Lstat(filepath.Join(root.Path, "jobs", reserved.JobID))
+					gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 				}
 				var claims int
 				if err := db.QueryRow(`SELECT COUNT(*) FROM managed_runs WHERE job_id=?`, reserved.JobID).Scan(&claims); err != nil || claims != 0 {

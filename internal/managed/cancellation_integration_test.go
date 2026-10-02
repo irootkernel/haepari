@@ -311,7 +311,7 @@ var _ = ginkgo.Describe("Task008CancellationLedger", ginkgo.Label("integration")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(current.JobRevision).To(gomega.Equal(ack.Receipt.JobRevision))
 	})
-	ginkgo.It("cancel-before-native freezes cancelled but cannot settle without termination proof or skip active required outputs", func() {
+	ginkgo.It("cancel-before-native freezes cancelled and refuses no-effect proof or missing active outputs", func() {
 		t := ginkgo.GinkgoT()
 		_, l, r := cancellationFixture(t)
 		r, id := cancellationRunning(t, l, r)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,15 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			panic(err)
 		}
-		_, err = crashOperation(ledger, os.Getenv("HAEPARI_STORAGE_OPERATION"), data)
+		operation := os.Getenv("HAEPARI_STORAGE_OPERATION")
+		var revision int64
+		if operation == "settle" {
+			revision, err = strconv.ParseInt(os.Getenv("HAEPARI_STORAGE_REVISION"), 10, 64)
+			if err != nil {
+				panic(err)
+			}
+		}
+		_, err = crashOperation(ledger, operation, data, revision)
 		if err != nil {
 			panic(err)
 		}
@@ -65,6 +74,8 @@ var _ = ginkgo.Describe("CrashTransactionBoundaries", ginkgo.Label("integration"
 				job := validJob()
 				job.Deadlines.QueueSeconds = 600
 				data := encode(t, job)
+				var settleRevision int64
+				expectedPhases := []ResultPhase{}
 				if operation != "admit" {
 					_, err := l.Admit(data, digest, "crash-request", "crash-job")
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -81,12 +92,39 @@ var _ = ginkgo.Describe("CrashTransactionBoundaries", ginkgo.Label("integration"
 				if operation == "settle" {
 					_, err := l.StartLocal("crash-job", 3, "crash-run")
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
-					revision := int64(4)
-					for _, phase := range [][2]string{{"running", "collecting"}, {"collecting", "cleaning"}, {"cleaning", "settling"}} {
-						_, err := l.AdvanceLocal("crash-job", revision, phase[0], phase[1], "setup-"+phase[1])
+					id, err := l.LocalIdentity("crash-job")
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					_, err = l.RecordLocalOutcome(LocalOutcomeRequest{Identity: id, ExpectedRevision: 4, Outcome: LocalOutcome{Started: true, WorkloadOutcome: "pass"}, MutationKey: "setup-outcome"})
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					r, err := l.CompleteLocalRun(LocalTerminationRequest{Identity: id, ExpectedRevision: 5, MutationKey: "setup-proof"})
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					// Durable phase observations precede the terminal transaction;
+					// a killed commit must preserve their exact timing projection.
+					for _, phase := range []string{"collect", "cleanup", "verify"} {
+						now := time.Now().UTC()
+						p := LocalPhase{Schema: "haepari.phase-receipt/v1", Identity: id, Phase: phase, BudgetSeconds: 10, StartedAt: now, Deadline: now.Add(10 * time.Second), ObservedAt: now}
+						if phase == "verify" {
+							p.BudgetSeconds, p.Deadline = 0, time.Time{}
+						}
+						r, err = l.RecordLocalPhase(LocalPhaseRequest{ExpectedRevision: r.JobRevision, Record: p, MutationKey: "setup-intent-" + phase})
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
-						revision++
+						p.Completed, p.Outcome, p.ObservedAt = true, "complete", time.Now().UTC()
+						if phase == "collect" {
+							p.Artifacts, p.EvidenceCompleteness = crashResult().Artifacts, "complete"
+						}
+						r, err = l.RecordLocalPhase(LocalPhaseRequest{ExpectedRevision: r.JobRevision, Record: p, MutationKey: "setup-observed-" + phase})
+						gomega.Expect(err).NotTo(gomega.HaveOccurred())
+						expectedPhases = append(expectedPhases, ResultPhase{Phase: phase, StartedAt: p.StartedAt.Format(time.RFC3339Nano), EndedAt: p.ObservedAt.Format(time.RFC3339Nano)})
+						if phase != "verify" {
+							from, to := "collecting", "cleaning"
+							if phase == "cleanup" {
+								from, to = "cleaning", "settling"
+							}
+							r, err = l.AdvanceLocal("crash-job", r.JobRevision, from, to, "setup-"+to)
+							gomega.Expect(err).NotTo(gomega.HaveOccurred())
+						}
 					}
+					settleRevision = r.JobRevision
 				}
 				var baselineMutations, baselineEvents int
 				gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_mutations`).Scan(&baselineMutations)).To(gomega.Succeed())
@@ -95,7 +133,7 @@ var _ = ginkgo.Describe("CrashTransactionBoundaries", ginkgo.Label("integration"
 				executable, err := os.Executable()
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				child := exec.Command(executable)
-				child.Env = append(os.Environ(), "HAEPARI_STORAGE_PROBE="+path, "HAEPARI_STORAGE_BOUNDARY="+boundary, "HAEPARI_STORAGE_OPERATION="+operation)
+				child.Env = append(os.Environ(), "HAEPARI_STORAGE_PROBE="+path, "HAEPARI_STORAGE_BOUNDARY="+boundary, "HAEPARI_STORAGE_OPERATION="+operation, "HAEPARI_STORAGE_REVISION="+strconv.FormatInt(settleRevision, 10))
 				output, err := os.Create(path + ".output")
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				defer output.Close()
@@ -177,7 +215,7 @@ var _ = ginkgo.Describe("CrashTransactionBoundaries", ginkgo.Label("integration"
 				gomega.Expect(mutations).To(gomega.Equal(expected))
 				if boundary == "after_commit" {
 					var replay Receipt
-					replay, err = crashOperation(l, operation, data)
+					replay, err = crashOperation(l, operation, data, settleRevision)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 					gomega.Expect(replay.JobID).To(gomega.Equal(receipt.JobID))
 					gomega.Expect(replay.JobRevision).To(gomega.Equal(receipt.JobRevision))
@@ -213,7 +251,13 @@ var _ = ginkgo.Describe("CrashTransactionBoundaries", ginkgo.Label("integration"
 					result, err := l.Result("crash-job")
 					if boundary == "after_commit" {
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
-						gomega.Expect(result).To(gomega.Equal(crashResult()))
+						expected := crashResult()
+						expected.Timings = result.Timings
+						gomega.Expect(result).To(gomega.Equal(expected))
+						gomega.Expect(result.Timings.AdmittedAt).NotTo(gomega.BeEmpty())
+						gomega.Expect(result.Timings.ReservedAt).NotTo(gomega.BeEmpty())
+						gomega.Expect(result.Timings.Phases).To(gomega.Equal(expectedPhases))
+						gomega.Expect(result.Timings.AdapterSteps).To(gomega.Equal([]ResultStep{}))
 					} else {
 						gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
 					}
@@ -258,7 +302,7 @@ func crashResult() Result {
 	return Result{Schema: "haepari.result/v1", JobID: "crash-job", ResourceID: "local-a", ResourceRevision: 1, LeaseGeneration: 1, JobState: "finished", ResourceAvailability: "available", WorkloadOutcome: "pass", EvidenceCompleteness: "complete", CleanupOutcome: "verified", FinalVerdict: Pass, Artifacts: []ResultArtifact{{Path: "results/build.json", SizeBytes: 1, SHA256: digest}}}
 }
 
-func crashOperation(l *Ledger, operation string, data []byte) (Receipt, error) {
+func crashOperation(l *Ledger, operation string, data []byte, revision int64) (Receipt, error) {
 	if strings.HasPrefix(operation, "vm-") {
 		return Receipt{}, crashPowerOperation(l, operation)
 	}
@@ -276,7 +320,7 @@ func crashOperation(l *Ledger, operation string, data []byte) (Receipt, error) {
 	case "start":
 		return l.StartLocal("crash-job", 3, "crash-run")
 	case "settle":
-		return l.SettleLocal("crash-job", 7, crashResult())
+		return l.SettleLocal("crash-job", revision, crashResult())
 	case "interrupt":
 		if err := l.MarkInterrupted(); err != nil {
 			return Receipt{}, err

@@ -38,37 +38,52 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 }
 
 func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.JobSpec, objectID string, prepareDeadline time.Time) error {
-	receipt := c.receipt
-	jobRoot := filepath.Join(s.root.Path, "jobs", receipt.JobID)
+	jobRoot := filepath.Join(s.root.Path, "jobs", c.identity.JobID)
 	workspace := filepath.Join(jobRoot, "workspace")
+	if err := s.beginPhase(c, "prepare", job.Deadlines.PrepareSeconds, prepareDeadline); err != nil {
+		return err
+	}
 	c.phase("preparing")
 	c.mu.Lock()
-	status, err := s.ledger.Cancellation(receipt.JobID)
+	status, err := s.ledger.Cancellation(c.identity.JobID)
 	if err != nil {
 		c.mu.Unlock()
 		return err
 	}
 	if status.Requested {
 		c.mu.Unlock()
+		if err := s.endPhase(c, "prepare", managed.LocalPhase{Outcome: "not_needed"}); err != nil {
+			return err
+		}
 		return s.settleCancelledPreparation(c, job, jobRoot, workspace)
 	}
-	if receipt.JobState != "preparing" {
+	if c.receipt.JobState != "preparing" {
 		c.mu.Unlock()
 		return managed.ErrConflict
 	}
-	// This flag is conservative: once the worker is allowed to create files,
-	// only observing its completion permits cleanup or a no-start settlement.
-	c.effects = true
 	c.mu.Unlock()
 	prepareErr := prepareLocal(prepareDeadline, func() error {
 		if !time.Now().Before(prepareDeadline) {
 			return context.DeadlineExceeded
 		}
+		c.mu.Lock()
+		// Once the worker is authorized, only observing its completion permits
+		// cleanup. Exclusive creation separately proves ownership of the path.
+		c.effects = true
+		c.mu.Unlock()
 		if err := os.Mkdir(jobRoot, 0700); err != nil {
 			return err
 		}
-		if err := writeReceipt(jobRoot, "input.json", map[string]any{"job_id": receipt.JobID, "snapshot_object_id": objectID, "lease_generation": receipt.LeaseGeneration}); err != nil {
+		c.mu.Lock()
+		c.ownsJobRoot = true
+		c.mu.Unlock()
+		if err := writeReceipt(jobRoot, "input.json", map[string]any{"identity": c.identity, "snapshot_object_id": objectID}); err != nil {
 			return err
+		}
+		if c.beforeInputCopy != nil {
+			if err := c.beforeInputCopy(); err != nil {
+				return err
+			}
 		}
 		snap, err := s.store.Read(objectID)
 		if err != nil {
@@ -76,11 +91,29 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		}
 		return copyInputWithCancel(snap, workspace, prepareDeadline, c.wake)
 	})
+	prepareOutcome := "complete"
+	if errors.Is(prepareErr, errPrepareUnproven) {
+		prepareOutcome = "unproven"
+	} else if errors.Is(prepareErr, context.DeadlineExceeded) {
+		prepareOutcome = "late"
+	} else if prepareErr != nil {
+		prepareOutcome = "failed"
+	}
+	if err := s.endPhase(c, "prepare", managed.LocalPhase{Outcome: prepareOutcome}); err != nil {
+		return err
+	}
 	if errors.Is(prepareErr, errPrepareUnproven) {
 		return prepareErr
 	}
+	if prepareErr != nil {
+		reason := "prepare_failed"
+		if errors.Is(prepareErr, context.DeadlineExceeded) {
+			reason = "prepare_deadline"
+		}
+		return s.finishPreparation(c, job, jobRoot, workspace, reason)
+	}
 	c.mu.Lock()
-	status, err = s.ledger.Cancellation(receipt.JobID)
+	status, err = s.ledger.Cancellation(c.identity.JobID)
 	if err != nil {
 		c.mu.Unlock()
 		return err
@@ -89,12 +122,10 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		c.mu.Unlock()
 		return s.settleCancelledPreparation(c, job, jobRoot, workspace)
 	}
-	if prepareErr != nil {
-		c.mu.Unlock()
-		return prepareErr
+	receipt, err := s.ledger.AdvanceLocal(c.identity.JobID, c.receipt.JobRevision, "preparing", "ready", "prepared-"+c.identity.JobID)
+	if err == nil {
+		c.receipt = receipt
 	}
-	receipt, err = s.ledger.AdvanceLocal(receipt.JobID, receipt.JobRevision, "preparing", "ready", "prepared-"+receipt.JobID)
-	c.receipt = receipt
 	c.mu.Unlock()
 	if err != nil {
 		return err
@@ -105,7 +136,7 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		return err
 	}
 	c.mu.Lock()
-	status, err = s.ledger.Cancellation(receipt.JobID)
+	status, err = s.ledger.Cancellation(c.identity.JobID)
 	if err != nil {
 		c.mu.Unlock()
 		return err
@@ -114,14 +145,15 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		c.mu.Unlock()
 		return s.settleCancelledPreparation(c, job, jobRoot, workspace)
 	}
-	receipt, err = s.ledger.StartLocal(receipt.JobID, receipt.JobRevision, runID)
+	receipt, err = s.ledger.StartLocal(c.identity.JobID, c.receipt.JobRevision, runID)
+	if err == nil {
+		c.receipt = receipt
+		c.identity.RunID = runID
+	}
+	c.mu.Unlock()
 	if err != nil {
-		c.mu.Unlock()
 		return err
 	}
-	c.receipt = receipt
-	c.identity.RunID = runID
-	c.mu.Unlock()
 	started, logFile, err := s.runWithSupervisor(c, job, jobRoot, workspace, runID)
 	if logFile != nil {
 		defer logFile.Close()
@@ -130,115 +162,27 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		return err
 	}
 	c.mu.Lock()
-	receipt = c.receipt
 	// A cancellation committed after native observation changes only intent.
-	receipt, err = s.ledger.CompleteLocalRun(managed.LocalTerminationRequest{Identity: c.identity, ExpectedRevision: receipt.JobRevision, MutationKey: "termination-" + receipt.JobID})
-	c.receipt = receipt
+	receipt, err = s.ledger.CompleteLocalRun(managed.LocalTerminationRequest{Identity: c.identity, ExpectedRevision: c.receipt.JobRevision, MutationKey: "termination-" + c.identity.JobID})
+	if err == nil {
+		c.receipt = receipt
+	}
 	c.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	frozen, err := s.ledger.LocalOutcome(receipt.JobID)
+	if err := s.endPhase(c, "run", managed.LocalPhase{Outcome: "complete"}); err != nil {
+		return err
+	}
+	frozen, err := s.ledger.LocalOutcome(c.identity.JobID)
 	if err != nil {
 		return err
 	}
-	outcome := frozen.WorkloadOutcome
-	nativeCode, signal := frozen.NativeExitCode, frozen.NativeSignal
-	timedOut := outcome == "timed_out"
-	if err = logFile.Sync(); err != nil {
-		return err
-	}
-	c.phase("collecting")
-	collectDeadline := time.Now().Add(time.Duration(job.Deadlines.CollectSeconds) * time.Second)
-	collected, collectionStatus := boundedPhase(collectDeadline, func() collectionAttempt {
-		artifacts, complete, expired := collectOutputs(workspace, filepath.Join(jobRoot, "artifacts"), job.Workload.RequiredOutputs, collectDeadline)
-		return collectionAttempt{artifacts: artifacts, complete: complete, expired: expired}
-	})
-	if collectionStatus == phaseUnproven {
-		// The collector may still hold a filesystem operation. Reconciliation
-		// retains occupancy and quarantines the resource; cleanup is unsafe.
-		return errors.New("collector termination unproven after deadline")
-	}
-	if collectionStatus == phaseLate {
-		collected.complete = false
-		collected.expired = true
-	}
-	artifacts, complete, collectionExpired := collected.artifacts, collected.complete, collected.expired
-	if err := writeReceipt(jobRoot, "collection.json", map[string]any{"complete": complete, "deadline_expired": collectionExpired, "artifacts": artifacts}); err != nil {
-		return err
-	}
-	receipt, err = s.ledger.AdvanceLocal(receipt.JobID, receipt.JobRevision, "collecting", "cleaning", "collected-"+receipt.JobID)
-	if err != nil {
-		return err
-	}
-	c.phase("cleaning")
-	var cleanupErr error
-	protected := []managed.ProtectedEvidence{}
-	if complete {
-		cleanupDeadline := time.Now().Add(time.Duration(job.Deadlines.CleanupSeconds) * time.Second)
-		var cleanupStatus phaseStatus
-		cleanupErr, cleanupStatus = boundedPhase(cleanupDeadline, func() error {
-			return removeTreeUntil(workspace, cleanupDeadline)
-		})
-		if cleanupStatus == phaseUnproven {
-			// A blocked unlink may still be running. Do not claim cleanup or
-			// settle while an owned filesystem effect remains unobserved.
-			return errors.New("cleanup termination unproven after deadline")
-		}
-		if cleanupStatus == phaseLate && cleanupErr == nil {
-			// Removal completed, but a late final syscall is not verified
-			// cleanup. The workspace is gone, so it is not protected evidence.
-			cleanupErr = context.DeadlineExceeded
-		} else if cleanupErr != nil {
-			protected = append(protected, managed.ProtectedEvidence{Path: "workspace", Reason: "cleanup_incomplete", RecoveryReference: "job:" + receipt.JobID})
-		}
-	} else {
-		cleanupErr = errors.New("required output collection incomplete; workspace protected")
-		reason := "required_output_uncollected"
-		if collectionExpired {
-			reason = "collection_deadline"
-		}
-		protected = append(protected, managed.ProtectedEvidence{Path: "workspace", Reason: reason, RecoveryReference: "job:" + receipt.JobID})
-	}
-	cleanup := "verified"
-	availability := "available"
-	if cleanupErr != nil {
-		cleanup = "failed"
-		availability = "quarantined"
-	}
-	if err := writeReceipt(jobRoot, "cleanup.json", map[string]any{"outcome": cleanup, "error": cleanupErr != nil, "protected_evidence": protected}); err != nil {
-		return err
-	}
-	receipt, err = s.ledger.AdvanceLocal(receipt.JobID, receipt.JobRevision, "cleaning", "settling", "cleaned-"+receipt.JobID)
-	if err != nil {
-		return err
-	}
-	c.phase("settling")
-	evidence := managed.EvidenceCompleteness("complete")
-	if !complete {
-		evidence = "partial"
-	}
-	verdict, err := managed.DeriveVerdict(managed.ResultFacts{WorkloadOutcome: outcome, EvidenceCompleteness: evidence, CleanupOutcome: managed.CleanupOutcome(cleanup), ManualEligible: true, CancelledBeforeOutcome: outcome == "cancelled", TerminationProven: true})
-	if err != nil {
-		return err
-	}
-	result := managed.Result{Schema: "haepari.result/v1", JobID: receipt.JobID, ResourceID: receipt.ResourceID, ResourceRevision: receipt.ResourceConfigRevision, LeaseGeneration: receipt.LeaseGeneration, JobState: "finished", ResourceAvailability: availability, WorkloadOutcome: outcome, EvidenceCompleteness: evidence, CleanupOutcome: managed.CleanupOutcome(cleanup), FinalVerdict: verdict, NativeExitCode: nativeCode, NativeSignal: signal, Artifacts: artifacts, ProtectedEvidence: protected}
+	reason := ""
 	if !started {
-		result.Reason = "process_start_failed"
-	} else if timedOut {
-		result.Reason = "run_deadline"
-	} else if !complete {
-		result.Reason = "required_output_missing"
-		if collectionExpired {
-			result.Reason = "collection_deadline"
-		}
-	} else if errors.Is(cleanupErr, context.DeadlineExceeded) {
-		result.Reason = "cleanup_deadline"
+		reason = "process_start_failed"
 	}
-	if _, err := s.ledger.SettleLocal(receipt.JobID, receipt.JobRevision, result); err != nil {
-		return err
-	}
-	return nil
+	return s.settleLocalPhases(c, job, jobRoot, workspace, frozen, false, reason, logFile)
 }
 
 func resolveWorkloadCommand(name, workDir, pathEnv string) (string, error) {
@@ -301,6 +245,10 @@ type phaseCompletion[T any] struct {
 // A completed operation carries its actual finish time so scheduler delay or
 // a timer race cannot turn late cleanup into verified cleanup.
 func boundedPhase[T any](deadline time.Time, work func() T) (T, phaseStatus) {
+	if !time.Now().Before(deadline) {
+		var zero T
+		return zero, phaseLate
+	}
 	done := make(chan phaseCompletion[T], 1)
 	go func() {
 		value := work()

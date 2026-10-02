@@ -34,7 +34,13 @@ func settleScheduling(t ginkgo.GinkgoTInterface, l *Ledger, r Receipt, cleanup s
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	r, err = l.StartLocal(r.JobID, r.JobRevision, "run-"+r.JobID)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	for _, phase := range [][2]string{{"running", "collecting"}, {"collecting", "cleaning"}, {"cleaning", "settling"}} {
+	id, err := l.LocalIdentity(r.JobID)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	r, err = l.RecordLocalOutcome(LocalOutcomeRequest{Identity: id, ExpectedRevision: r.JobRevision, Outcome: LocalOutcome{Started: true, WorkloadOutcome: "pass"}, MutationKey: "observed-" + r.JobID})
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	r, err = l.CompleteLocalRun(LocalTerminationRequest{Identity: id, ExpectedRevision: r.JobRevision, MutationKey: "stopped-" + r.JobID})
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	for _, phase := range [][2]string{{"collecting", "cleaning"}, {"cleaning", "settling"}} {
 		r, err = l.AdvanceLocal(r.JobID, r.JobRevision, phase[0], phase[1], phase[1]+"-"+r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}

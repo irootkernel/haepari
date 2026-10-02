@@ -35,24 +35,24 @@ Requirement coverage: `HP-REQ-016`, `HP-REQ-017`.
 Requirement coverage: `HP-REQ-018`, `HP-REQ-019`.
 
 #### Implement
-- [ ] Connect common prepare/run/collect/cleanup/verify transitions, independent phase budgets, verdict derivation, and quarantine on unproven reuse. TASK-019 owns manual completion/session details.
-- [ ] Implement the transition-table rows for cancel during preparing or ready, prepare deadline, collection deadline with partial evidence, termination-proof failure while cancelling, and queued input corruption or lost prerequisite.
-- [ ] Derive every final verdict in one common path from the authoritative decision table. Preserve a known workload failure when evidence or cleanup is incomplete; support safe `not_needed`, queued cancellation/rejection, manual omissions, deadlines and late cancellation without rewriting a terminal result.
-- [ ] Settle a reserved proven no-effect Job through the same verdict path with `cleanup_outcome=not_needed`, one atomic result/lease/`(-1,-1)`/event commit and unchanged availability. For VM-local `vm_unavailable`, use the committed pause receipt and successor resource revision before returning capacity; keep occupancy through a crash between pause and settlement. Reject this shortcut while process or power effects are uncertain.
+- [x] Connect common prepare/run/collect/cleanup/verify transitions, independent phase budgets, verdict derivation, and quarantine on unproven reuse. TASK-019 owns manual completion/session details.
+- [x] Implement the transition-table rows for cancel during preparing or ready, prepare deadline, collection deadline with partial evidence, termination-proof failure while cancelling, and queued input corruption or lost prerequisite.
+- [x] Derive every final verdict in one common path from the authoritative decision table. Preserve a known workload failure when evidence or cleanup is incomplete; support safe `not_needed`, queued cancellation/rejection, manual omissions, deadlines and late cancellation without rewriting a terminal result.
+- [x] Settle a reserved proven no-effect Job through the same verdict path with `cleanup_outcome=not_needed`, one atomic result/lease/`(-1,-1)`/event commit and unchanged availability. For VM-local `vm_unavailable`, use the committed pause receipt and successor resource revision before returning capacity; keep occupancy through a crash between pause and settlement. Reject this shortcut while process or power effects are uncertain.
 
 #### Do not
-- [ ] Do not release on command exit or hide required cleanup/evidence failure behind a product PASS.
+- [x] Do not release on command exit or hide required cleanup/evidence failure behind a product PASS.
 
 #### Verify
-- [ ] Fail each phase after partial effects; assert lease retention, bounded cleanup and correct result/resource state for all outcomes. Use table-driven tests for workload outcome, required evidence, cleanup, manual eligibility and cancellation ordering.
-- [ ] Assert reserved cancel is CANCELLED and proven no-effect preparation failure is INCOMPLETE, both with `not_needed` and one `(-1,-1)` return; queued cancel stays `(0,0)`. Replay or restart around terminal commit cannot duplicate a result or return. Pause/quarantine survive settlement and uncertain effects cannot take the no-effect row.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Fail each phase after partial effects; assert lease retention, bounded cleanup and correct result/resource state for all outcomes. Use table-driven tests for workload outcome, required evidence, cleanup, manual eligibility and cancellation ordering.
+- [x] Assert reserved cancel is CANCELLED and proven no-effect preparation failure is INCOMPLETE, both with `not_needed` and one `(-1,-1)` return; queued cancel stays `(0,0)`. Replay or restart around terminal commit cannot duplicate a result or return. Pause/quarantine survive settlement and uncertain effects cannot take the no-effect row.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-011
 

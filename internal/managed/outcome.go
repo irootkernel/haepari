@@ -204,11 +204,9 @@ func DecodeResultForJob(data []byte, job JobSpec) (Result, error) {
 	if err != nil {
 		return result, err
 	}
-	// A cancelled preparation never ran the workload whose outputs were
-	// declared. SettleLocal additionally requires a durable no-start receipt.
-	cancelledNoStart := result.Reason == "cancel_before_start" && result.WorkloadOutcome == "cancelled" &&
-		result.NativeExitCode == nil && result.NativeSignal == "" && (result.FinalVerdict == Cancelled || result.FinalVerdict == Incomplete)
-	if result.EvidenceCompleteness == "complete" && result.CleanupOutcome != "not_needed" && !cancelledNoStart {
+	// No-start results omit outputs from an unentered workload. The ledger
+	// requires the matching durable native or preparation termination proof.
+	if result.EvidenceCompleteness == "complete" && result.CleanupOutcome != "not_needed" && !noStartResult(result) {
 		present := map[string]bool{}
 		for _, artifact := range result.Artifacts {
 			present[artifact.Path] = true
@@ -220,6 +218,13 @@ func DecodeResultForJob(data []byte, job JobSpec) (Result, error) {
 		}
 	}
 	return result, nil
+}
+
+func noStartResult(result Result) bool {
+	return oneOf(result.Reason, "cancel_before_start", "prepare_failed", "prepare_deadline", "process_start_failed") &&
+		oneOf(string(result.WorkloadOutcome), "inconclusive", "cancelled") &&
+		result.NativeExitCode == nil && result.NativeSignal == "" &&
+		(result.FinalVerdict == Cancelled || result.FinalVerdict == Incomplete)
 }
 
 func DecodeManualResult(data []byte, required []string) (ManualResult, error) {

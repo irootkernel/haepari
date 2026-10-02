@@ -96,6 +96,13 @@ var _ = ginkgo.Describe("ReservedNoEffectReplayAfterRestart", ginkgo.Label("inte
 		if finished.GlobalOccupancy != 0 || finished.ResourceOccupancy != 0 || finished.CapacityDelta != -1 || finished.Verdict != Cancelled || finished.ResourceAvailability != "available" {
 			t.Fatalf("settled: %+v", finished)
 		}
+		result, err := l.Result(finished.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(result.Timings).NotTo(gomega.BeNil())
+		gomega.Expect(result.Timings.AdmittedAt).NotTo(gomega.BeEmpty())
+		gomega.Expect(result.Timings.ReservedAt).NotTo(gomega.BeEmpty())
+		gomega.Expect(result.Timings.Phases).To(gomega.BeEmpty())
+		gomega.Expect(result.Timings.AdapterSteps).To(gomega.Equal([]ResultStep{}))
 		if replay, err := l.SettleNoEffect(settle); err != nil || replay != finished {
 			t.Fatalf("settle replay: %+v %v", replay, err)
 		}

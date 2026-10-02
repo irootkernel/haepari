@@ -169,6 +169,26 @@ var _ = ginkgo.Describe("VerdictPriorityAndErrorExits", ginkgo.Label("unit"), fu
 			{"failure", func(f *ResultFacts) { f.WorkloadOutcome = "fail" }, Fail, nil},
 			{"failed with missing evidence", func(f *ResultFacts) { f.WorkloadOutcome = "fail"; f.EvidenceCompleteness = "missing" }, Incomplete, nil},
 			{"failed cleanup", func(f *ResultFacts) { f.WorkloadOutcome = "fail"; f.CleanupOutcome = "failed" }, Incomplete, nil},
+			{"failure with partial evidence and unknown cleanup", func(f *ResultFacts) {
+				f.WorkloadOutcome = "fail"
+				f.EvidenceCompleteness = "partial"
+				f.CleanupOutcome = "unknown"
+			}, Incomplete, nil},
+			{"cancel with missing evidence", func(f *ResultFacts) {
+				f.WorkloadOutcome = "cancelled"
+				f.CancelledBeforeOutcome = true
+				f.EvidenceCompleteness = "missing"
+			}, Incomplete, nil},
+			{"cancel with failed cleanup", func(f *ResultFacts) {
+				f.WorkloadOutcome = "cancelled"
+				f.CancelledBeforeOutcome = true
+				f.CleanupOutcome = "failed"
+			}, Incomplete, nil},
+			{"no-effect preparation failure", func(f *ResultFacts) {
+				f.WorkloadOutcome = "inconclusive"
+				f.CleanupOutcome = "not_needed"
+				f.NoOwnedEffect = true
+			}, Incomplete, nil},
 			{"manual unobserved", func(f *ResultFacts) { f.ManualEligible = false }, Incomplete, nil},
 			{"cancel", func(f *ResultFacts) {
 				f.WorkloadOutcome = "cancelled"

@@ -10,8 +10,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -529,34 +527,9 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 	}
 }
 
-func (s *runtimeServer) failed(id string, cause error) {
-	if errors.Is(cause, errPrepareUnproven) {
-		_ = s.ledger.ReconcileLocalFailure(id)
-		return
-	}
-	receipt, readErr := s.ledger.Snapshot(id)
-	if readErr != nil {
-		return
-	}
-	if receipt.JobState == "preparing" || receipt.JobState == "ready" {
-		jobRoot := filepath.Join(s.root.Path, "jobs", id)
-		reason := "prepare_failed"
-		if errors.Is(cause, context.DeadlineExceeded) {
-			reason = "prepare_deadline"
-		}
-		if os.MkdirAll(jobRoot, 0700) == nil && os.RemoveAll(filepath.Join(jobRoot, "workspace")) == nil && writeReceipt(jobRoot, "prepare-failure.json", map[string]any{"reason": reason}) == nil {
-			if next, e := s.ledger.AbortLocalBeforeStart(id, receipt.JobRevision); e == nil {
-				if next, e = s.ledger.AdvanceLocal(id, next.JobRevision, "collecting", "cleaning", "abort-collected-"+id); e == nil {
-					if next, e = s.ledger.AdvanceLocal(id, next.JobRevision, "cleaning", "settling", "abort-cleaned-"+id); e == nil {
-						result := managed.Result{Schema: "haepari.result/v1", JobID: id, ResourceID: next.ResourceID, ResourceRevision: next.ResourceConfigRevision, LeaseGeneration: next.LeaseGeneration, JobState: "finished", ResourceAvailability: "available", WorkloadOutcome: "inconclusive", EvidenceCompleteness: "unobserved", CleanupOutcome: "verified", FinalVerdict: managed.Incomplete, Reason: reason}
-						if _, e = s.ledger.SettleLocal(id, next.JobRevision, result); e == nil {
-							return
-						}
-					}
-				}
-			}
-		}
-	}
+func (s *runtimeServer) failed(id string, _ error) {
+	// Completed preparation failures use the common bounded phase path.
+	// Unexpected errors cannot prove an owned worker stopped or cleanup safe.
 	_ = s.ledger.ReconcileLocalFailure(id)
 }
 

@@ -182,45 +182,6 @@ func (l *Ledger) StartLocal(jobID string, revision int64, runID string) (Receipt
 	})
 }
 
-// AbortLocalBeforeStart can settle a local preparation failure only while no
-// run claim exists. An effect after StartLocal requires reconciliation instead.
-func (l *Ledger) AbortLocalBeforeStart(jobID string, revision int64) (Receipt, error) {
-	q := struct {
-		JobID    string
-		Revision int64
-	}{jobID, revision}
-	return l.mutate("local_abort", "abort-"+jobID, q, func(tx *sql.Tx) (Receipt, error) {
-		var state string
-		var current int64
-		if err := tx.QueryRow(`SELECT state,revision FROM managed_jobs WHERE id=?`, jobID).Scan(&state, &current); err != nil {
-			return Receipt{}, mapNoRows(err)
-		}
-		if current != revision {
-			return Receipt{}, ErrStale
-		}
-		if state != "preparing" && state != "ready" {
-			return Receipt{}, ErrConflict
-		}
-		var count int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM managed_runs WHERE job_id=?`, jobID).Scan(&count); err != nil {
-			return Receipt{}, err
-		}
-		if count != 0 {
-			return Receipt{}, ErrBlocked
-		}
-		if _, err := tx.Exec(`UPDATE managed_jobs SET state='collecting',revision=revision+1 WHERE id=?`, jobID); err != nil {
-			return Receipt{}, err
-		}
-		cursor, err := addEvent(tx, jobID, "prepare_failed", map[string]any{"effect": "owned_workspace_only"})
-		if err != nil {
-			return Receipt{}, err
-		}
-		receipt, err := l.snapshotTx(tx, jobID)
-		receipt.EventCursor = cursor
-		return receipt, err
-	})
-}
-
 func (l *Ledger) ReconcileLocalFailure(jobID string) error {
 	tx, err := l.db.BeginTx(context.Background(), nil)
 	if err != nil {
@@ -299,6 +260,13 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 			}
 		}
 		if err := validateLocalOutcomeTx(tx, jobID, result); err != nil {
+			return Receipt{}, err
+		}
+		if err := validatePhaseResultTx(tx, jobID, result); err != nil {
+			return Receipt{}, err
+		}
+		result.Timings, err = resultTimingsTx(tx, jobID)
+		if err != nil {
 			return Receipt{}, err
 		}
 		encoded, err := json.Marshal(result)

@@ -22,7 +22,7 @@ import (
 var _ = ginkgo.Describe("Task009IndependentControllerRunner", ginkgo.Label("integration"), func() {
 	ginkgo.It("imports a proven no-start deadline receipt and permits collection", func() {
 		t := ginkgo.GinkgoT()
-		_, s, r, _, _ := cancellationRuntime(t, "true")
+		_, s, r, job, _ := cancellationRuntime(t, "true")
 		var err error
 		r, err = s.ledger.AdvanceLocal(r.JobID, r.JobRevision, "preparing", "ready", "ready-expired-gate")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -64,6 +64,15 @@ var _ = ginkgo.Describe("Task009IndependentControllerRunner", ginkgo.Label("inte
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(current.JobState).To(gomega.Equal("collecting"))
 		gomega.Expect(current.ResourceAvailability).To(gomega.Equal("available"))
+		c.receipt = current
+		gomega.Expect(s.settleLocalPhases(c, job, root, work, out, false, "process_start_failed", nil)).To(gomega.Succeed())
+		result, err := s.ledger.Result(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Incomplete))
+		gomega.Expect(result.EvidenceCompleteness).To(gomega.Equal(managed.EvidenceCompleteness("complete")))
+		gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("verified")))
+		gomega.Expect(result.ResourceAvailability).To(gomega.Equal("available"))
+		gomega.Expect(result.ProtectedEvidence).To(gomega.BeEmpty())
 		_, err = os.Stat(filepath.Join(work, "effect.txt"))
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 	})
