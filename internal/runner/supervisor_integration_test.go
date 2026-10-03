@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -428,4 +429,32 @@ var _ = ginkgo.Describe("Independent native runner", ginkgo.Label("integration")
 		_, err = os.Stat(filepath.Join(root, "intent.json"))
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 	})
+})
+
+var _ = ginkgo.Describe("Task009UncertaintyOutcome", ginkgo.Label("integration"), func() {
+	for _, outcome := range []struct {
+		code     int
+		workload managed.WorkloadOutcome
+	}{{0, "pass"}, {7, "fail"}} {
+		ginkgo.It(fmt.Sprintf("preserves native exit %d without inventing a cancellation request", outcome.code), func() {
+			root, _ := nativeFixture(fmt.Sprintf("trap 'exit %d' TERM; printf once >> count.txt; while :; do /bin/sleep 0.02; done", outcome.code))
+			defer os.RemoveAll(root)
+			_, done := launchFixture(root, "census-once")
+			view := awaitFixture(root, done, false)
+			gomega.Expect(view.Exit).NotTo(gomega.BeNil())
+			gomega.Expect(view.Exit.TerminationProven).To(gomega.BeFalse())
+			gomega.Expect(view.Exit.Reason).To(gomega.Equal("native_observation_uncertain"))
+			_, err := os.Stat(filepath.Join(root, "cancel.json"))
+			gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+			gomega.Expect(view.Exit.Outcome.NativeExitCode).NotTo(gomega.BeNil())
+			gomega.Expect(*view.Exit.Outcome.NativeExitCode).To(gomega.Equal(outcome.code))
+			gomega.Expect(view.Exit.Outcome.WorkloadOutcome).To(gomega.Equal(outcome.workload))
+			replay, err := StartRun(filepath.Join(root, "request.json"))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(replay).To(gomega.Equal(view))
+			data, err := os.ReadFile(filepath.Join(root, "workspace/count.txt"))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(string(data)).To(gomega.Equal("once"))
+		})
+	}
 })

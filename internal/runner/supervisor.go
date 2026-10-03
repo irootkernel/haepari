@@ -180,6 +180,7 @@ func supervise(d *directory, q Request, path string) error {
 	var end *nativeEnd
 	var outcome *managed.LocalOutcome
 	var stopping time.Time
+	cancelledBeforeOutcome := false
 	killed := false
 	var uncertainty error
 	for {
@@ -218,7 +219,7 @@ func supervise(d *directory, q Request, path string) error {
 				// A refused gate or failed exec is a no-start result, even
 				// after the deadline. Only an entered workload can time out.
 			}
-			if out.Started && !stopping.IsZero() && end.at.After(stopping) && out.WorkloadOutcome != "timed_out" {
+			if out.Started && cancelledBeforeOutcome && !stopping.IsZero() && end.at.After(stopping) && out.WorkloadOutcome != "timed_out" {
 				out.WorkloadOutcome = "cancelled"
 			}
 			outcome = &out
@@ -234,6 +235,11 @@ func supervise(d *directory, q Request, path string) error {
 		cancelled, cancelErr := cancellation(d, q)
 		if cancelErr != nil {
 			uncertainty = cancelErr
+		}
+		// Uncertainty can require a stop without a cancellation request.
+		// Preserve the native outcome unless durable cancellation preceded it.
+		if cancelled && outcome == nil {
+			cancelledBeforeOutcome = true
 		}
 		if stopping.IsZero() && (end != nil || cancelled || !time.Now().Before(deadline) || uncertainty != nil) {
 			stopping = time.Now()
