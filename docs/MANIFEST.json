@@ -47,8 +47,8 @@
     },
     {
       "path": "TODO.md",
-      "bytes": 19093,
-      "sha256": "320a5a1d4162c87e0ae0a8b9278d814a8280329cce26d8169e445c8bd64c3868"
+      "bytes": 21602,
+      "sha256": "04d668f1a646e12357300252db9ff6b244fda81dae3be13e92097493b937e447"
     },
     {
       "path": "aquarium-adoption.md",
@@ -162,8 +162,8 @@
     },
     {
       "path": "contracts/artifact-and-profile.md",
-      "bytes": 18675,
-      "sha256": "9b0b2913e23a30d9cbcb1335f184646d10975ce7c8fe74c530f42289b66e9517"
+      "bytes": 18764,
+      "sha256": "3209fb191eee2497b5345eb570d286874fc03504aa9813235a2f362a037e3595"
     },
     {
       "path": "contracts/cli-and-jobs.md",
@@ -287,8 +287,8 @@
     },
     {
       "path": "operations.md",
-      "bytes": 23791,
-      "sha256": "ffeb21cd86544dcfd8a803433dbc7c24ee8f5e9cf8af370de3886547f0c3d9a0"
+      "bytes": 23782,
+      "sha256": "1ed5bd5fd8ff56756e713b6b721178d6bb53ba554351d1e0748f080edbfca6ef"
     },
     {
       "path": "package-validation.md",
