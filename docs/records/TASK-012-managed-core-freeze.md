@@ -10,7 +10,7 @@ Production remains a private Unix controller with the local auto-Job backend. Fr
 
 ## Changes from TASK-002
 
-TASK-002 (`c371408`) established provisional v1 schemas and schema 2 persistence. All intervening commits are inventoried below, including evidence/authority-only corrections that introduce no public shape. Pre-F1 changes deliberately retained provisional v1 identities; after F1 a public contract change requires a recorded decision and schema version change. SQLite migration numbers are internal storage identities, not public wire schema versions.
+TASK-002 (`c371408`) established provisional v1 schemas and schema 2 persistence. The revision inventory below covers changes through the initial TASK-012 delivery, including evidence/authority-only corrections that introduce no public shape. The field decisions and verification mapping record the managed contract semantics, including corrective retention work that preserves F1. Pre-F1 changes deliberately retained provisional v1 identities; after F1 a public contract change requires a recorded decision and schema version change. SQLite migration numbers are internal storage identities, not public wire schema versions.
 
 | Exact revision | Work | Contract delta or evidence role |
 | --- | --- | --- |

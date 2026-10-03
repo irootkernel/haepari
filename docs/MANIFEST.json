@@ -167,8 +167,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 40306,
-      "sha256": "47786e2b849ad6adcee13dfdac4a26e7a77cbc08ee350d8d7ebf151c3ae6baf9"
+      "bytes": 40347,
+      "sha256": "267b748914ff3f225d20f5b3bb2c80495efd37ab18c77cca6f4bfdf24b16bb47"
     },
     {
       "path": "contracts/configuration.md",
@@ -302,8 +302,8 @@
     },
     {
       "path": "records/TASK-012-managed-core-freeze.md",
-      "bytes": 14897,
-      "sha256": "bc3be825fc55da8a6c643fd4d955ccdacc058f6ba08adcd91074a8cff8ed18ea"
+      "bytes": 15072,
+      "sha256": "1af5194c87d59a16776046f214e34f1e2338e0137318f311fa5f646399bb1315"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
