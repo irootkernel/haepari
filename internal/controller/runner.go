@@ -45,7 +45,15 @@ func observeWithinRunBudgetWithWorker(deadline time.Time, terminationAllowance t
 	// The run deadline starts before log/request publication. Termination has
 	// its own bounded observation allowance; a blocked setup or observer is
 	// uncertainty, never a stopped workload or permission to release the lease.
-	timer := time.NewTimer(time.Until(deadline) + terminationAllowance + supervisorObservationSlack)
+	budget := time.Until(deadline)
+	for _, additional := range []time.Duration{terminationAllowance, supervisorObservationSlack} {
+		if budget > time.Duration(1<<63-1)-additional {
+			budget = time.Duration(1<<63 - 1)
+		} else {
+			budget += additional
+		}
+	}
+	timer := time.NewTimer(budget)
 	defer timer.Stop()
 	drain := func() {
 		go func() {

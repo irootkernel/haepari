@@ -77,6 +77,29 @@ var _ = ginkgo.Describe("Task010PhaseSettlement", ginkgo.Label("integration"), f
 		gomega.Expect(returns).To(gomega.Equal(1))
 	})
 
+	ginkgo.It("keeps individually valid long run and termination budgets from expiring immediately", func() {
+		release := make(chan struct{})
+		s := &runtimeServer{}
+		defer func() { close(release); s.workers.Wait() }()
+		entered := make(chan struct{})
+		result := make(chan error, 1)
+		go func() {
+			started, log, err := observeWithinRunBudgetWithWorker(time.Now().Add(5_000_000_000*time.Second), 5_000_000_000*time.Second, s.startWorker, s.detached, func() (bool, *os.File, error) {
+				close(entered)
+				<-release
+				return true, nil, nil
+			})
+			if err == nil && (!started || log != nil) {
+				err = errors.New("completed observer lost its result")
+			}
+			result <- err
+		}()
+		gomega.Eventually(entered, "2s").Should(gomega.BeClosed())
+		gomega.Consistently(result, "100ms").ShouldNot(gomega.Receive())
+		release <- struct{}{}
+		gomega.Eventually(result, "2s").Should(gomega.Receive(gomega.BeNil()))
+	})
+
 	ginkgo.It("bounds a blocked supervisor observer and closes its later log without inventing termination", func() {
 		log, err := os.CreateTemp(ginkgo.GinkgoT().TempDir(), "output-")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
