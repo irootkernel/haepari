@@ -167,8 +167,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 40257,
-      "sha256": "810cbe26a4910c27bee54da461b8721d04d7d0c6382712edb7d47221a0b4e874"
+      "bytes": 40306,
+      "sha256": "47786e2b849ad6adcee13dfdac4a26e7a77cbc08ee350d8d7ebf151c3ae6baf9"
     },
     {
       "path": "contracts/configuration.md",

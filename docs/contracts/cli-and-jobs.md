@@ -125,7 +125,7 @@ The implementation may perform bounded internal liveness checks. TASK-008 uses b
 
 ### Implemented local observer wire format
 
-The standalone `capabilities --json` response lists compiled feature identifiers in `capabilities`, separately from `protocol_versions`, `compiled_backends` and `qualified_backends`. The current local slice reports `managed-execution/v1`, `durable-observation/v1`, `advisory-lock/v1` and `managed-recovery/v1`; this feature report does not claim live backend qualification.
+The standalone `capabilities --json` response lists compiled feature identifiers in `capabilities`, separately from `protocol_versions`, `compiled_backends` and `qualified_backends`. The current local slice reports `managed-execution/v1`, `durable-observation/v1`, `advisory-lock/v1`, `managed-recovery/v1`, `artifact-delivery/v1` and `evidence-retention/v1`; this feature report does not claim live backend qualification.
 
 Closed operation envelopes are bounded to 4 MiB, allowing result inventories and bounded observation pages above the 1 MiB input-document limit. Response payloads may contain literal angle brackets; illustrative input placeholders are not a response-validation rule. Known unavailable-result errors retain `RESULT_UNAVAILABLE` and exit 2.
 
