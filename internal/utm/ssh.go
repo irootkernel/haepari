@@ -251,7 +251,24 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	if err != nil {
 		return reply, errors.Join(ErrGuestUncertain, err)
 	}
-	if !lease.Expires.After(time.Now()) || reply.Request == nil {
+	if !lease.Expires.After(time.Now()) {
+		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
+	}
+	if q.Operation == "state" || q.Operation == "retire" || q.Operation == "health" || q.Operation == "root" || q.Operation == "file" || q.Operation == "cleanup" {
+		if reply.Control == nil || runner.ValidateGuestControl(*reply.Control, q) != nil || !reply.Control.Complete && q.Operation != "state" && !(q.Operation == "health" && reply.Reusable && reply.Control.Stopped) {
+			return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
+		}
+		if reply.Request == nil {
+			if q.Operation == "retire" && !reply.Control.Retired {
+				return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
+			}
+			if q.Operation == "state" || q.Operation == "retire" || q.Operation == "cleanup" || q.Operation == "health" && reply.Reusable {
+				return reply, nil
+			}
+			return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
+		}
+	}
+	if reply.Request == nil {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	expected := q.Request
@@ -262,14 +279,20 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	if !reflect.DeepEqual(expected, *reply.Request) || reply.Request.LogInode == 0 {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
-	if q.Operation != "prepare" && (reply.Observation == nil || runner.ValidateGuestObservation(*reply.Observation, *reply.Request) != nil) {
+	if q.Operation != "prepare" && q.Operation != "state" && q.Operation != "retire" && (reply.Observation == nil || runner.ValidateGuestObservation(*reply.Observation, *reply.Request) != nil) {
+		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
+	}
+	if q.Operation == "retire" && !reply.Control.Retired {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	if q.Operation == "cancel" && (reply.Observation.Exit == nil || !reply.Observation.Exit.TerminationProven) {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
-	if q.Operation == "output" && (len(reply.Output) > 64<<10 || reply.NextOffset != q.Offset+int64(len(reply.Output))) {
+	if (q.Operation == "output" || q.Operation == "file") && (len(reply.Output) > 64<<10 || reply.NextOffset != q.Offset+int64(len(reply.Output))) {
 		return runner.GuestReply{}, ErrUnavailable
+	}
+	if q.Operation == "file" && (reply.File == nil || reply.File.Path != q.Path || reply.File.Inode == 0 || reply.File.Size < reply.NextOffset || reply.File.Size > 1<<30 || len(reply.File.SHA256) != 64) {
+		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	return reply, nil
 }

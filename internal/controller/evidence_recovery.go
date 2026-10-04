@@ -2,13 +2,16 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
+	"github.com/irootkernel/haepari/internal/runner"
 )
 
 func retainedPath(fd int, name string, directory bool) (managed.RetainedPath, error) {
@@ -75,6 +78,12 @@ func (s *runtimeServer) planEvidenceRecovery(id, action string) (resourceRecover
 		p.Effects = []string{"record explicit authorization of the listed evidence loss", "delete the listed owned workspaces under original recovery deadlines", "retain immutable Job verdicts and verify resource health separately"}
 	} else {
 		p.Effects = []string{"record bounded evidence recovery intent", "collect required outputs into a separate immutable supplementary inventory", "record collection before workspace cleanup", "retain immutable Job verdicts and verify resource health separately"}
+	}
+	if snap.Resource.Kind == "utm-macos" {
+		for i, effect := range p.Effects {
+			p.Effects[i] = strings.ReplaceAll(effect, "workspaces", "guest Job directories (including native logs and receipts)")
+			p.Effects[i] = strings.ReplaceAll(p.Effects[i], "workspace cleanup", "guest Job directory cleanup")
+		}
 	}
 	p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
 	p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, action, managed.RecoveryDigest(snap), managed.RecoveryDigest(jobs), p.ExpiresAt})
@@ -256,7 +265,7 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 				observeRetentionBoundary("collect-worker")
 				return backend.Collect(j, filepath.Join(jobRoot, destination))
 			})
-			if status == phaseUnproven {
+			if status == phaseUnproven || collected.unproven {
 				return managed.ErrBlocked
 			}
 			r.ActiveOwner = nil
@@ -321,7 +330,7 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 		cleanup, status := boundedPhaseWithWorker(j.CleanupDeadline, s.detached, start, func() error {
 			return backend.Cleanup(j)
 		})
-		if status == phaseUnproven {
+		if status == phaseUnproven || errors.Is(cleanup, runner.ErrUnproven) {
 			return managed.ErrBlocked
 		}
 		r.ActiveOwner = nil

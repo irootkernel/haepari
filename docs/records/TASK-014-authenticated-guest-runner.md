@@ -18,6 +18,6 @@ No optional real-guest smoke is claimed. A diagnostic SSH alias alone supplies n
 
 ## Remaining owners
 
-TASK-015 connects the transport and durable guest request to Job admission, resource leases, phase deadlines, collection, cleanup, quarantine and recovery. It must preserve issued-effect uncertainty, original native request/boot identity, partial preparation and ambiguous launch; no lost transport response permits a second workload or automatic file deletion. The transport's internal JSON/runner limits must be checked before owned guest preparation, with explicit failure rather than input truncation. Public VM Job dispatch, resume, removal and recovery remain unavailable until that integration.
+TASK-015 connects the transport and durable guest request to Job admission, resource leases, phase deadlines, collection, cleanup, quarantine and recovery. It must preserve issued-effect uncertainty, original native request/boot identity, partial preparation and ambiguous launch; no lost transport response permits a second workload or automatic file deletion. The transport's internal JSON/runner limits must be checked before owned guest preparation, with explicit failure rather than input truncation. TASK-015 now owns the integrated boundary in its [VM Job recovery record](TASK-015-vm-job-recovery.md); removal remains unsupported.
 
 TASK-016 performs the mandatory real backend campaign and freeze inventory. Release notes are not enrolled in this repository. Neither this record nor a member commit authorizes installation, publication or release.

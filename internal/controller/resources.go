@@ -95,11 +95,13 @@ func (s *runtimeServer) resourceAvailability(w http.ResponseWriter, r *http.Requ
 			reject(w, op, err)
 			return
 		}
-		if status.Kind != "local" {
-			reject(w, op, managed.ErrUnsupported)
-			return
+		if status.Kind == "utm-macos" {
+			q.ReadinessDigest, q.ObservationReference, err = s.observeVMReadiness(q)
+		} else if status.Kind == "local" {
+			q.ReadinessDigest, q.ObservationReference, err = s.observeLocalReadiness(q.ResourceID)
+		} else {
+			err = managed.ErrUnsupported
 		}
-		q.ReadinessDigest, q.ObservationReference, err = s.observeLocalReadiness(q.ResourceID)
 		if err != nil {
 			// Another identical request may have committed while the observation
 			// failed. Recover that receipt before reporting a new-operation failure.

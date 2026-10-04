@@ -1,0 +1,19 @@
+# TASK-015 VM Job collection and recovery boundary
+
+The [canonical roadmap](../roadmap.md) alone owns lifecycle. [Resource and runner semantics](../contracts/resource-and-runner.md#implemented-vm-collection-and-recovery-task-015) and [managed transitions](../contracts/managed-transitions.md) own behavior. This task integrates the previously separate host-control and authenticated guest ports without changing the frozen common schema 9 or claiming F2.
+
+## Delivered boundary
+
+Automatic development VM Jobs use sealed admission, a fenced single-VM lease and the configured host limit. A durable future-run plan precedes native preparation; the host keeps that Job's frozen runner artifact for restart. Host and guest filesystems are separate, and project recipes execute only in the guest. Existing power transfer fences permit only the exact eligible registered idle victim. No clone, VM deletion or reset is used.
+
+The native guest control receipt serializes filesystem work and launch on an owned inode. Workload termination and filesystem-worker termination are independent facts. Lost replies preserve the original identity and deadlines. An unobserved start requires a durable retirement barrier before no-start settlement, preventing delayed delivery from launching later. An ambiguous launch or unknown worker retains occupancy and quarantine. A stopped preparer with an empty private root and no published root binding can be observed read-only under its original durable prepare intent; retirement revalidates and persists that incarnation before cleanup. Live preparers and nonempty unbound roots remain blocked.
+
+Bounded collection verifies guest file incarnation and full SHA-256, publishes host files exclusively with durable parent synchronization, and revalidates evidence before deletion. Failed collection records gaps and retains the entire guest Job directory under its logical protected reference. Proven termination may settle INCOMPLETE while quarantined; unknown termination cannot return capacity. Supplemental recollection or explicit disposal resolves evidence, followed by separate health verification. Terminal results remain immutable. Small control receipts outside removed Job directories preserve recovery and delayed-request fences.
+
+VM-local proven pre-claim failures use the atomic pause/settling transition before one no-effect capacity return. Explicit authenticated readiness verification is required for resume. A narrowly recognized returned framework-limit start rejection also needs fresh stopped status before host-wide pause and no-effect settlement; other command failures preserve uncertainty. The foreground option implements host limits one or two, default one, without the general configuration loader.
+
+## Verification boundary
+
+The focused command is `go test -race -tags=integration ./internal/controller ./internal/managed ./internal/runner ./internal/utm -ginkgo.focus='Task015VMJobs|Task013|Task014'`; `make test` is the common final gate. Scripted transport fixtures exercise actual native guest execution and separate host/guest roots, collection, cleanup, cancellation, restart and evidence recovery. Existing managed/controller fixtures cover transaction and power negative cases. Exact candidate identities, command outcomes and review evidence remain private workflow evidence, not release qualification.
+
+No real SSH/UTM execution, Remote Login setup, installed-service backend campaign, hardware power loss, provider execution or F2 is claimed. TASK-016 owns the actual qualified combination and persistent-VM campaign; TASK-023 owns the full configuration loader. VM registration removal remains unavailable. Release notes are not enrolled. This checkpoint authorizes no installation, service change, upstream publication or release.

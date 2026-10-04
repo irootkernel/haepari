@@ -85,3 +85,7 @@ A failed validation keeps the old effective configuration and refuses startup. R
 ## TASK-012 implementation boundary
 
 The current local controller uses the default 256 MiB combined stdout/stderr log prefix, 1 GiB and 1000 required outputs per collection, and 64 KiB delivery pages. Truncation and write failures become explicit immutable evidence gaps. Required outputs exceeding a bound remain protected and cannot produce complete evidence. This implements default resource protection, not the full operator configuration parser. The table's configurable retention days do not authorize automatic deletion: only explicit revision-bound purge and protected-evidence recovery are implemented. TASK-023 owns effective configuration and performance qualification; changing a frozen managed schema requires the F1 contract decision process.
+
+## TASK-015 implementation boundary
+
+The foreground controller accepts `daemon run --host-macos-guest-limit 1|2`, default 1, before opening its state or issuing effects. Scheduling counts observed running VMs and pending/uncertain start claims, uses only eligible operator-authorized registered victims, and preserves blocked queue deadlines. This explicit option implements the host limit without claiming the TASK-023 general configuration loader or TASK-016 real limit qualification. Automatic development VM input is bounded to 48 MiB payload and 96 MiB encoded guest request before preparation; output and log defaults retain the TASK-012 bounds above.

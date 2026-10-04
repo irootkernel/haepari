@@ -232,6 +232,7 @@ type PowerIntent struct {
 	Identity              PowerTransitionIdentity `json:"identity"`
 	State                 string                  `json:"state"`
 	Stage                 string                  `json:"stage"`
+	noEffectReturned      bool
 	commandReturned       bool
 	commandReturnRequired bool
 	hostControlled        bool
@@ -246,7 +247,8 @@ type powerTransitionRecord struct {
 
 // CommandReturned reports a successful command return recorded for this exact
 // effect. It is not power-state or no-effect evidence.
-func (p PowerIntent) CommandReturned() bool { return p.commandReturned }
+func (p PowerIntent) CommandReturned() bool      { return p.commandReturned }
+func (p PowerIntent) RefusedWithoutEffect() bool { return p.noEffectReturned }
 
 // Power stages are internal durable vocabulary. The ledger owns which ready
 // stage permits a single effect; adapters only observe issued/uncertain stages.
@@ -320,6 +322,7 @@ func powerIntentTx(q rowQuerier, generation int64) (PowerIntent, error) {
 	if samePowerEffect(proof.ExpectedStage, p.Stage) {
 		p.commandReturnRequired = proof.CommandReturnRequired
 		p.commandReturned = proof.CommandReturned
+		p.noEffectReturned = proof.NoEffectProven && proof.CommandReturned
 	} else if !((p.Stage == PowerStartReady && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain)) ||
 		(p.Stage == PowerDone && oneOf(proof.ExpectedStage, PowerStartIssued, PowerStartUncertain)) ||
 		(p.Stage == PowerFailedNoEffect && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain, PowerStartIssued, PowerStartUncertain))) {
@@ -548,6 +551,36 @@ func (l *Ledger) ConfirmPower(q PowerConfirmation) error {
 		}
 	}
 	if _, err := addEvent(tx, q.Identity.TargetJobID, "power_observed", map[string]any{"identity": q.Identity, "state": state, "stage": stage, "evidence_digest": q.EvidenceDigest}); err != nil {
+		return err
+	}
+	return l.commit(tx)
+}
+
+// RecordPowerRefusal records a returned framework rejection of this exact start,
+// separately from successful effects and ambiguous failures. A fresh stopped
+// target observation is still required before either protection can clear.
+func (l *Ledger) RecordPowerRefusal(id PowerTransitionIdentity, digest string) error {
+	if !id.Valid() || !validDigest(digest) {
+		return ErrInvalid
+	}
+	tx, err := l.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	p, err := powerFenceTx(tx, id)
+	if err != nil {
+		return err
+	}
+	if p.State != "pending" || p.Stage != PowerStartIssued || !p.commandReturnRequired || p.CommandReturned() {
+		return ErrStale
+	}
+	proof := PowerConfirmation{Identity: id, ExpectedStage: p.Stage, EvidenceDigest: digest, CommandReturned: true, CommandReturnRequired: true, NoEffectProven: true}
+	raw, _ := json.Marshal(proof)
+	if _, err = tx.Exec(`UPDATE managed_power_progress SET observation_json=? WHERE operation_generation=?`, raw, id.OperationGeneration); err != nil {
+		return err
+	}
+	if _, err = addEvent(tx, id.TargetJobID, "power_start_refused", map[string]any{"identity": id, "evidence_digest": digest}); err != nil {
 		return err
 	}
 	return l.commit(tx)

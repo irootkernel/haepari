@@ -176,6 +176,9 @@ func (s *runtimeServer) recoverInterrupted(jobID string, automatic bool, attesta
 			return managed.ErrStale
 		}
 	}
+	if snapshot.Resource.Kind == "utm-macos" {
+		return s.recoverVMInterrupted(snapshot, automatic, attestation, plan, key, clientDigest)
+	}
 	if snapshot.Receipt.JobState != "reconciling" || snapshot.Resource.Kind != "local" || len(snapshot.AdapterIntents) != 0 {
 		return managed.ErrBlocked
 	}

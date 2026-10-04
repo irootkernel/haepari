@@ -310,7 +310,7 @@ func (l *Ledger) BeginJobRecovery(q JobRecoveryRequest) (Receipt, error) {
 		if s.Identity != q.Identity || RecoveryDigest(s) != q.SnapshotDigest {
 			return Receipt{}, ErrStale
 		}
-		if s.Receipt.JobState != "reconciling" || s.Resource.Kind != "local" {
+		if s.Receipt.JobState != "reconciling" || !oneOf(s.Resource.Kind, "local", "utm-macos") {
 			return Receipt{}, ErrBlocked
 		}
 		if len(s.AdapterIntents) != 0 {

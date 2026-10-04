@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,7 +41,11 @@ type runtimeServer struct {
 	// Serialize finished evidence reads/deletion and sealing through admission.
 	evidenceMu      sync.RWMutex
 	backendEvidence func(kind, id string) (evidenceBackend, error)
-	utmCommand      utm.CommandRunner // nil in production; the argv boundary is injectable for fake UTM
+	sshCommand      utm.SSHRunner
+	vmLeases        func() (io.ReadCloser, error)       // nil selects the native macOS DHCP database
+	vmWrite         func(*os.File, []byte) (int, error) // nil is the ordinary durable collector; tests inject ENOSPC
+	vmHostLimit     int                                 // zero defaults to one; bounded at two
+	utmCommand      utm.CommandRunner                   // nil in production; the argv boundary is injectable for fake UTM
 	// Test barrier after a replay miss, before observing readiness. Nil in production.
 	beforeAvailabilityObservation func()
 	beforeWaitRead                func() // nil in production; subscribe/read race barrier
@@ -335,9 +340,9 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		reject(w, "submit", err)
 		return
 	}
-	// Registration and host control precede TASK-014's authenticated guest
-	// execution. Never dispatch a registered VM through the local runner.
-	if resource.Kind != "local" || job.Mode != "auto" || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 {
+	// Automatic development Jobs dispatch through their registered backend.
+	// A VM never enters the host-local workload path.
+	if (resource.Kind != "local" && resource.Kind != "utm-macos") || job.Mode != "auto" || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 {
 		reject(w, "submit", managed.ErrUnsupported)
 		return
 	}
@@ -489,6 +494,9 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 			timerChannel = timer.C
 		} else if hasDeadline {
 			wait := time.Until(deadline)
+			if wait > time.Second {
+				wait = time.Second
+			}
 			if wait < 0 {
 				wait = 0
 			}
@@ -516,9 +524,10 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 				break
 			}
 		}
+		excluded := []string{}
 		for {
 			// See managed.NextQueued for selector/Reserve/controller guard ownership.
-			queued, err := s.ledger.NextQueued()
+			queued, err := s.ledger.NextQueuedExcludingResources(excluded)
 			if err != nil {
 				break
 			}
@@ -545,7 +554,29 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 				}
 				continue
 			}
-			r, err := s.ledger.Reserve(managed.ReserveRequest{JobID: queued.Receipt.JobID, ExpectedJobRevision: queued.Receipt.JobRevision, ExpectedConfigRevision: queued.Receipt.ResourceConfigRevision, ExpectedAvailabilityRevision: queued.Receipt.ResourceAvailabilityRevision, MutationKey: "reserve-" + queued.Receipt.JobID})
+			reservation := managed.ReserveRequest{JobID: queued.Receipt.JobID, ExpectedJobRevision: queued.Receipt.JobRevision, ExpectedConfigRevision: queued.Receipt.ResourceConfigRevision, ExpectedAvailabilityRevision: queued.Receipt.ResourceAvailabilityRevision, MutationKey: "reserve-" + queued.Receipt.JobID}
+			status, statusErr := s.ledger.ResourceStatus(queued.Receipt.ResourceID)
+			if statusErr != nil {
+				break
+			}
+			if status.Kind == "utm-macos" {
+				limit := s.vmHostLimit
+				if limit == 0 {
+					limit = 1
+				}
+				reservation.VMGuard, err = s.observeVMs(ctx, limit)
+				if err != nil {
+					excluded = append(excluded, status.ID)
+					continue
+				}
+			}
+			r, err := s.ledger.Reserve(reservation)
+			var hostBlocked *managed.HostCapacityBlocked
+			if errors.As(err, &hostBlocked) {
+				_ = s.ledger.RecordQueueBlocker(queued.Receipt.JobID, queued.Receipt.JobRevision, hostBlocked.Blocker)
+				excluded = append(excluded, status.ID)
+				continue
+			}
 			if err != nil {
 				if errors.Is(err, managed.ErrBusy) && time.Now().UTC().UnixNano() >= queued.DeadlineNS {
 					if _, e := s.ledger.ExpireQueued(queued.Receipt.JobID, queued.Receipt.JobRevision, "expired-"+queued.Receipt.JobID); e == nil {
@@ -554,7 +585,7 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 				}
 				break
 			}
-			s.startWorker(func() {
+			s.startJobWorker(r.JobID, func() {
 				s.execute(ctx, r, queued.Spec, queued.ObjectID, time.Now().Add(time.Duration(queued.Spec.Deadlines.PrepareSeconds)*time.Second))
 			})
 		}

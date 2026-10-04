@@ -27,6 +27,7 @@ type localRunControl struct {
 	completion       *nativeCompletion
 	observed         bool
 	deadline         time.Time
+	vm               *runner.GuestRequest
 	runnerRequest    string
 	runnerExited     chan struct{}
 	effects          bool
@@ -115,6 +116,19 @@ func (s *runtimeServer) requestCancel(q managed.CancelRequest) (managed.CancelRe
 	if c != nil {
 		c.mu.Lock()
 		defer c.mu.Unlock()
+		// A readable guest outcome gets the same cancellation precedence as a
+		// local native outcome. Transport loss cannot prevent recording the
+		// cancellation; the original run still needs termination proof.
+		if c.vm != nil && c.vm.Root != nil && !c.observed {
+			probe := *c.vm
+			probe.Operation = "inspect"
+			probe.Deadline = time.Now().Add(5 * time.Second)
+			if view, err := s.vmCall(probe); err == nil && view.Observation != nil {
+				if err = s.importVMView(c, *view.Observation); err != nil {
+					return managed.CancelReceipt{}, err
+				}
+			}
+		}
 		// Import a native result already published by Wait before deciding the
 		// cancellation edge. Main-process exit is not a process-tree proof.
 		if err := s.observeLocalCompletion(c); err != nil {

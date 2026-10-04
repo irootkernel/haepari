@@ -18,6 +18,8 @@ var ErrUnavailable = errors.New("UTM prerequisite unavailable")
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+var frameworkLimitPattern = regexp.MustCompile(`(?:\(VZErrorDomain error 6\.\)|Error Domain=VZErrorDomain Code=6(?: |$))`)
+
 const commandLimit = 1 << 20
 
 type CommandResult struct {
@@ -41,8 +43,9 @@ type VM struct {
 // CommandFailure does not assert whether a power command took effect. Its caller
 // must reconcile the durable intent using a new observation, never retry it.
 type CommandFailure struct {
-	Operation string
-	ExitCode  int
+	Operation      string
+	ExitCode       int
+	FrameworkLimit bool
 }
 
 func (e *CommandFailure) Error() string {
@@ -63,7 +66,11 @@ func (c Control) call(ctx context.Context, args ...string) (CommandResult, error
 	r, err := run(ctx, c.Executable, args...)
 	if err != nil || r.ExitCode != 0 || strings.Contains(r.Stderr, "Error from event") ||
 		len(r.Stdout) > commandLimit || len(r.Stderr) > commandLimit {
-		return r, &CommandFailure{Operation: args[0], ExitCode: r.ExitCode}
+		var exitFailure *exec.ExitError
+		returned := err == nil || errors.As(err, &exitFailure) && exitFailure.ExitCode() >= 0
+		refused := returned && args[0] == "start" && ctx.Err() == nil && r.ExitCode >= 0 && len(r.Stderr) <= commandLimit &&
+			frameworkLimitPattern.MatchString(r.Stderr)
+		return r, &CommandFailure{Operation: args[0], ExitCode: r.ExitCode, FrameworkLimit: refused}
 	}
 	return r, nil
 }

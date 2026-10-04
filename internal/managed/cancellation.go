@@ -459,7 +459,19 @@ type LocalPreparationStopRequest struct {
 // out observer. No run claim can exist, and the controller must have observed
 // the worker stop before classifying its owned filesystem effects.
 func (l *Ledger) RecordLocalPreparationStop(q LocalPreparationStopRequest) (Receipt, error) {
-	if q.ExpectedRevision <= 0 || q.Identity.RunID != "" || !oneOf(q.Reason, "prepare_failed", "prepare_deadline", "cancel_before_start") {
+	if q.Identity.RunID != "" {
+		return Receipt{}, ErrInvalid
+	}
+	return l.recordPreparationStop(q, "local")
+}
+func (l *Ledger) RecordVMPreparationStop(q LocalPreparationStopRequest) (Receipt, error) {
+	if !identifier.MatchString(q.Identity.RunID) {
+		return Receipt{}, ErrInvalid
+	}
+	return l.recordPreparationStop(q, "utm-macos")
+}
+func (l *Ledger) recordPreparationStop(q LocalPreparationStopRequest, expectedKind string) (Receipt, error) {
+	if q.ExpectedRevision <= 0 || !oneOf(q.Reason, "prepare_failed", "prepare_deadline", "cancel_before_start") {
 		return Receipt{}, ErrInvalid
 	}
 	return l.mutate("local_preparation_stop", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
@@ -480,15 +492,27 @@ func (l *Ledger) RecordLocalPreparationStop(q LocalPreparationStopRequest) (Rece
 		if err := tx.QueryRow(`SELECT kind FROM managed_resources WHERE id=?`, q.Identity.ResourceID).Scan(&kind); err != nil {
 			return Receipt{}, err
 		}
-		if kind != "local" {
+		if kind != expectedKind {
 			return Receipt{}, ErrUnsupported
+		}
+		if kind == "local" && q.Identity.RunID != "" {
+			return Receipt{}, ErrInvalid
 		}
 		var claims int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM managed_runs WHERE job_id=?`, q.Identity.JobID).Scan(&claims); err != nil {
 			return Receipt{}, err
 		}
-		if claims != 0 {
+		if kind == "local" && claims != 0 {
 			return Receipt{}, ErrBlocked
+		}
+		if kind == "utm-macos" {
+			var launched int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM managed_runner_receipts WHERE job_id=? AND kind IN ('intent','start','outcome','exit')`, q.Identity.JobID).Scan(&launched); err != nil {
+				return Receipt{}, err
+			}
+			if launched != 0 {
+				return Receipt{}, ErrBlocked
+			}
 		}
 		status, err := cancellationStatusTx(tx, q.Identity.JobID)
 		if err != nil {

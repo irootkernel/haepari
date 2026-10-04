@@ -89,24 +89,24 @@ Optional real-guest branch remains unobserved: no current product registration/p
 Requirement coverage: `HP-REQ-029`, `HP-REQ-030`.
 
 #### Implement
-- [ ] Join UTM and SSH phases with the resource lease. Capture evidence before deleting guest Job files; remove those files after complete collection, or retain required uncollected evidence and quarantine the VM. Quarantine also when owned process termination or cleanup cannot be confirmed, and implement exact VM recovery.
-- [ ] Separate owned process termination from deletion of guest Job files. On failed collection preserve required recoverable evidence with durable references, settle proven termination INCOMPLETE while quarantined, or retain occupancy when termination is unproven. Resource recovery re-collects or records explicitly authorized loss, then cleans and verifies health; later evidence never rewrites the original verdict.
-- [ ] Enforce the configured host macOS guest limit before starting a stopped VM: stop only an eligible, operator-authorized registered VM under the fenced transfer intent, or keep the Job queued with its original deadline and blocker. A framework VM-limit error without a guest start is a temporary prerequisite gap: finish INCOMPLETE without quarantine.
-- [ ] For VM-local proven no-effect preparation failure, commit `vm_unavailable` pause and the Job's failure classification/entry into `settling` in one transaction, before INCOMPLETE/`not_needed` settlement returns capacity. Link the pause receipt's successor revision to the original Job lease. Preserve an existing pause or quarantine and require explicit verified resume after remediation; host-wide failures keep their host-wide path.
+- [x] Join UTM and SSH phases with the resource lease. Capture evidence before deleting guest Job files; remove those files after complete collection, or retain required uncollected evidence and quarantine the VM. Quarantine also when owned process termination or cleanup cannot be confirmed, and implement exact VM recovery.
+- [x] Separate owned process termination from deletion of guest Job files. On failed collection preserve required recoverable evidence with durable references, settle proven termination INCOMPLETE while quarantined, or retain occupancy when termination is unproven. Resource recovery re-collects or records explicitly authorized loss, then cleans and verifies health; later evidence never rewrites the original verdict.
+- [x] Enforce the configured host macOS guest limit before starting a stopped VM: stop only an eligible, operator-authorized registered VM under the fenced transfer intent, or keep the Job queued with its original deadline and blocker. A framework VM-limit error without a guest start is a temporary prerequisite gap: finish INCOMPLETE without quarantine.
+- [x] For VM-local proven no-effect preparation failure, commit `vm_unavailable` pause and the Job's failure classification/entry into `settling` in one transaction, before INCOMPLETE/`not_needed` settlement returns capacity. Link the pause receipt's successor revision to the original Job lease. Preserve an existing pause or quarantine and require explicit verified resume after remediation; host-wide failures keep their host-wide path.
 
 #### Do not
-- [ ] Do not make project recipes host hooks, reset or delete the VM, or free a resource while a Haepari runner may still be active.
+- [x] Do not make project recipes host hooks, reset or delete the VM, or free a resource while a Haepari runner may still be active.
 
 #### Verify
-- [ ] With the fake backend and scripted guest fixtures, prove that a next job runs only after verified cleanup, workload changes outside the job directory persist, and every cleanup or retained-evidence path quarantines the resource. Include disk-full collection, controller restart, bounded re-collection, explicit disposal and unknown workload/collector termination. The real proof belongs to TASK-016.
-- [ ] Verify A stays unavailable to later Jobs across pause, settlement replay and restart, while B/local resources can dispatch; confirm one capacity return, stale-response rejection, quarantine preservation, and dispatch only after explicit readiness-verified resume. The real proof belongs to TASK-016.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] With the fake backend and scripted guest fixtures, prove that a next job runs only after verified cleanup, workload changes outside the job directory persist, and every cleanup or retained-evidence path quarantines the resource. Include disk-full collection, controller restart, bounded re-collection, explicit disposal and unknown workload/collector termination. The real proof belongs to TASK-016.
+- [x] Verify A stays unavailable to later Jobs across pause, settlement replay and restart, while B/local resources can dispatch; confirm one capacity return, stale-response rejection, quarantine preservation, and dispatch only after explicit readiness-verified resume. The real proof belongs to TASK-016.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-016
 

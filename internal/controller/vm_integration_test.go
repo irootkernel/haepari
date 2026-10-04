@@ -243,11 +243,11 @@ var _ = ginkgo.Describe("Task013UTMController", ginkgo.Label("integration"), fun
 		job := prior.Spec
 		job.ResourceID = a.ID
 		job.Input.SelectedFiles = []string{"source/input.txt"}
-		_, _, err = c.Submit(context.Background(), mustJSONScheduling(job), "vm-unsupported")
+		_, _, err = c.Submit(context.Background(), mustJSONScheduling(job), "vm-missing-input")
 		var issue *client.Issue
 		gomega.Expect(errors.As(err, &issue)).To(gomega.BeTrue())
-		gomega.Expect(issue.Code).To(gomega.Equal("UNSUPPORTED"))
-		_, err = s.ledger.Request("vm-unsupported")
+		gomega.Expect(issue.Code).To(gomega.Equal("PREREQUISITE_UNAVAILABLE"))
+		_, err = s.ledger.Request("vm-missing-input")
 		gomega.Expect(errors.Is(err, managed.ErrNotFound)).To(gomega.BeTrue())
 	})
 

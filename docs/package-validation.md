@@ -12,7 +12,7 @@ The documentation results below come from [`tools/validate_docs.py`](tools/valid
 | Check | Result |
 | --- | --- |
 | UTF-8, balanced code fences and JSON syntax | Passed |
-| Relative links and anchors (503 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (510 links, GitHub-style anchors) | Passed |
 | Roadmap DAG | Passed. See below. |
 | Task titles, roadmap versus epic files | Passed |
 | Requirement–task–case traceability, both directions | Passed. See below. |
@@ -54,7 +54,7 @@ The documentation results below come from [`tools/validate_docs.py`](tools/valid
 | ADRs | 18 | 16 | 2 |
 | Verification cases | 85 | 65 (V01–V65) | 20 (E01–E20) |
 
-The package also holds 68 Markdown documents, 11 JSON design templates, nine unsent producer request drafts and one validation script. This documentation validator executes no product test; the separate [TASK-004 host gate](records/TASK-004-macos-supervision.md) records its own observed cases.
+The package also holds 69 Markdown documents, 11 JSON design templates, nine unsent producer request drafts and one validation script. This documentation validator executes no product test; the separate [TASK-004 host gate](records/TASK-004-macos-supervision.md) records its own observed cases.
 
 ## Limits of these checks
 

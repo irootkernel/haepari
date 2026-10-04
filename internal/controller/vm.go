@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -131,8 +132,18 @@ func (s *runtimeServer) advanceVMPower(ctx context.Context, identity managed.Pow
 			Effect   string
 			Success  bool
 		}{identity, effect, commandErr == nil}
-		if err := s.ledger.RecordPowerCommandReturn(identity, effect, proof.Success, vmEvidence(proof)); err != nil {
-			return p, err
+		var failure *utm.CommandFailure
+		var recordErr error
+		if effect == "start" && errors.As(commandErr, &failure) && failure.FrameworkLimit {
+			recordErr = s.ledger.RecordPowerRefusal(identity, vmEvidence(struct {
+				Identity managed.PowerTransitionIdentity
+				Failure  *utm.CommandFailure
+			}{identity, failure}))
+		} else {
+			recordErr = s.ledger.RecordPowerCommandReturn(identity, effect, proof.Success, vmEvidence(proof))
+		}
+		if recordErr != nil {
+			return p, recordErr
 		}
 		p, err = s.ledger.PowerIntent(identity.OperationGeneration)
 		if err != nil {
@@ -156,6 +167,7 @@ func (s *runtimeServer) advanceVMPower(ctx context.Context, identity managed.Pow
 	}
 	q := managed.PowerConfirmation{Identity: identity, ExpectedStage: p.Stage,
 		VictimPower: observe(identity.VictimResourceID), TargetPower: observe(identity.TargetResourceID)}
+	q.NoEffectProven = p.RefusedWithoutEffect()
 	q.EvidenceDigest = vmEvidence(q)
 	if err := s.ledger.ConfirmPower(q); err != nil {
 		return p, err

@@ -24,7 +24,15 @@ import (
 
 var ErrSocketExists = errors.New("control socket already exists; refusing to replace it")
 
+type Options struct{ HostMACOSGuestLimit int }
+
 func Run(ctx context.Context, root state.Root) error {
+	return RunWithOptions(ctx, root, Options{HostMACOSGuestLimit: 1})
+}
+func RunWithOptions(ctx context.Context, root state.Root, options Options) error {
+	if options.HostMACOSGuestLimit < 1 || options.HostMACOSGuestLimit > 2 {
+		return managed.ErrInvalid
+	}
 	if err := root.Prepare(); err != nil {
 		return err
 	}
@@ -79,6 +87,7 @@ func Run(ctx context.Context, root state.Root) error {
 	if err != nil {
 		return fmt.Errorf("bind installation identity: %w", err)
 	}
+	runtime.vmHostLimit = options.HostMACOSGuestLimit
 	// A graceful listener exit detaches observers, not the independent runner.
 	// Retain the kernel ownership lock and database until in-process workers
 	// actually stop, including a filesystem worker that outlived its observer.

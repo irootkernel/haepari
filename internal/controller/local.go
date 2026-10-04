@@ -19,7 +19,15 @@ import (
 )
 
 func (s *runtimeServer) execute(_ context.Context, receipt managed.Receipt, job managed.JobSpec, objectID string, prepareDeadline time.Time) {
-	if err := s.executeLocal(receipt, job, objectID, prepareDeadline); err != nil {
+	status, err := s.ledger.ResourceStatus(receipt.ResourceID)
+	if err == nil {
+		if status.Kind == "utm-macos" {
+			err = s.executeVM(receipt, job, objectID, prepareDeadline)
+		} else {
+			err = s.executeLocal(receipt, job, objectID, prepareDeadline)
+		}
+	}
+	if err != nil {
 		s.failed(receipt.JobID, err)
 	}
 	s.notifyScheduler()
@@ -204,6 +212,7 @@ type collectionAttempt struct {
 	artifacts []managed.ResultArtifact
 	complete  bool
 	expired   bool
+	unproven  bool // remote filesystem owner could still be acting
 }
 
 type phaseStatus uint8

@@ -31,37 +31,47 @@ var guestUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // GuestRequest is stdin data, never a remote shell command. Prepare supplies
 // the sealed inventory and bytes; later operations carry the returned request.
 type GuestRequest struct {
-	Schema        string    `json:"schema"`
-	Operation     string    `json:"operation"`
-	VMUUID        string    `json:"vm_uuid"`
-	MAC           string    `json:"mac"`
-	Challenge     string    `json:"challenge"`
-	BootID        string    `json:"boot_id"`
-	JobRoot       string    `json:"job_root"`
-	RunnerDigest  string    `json:"runner_digest"`
-	Request       Request   `json:"request"`
-	ObjectID      string    `json:"object_id"`
-	InputDigest   string    `json:"input_digest"`
-	ProfileDigest string    `json:"profile_digest"`
-	Deadline      time.Time `json:"deadline"`
-	Inventory     []byte    `json:"inventory"`
-	Files         [][]byte  `json:"files"`
-	Offset        int64     `json:"offset"`
+	Schema        string                `json:"schema"`
+	Operation     string                `json:"operation"`
+	VMUUID        string                `json:"vm_uuid"`
+	MAC           string                `json:"mac"`
+	Challenge     string                `json:"challenge"`
+	BootID        string                `json:"boot_id"`
+	JobRoot       string                `json:"job_root"`
+	RunnerDigest  string                `json:"runner_digest"`
+	Request       Request               `json:"request"`
+	ObjectID      string                `json:"object_id"`
+	InputDigest   string                `json:"input_digest"`
+	ProfileDigest string                `json:"profile_digest"`
+	Deadline      time.Time             `json:"deadline"`
+	Inventory     []byte                `json:"inventory"`
+	Files         [][]byte              `json:"files"`
+	Offset        int64                 `json:"offset"`
+	Area          string                `json:"area"`
+	ExpectedFile  *GuestFile            `json:"expected_file,omitempty"`
+	Path          string                `json:"path"`
+	Root          *managed.RetainedPath `json:"root,omitempty"`
 }
 
 type GuestReply struct {
-	Schema         string       `json:"schema"`
-	ProtocolDigest string       `json:"protocol_digest"`
-	VMUUID         string       `json:"vm_uuid"`
-	MAC            string       `json:"mac"`
-	Challenge      string       `json:"challenge"`
-	BootID         string       `json:"boot_id"`
-	OS             string       `json:"os"`
-	Arch           string       `json:"arch"`
-	Request        *Request     `json:"request,omitempty"`
-	Observation    *Observation `json:"observation,omitempty"`
-	Output         []byte       `json:"output,omitempty"`
-	NextOffset     int64        `json:"next_offset"`
+	Schema          string                `json:"schema"`
+	ProtocolDigest  string                `json:"protocol_digest"`
+	VMUUID          string                `json:"vm_uuid"`
+	MAC             string                `json:"mac"`
+	Challenge       string                `json:"challenge"`
+	BootID          string                `json:"boot_id"`
+	OS              string                `json:"os"`
+	Arch            string                `json:"arch"`
+	Request         *Request              `json:"request,omitempty"`
+	Observation     *Observation          `json:"observation,omitempty"`
+	Output          []byte                `json:"output,omitempty"`
+	NextOffset      int64                 `json:"next_offset"`
+	Root            *managed.RetainedPath `json:"root,omitempty"`
+	File            *GuestFile            `json:"file,omitempty"`
+	Control         *GuestControl         `json:"control,omitempty"`
+	SupervisorAlive *bool                 `json:"supervisor_alive,omitempty"`
+	OwnersLive      *bool                 `json:"owners_live,omitempty"`
+	Reusable        bool                  `json:"reusable"`
 }
 
 func guestIdentity(q GuestRequest) (GuestReply, error) {
@@ -148,7 +158,7 @@ func GuestCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func Guest(q GuestRequest) (GuestReply, error) {
+func guestEffect(q GuestRequest, control *guestControlFile) (GuestReply, error) {
 	if q.Deadline.IsZero() || !time.Now().Before(q.Deadline) {
 		return GuestReply{}, ErrInvalid
 	}
@@ -159,7 +169,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 	if q.Operation == "identity" {
 		return reply, nil
 	}
-	if q.Operation != "prepare" && q.Operation != "start" && q.Operation != "inspect" && q.Operation != "watch" && q.Operation != "cancel" && q.Operation != "output" {
+	if q.Operation != "prepare" && q.Operation != "start" && q.Operation != "inspect" && q.Operation != "watch" && q.Operation != "cancel" && q.Operation != "output" && q.Operation != "root" && q.Operation != "file" && q.Operation != "cleanup" {
 		return reply, ErrInvalid
 	}
 	if q.BootID == "" || q.Request.BootID != reply.BootID || !managed.ValidRequestKey(q.Request.Identity.JobID) || q.Request.Identity.Nonce == "" || q.Offset < 0 {
@@ -182,7 +192,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		return reply, ErrInvalid
 	}
 	if q.Operation == "prepare" {
-		request, err := prepareGuest(parent, root, q)
+		request, err := prepareGuest(parent, root, q, control)
 		if err != nil {
 			return reply, err
 		}
@@ -248,6 +258,10 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		}
 	}
 	reply.Request, reply.Observation = &request, &view
+	guestNativeOwners(&reply, view)
+	if q.Operation == "root" || q.Operation == "file" || q.Operation == "cleanup" {
+		return guestFiles(parent, d, q, reply, control)
+	}
 	if q.Operation == "output" {
 		f, err := d.open("output.log", unix.O_RDONLY)
 		if err != nil {
@@ -269,7 +283,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 	return reply, nil
 }
 
-func prepareGuest(parent *directory, root string, q GuestRequest) (Request, error) {
+func prepareGuest(parent *directory, root string, q GuestRequest, control *guestControlFile) (Request, error) {
 	manifest, err := snapshot.DecodeInventory(q.Inventory, q.ObjectID)
 	if err != nil || manifest.TreeSHA256 != q.InputDigest || len(manifest.Entries) != len(q.Files) || q.Request.LogDevice != 0 || q.Request.LogInode != 0 {
 		return Request{}, ErrInvalid
@@ -339,6 +353,9 @@ func prepareGuest(parent *directory, root string, q GuestRequest) (Request, erro
 		return Request{}, err
 	}
 	defer d.close()
+	if err := control.bindRoot(d); err != nil {
+		return Request{}, err
+	}
 	if err := d.write("guest.json", owner); err != nil {
 		return Request{}, err
 	}
@@ -541,4 +558,43 @@ func ValidateGuestObservation(view Observation, q Request) error {
 		return ErrConflict
 	}
 	return nil
+}
+
+// These are fresh guest kernel observations, never host PID probes. Missing
+// census evidence remains unknown; immutable receipts alone are not liveness.
+func guestNativeOwners(reply *GuestReply, view Observation) {
+	supervisor, owners := false, false
+	if view.Exit != nil && view.Exit.TerminationProven {
+		reply.SupervisorAlive = &supervisor
+		reply.OwnersLive = &owners
+		return
+	}
+	if view.Intent == nil {
+		if view.State == "prepared" {
+			reply.SupervisorAlive = &supervisor
+			reply.OwnersLive = &owners
+		}
+		return
+	}
+	processes, err := platform.ProcessCensus()
+	if err != nil {
+		return
+	}
+	for _, p := range processes {
+		if p.Zombie {
+			continue
+		}
+		if p.Identity == view.Intent.Supervisor {
+			supervisor = true
+			owners = true
+		}
+		if p.Identity.BootID == view.Intent.Supervisor.BootID && (p.Identity.PGID == view.Intent.Supervisor.PGID || p.Identity.SID == view.Intent.Supervisor.SID) {
+			owners = true
+		}
+		if view.Start != nil && p.Identity.BootID == view.Start.Process.BootID && (p.Identity == view.Start.Process || p.Identity.PGID == view.Start.Process.PGID || p.Identity.SID == view.Start.Process.SID) {
+			owners = true
+		}
+	}
+	reply.SupervisorAlive = &supervisor
+	reply.OwnersLive = &owners
 }

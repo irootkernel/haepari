@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -73,11 +74,23 @@ func (l *Ledger) Request(key string) (QueuedJob, error) {
 // no pending/uncertain power transition. Reserve repeats these guards inside its
 // transaction, then checks pinned revisions and deadline. The controller checks
 // pinned configuration, input readability and deadline before attempting Reserve.
-func (l *Ledger) NextQueued() (QueuedJob, error) {
+func (l *Ledger) NextQueued() (QueuedJob, error) { return l.NextQueuedExcludingResources(nil) }
+
+// One scheduling pass may skip capacity-blocked VMs without starving local or
+// other VM resources. Reserve still rechecks every original guard.
+func (l *Ledger) NextQueuedExcludingResources(excluded []string) (QueuedJob, error) {
 	var job QueuedJob
 	var spec []byte
-	err := l.db.QueryRow(`SELECT j.id,j.spec_json,i.object_id,j.queue_deadline_ns,j.pinned_config_revision FROM managed_jobs j JOIN managed_job_inputs i ON i.job_id=j.id JOIN managed_admissions a ON a.job_id=j.id JOIN managed_resources r ON r.id=j.resource_id WHERE j.state='queued' AND r.availability='available' AND r.occupancy<r.capacity AND (SELECT COALESCE(SUM(occupancy),0) FROM managed_resources)<? AND NOT EXISTS(SELECT 1 FROM managed_power_transitions p WHERE p.state IN ('pending','uncertain') AND (p.victim_resource_id=r.id OR p.target_resource_id=r.id)) AND NOT EXISTS(SELECT 1 FROM managed_jobs h JOIN managed_admissions ha ON ha.job_id=h.id WHERE h.resource_id=j.resource_id AND h.state='queued' AND ha.sequence<a.sequence) ORDER BY a.sequence LIMIT 1`, l.globalLimit).
-		Scan(&job.Receipt.JobID, &spec, &job.ObjectID, &job.DeadlineNS, &job.PinnedConfigRevision)
+	query := `SELECT j.id,j.spec_json,i.object_id,j.queue_deadline_ns,j.pinned_config_revision FROM managed_jobs j JOIN managed_job_inputs i ON i.job_id=j.id JOIN managed_admissions a ON a.job_id=j.id JOIN managed_resources r ON r.id=j.resource_id WHERE j.state='queued' AND r.availability='available' AND r.occupancy<r.capacity AND (SELECT COALESCE(SUM(occupancy),0) FROM managed_resources)<? AND NOT EXISTS(SELECT 1 FROM managed_power_transitions p WHERE p.state IN ('pending','uncertain') AND (p.victim_resource_id=r.id OR p.target_resource_id=r.id)) AND NOT EXISTS(SELECT 1 FROM managed_jobs h JOIN managed_admissions ha ON ha.job_id=h.id WHERE h.resource_id=j.resource_id AND h.state='queued' AND ha.sequence<a.sequence) ORDER BY a.sequence LIMIT 1`
+	args := []any{l.globalLimit}
+	if len(excluded) > 0 {
+		filter := " AND j.resource_id NOT IN (" + strings.TrimSuffix(strings.Repeat("?,", len(excluded)), ",") + ") "
+		query = strings.Replace(query, " ORDER BY a.sequence LIMIT 1", filter+" ORDER BY a.sequence LIMIT 1", 1)
+		for _, id := range excluded {
+			args = append(args, id)
+		}
+	}
+	err := l.db.QueryRow(query, args...).Scan(&job.Receipt.JobID, &spec, &job.ObjectID, &job.DeadlineNS, &job.PinnedConfigRevision)
 	if err != nil {
 		return job, mapNoRows(err)
 	}

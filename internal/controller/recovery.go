@@ -91,6 +91,9 @@ func (s *runtimeServer) planJobRecovery(jobID, action string) (jobRecoveryPlan, 
 	if snap.Receipt.JobState != "reconciling" {
 		return p, managed.ErrBlocked
 	}
+	if snap.Resource.Kind == "utm-macos" {
+		return s.planVMJobRecovery(p)
+	}
 	if snap.Resource.Kind != "local" {
 		if action != "reconcile" {
 			return p, managed.ErrUnsupported
