@@ -120,6 +120,8 @@ The managed resource lease authorizes Job effects. The internal power-transition
 
 ## Host session and VM identity
 
+VM UUID identity comparisons are case-insensitive, and internal inventory keys are lowercase. Each `status`, `start` or `stop` first resolves the UUID from the current `utmctl list` and passes the exact observed spelling as a literal argument. Native UTM lookup can be case-sensitive. Membership lookup and the subsequent command share one ten-second deadline; missing membership or duplicate entries differing only in case refuse the operation before that subsequent command. Power commands remain single-effect calls without retry under the durable claim described below.
+
 Host UTM control runs `utmctl` from the development or release LaunchAgent in the logged-in Aqua session. In the TASK-034 probe, an ad-hoc-signed LaunchAgent ran every `utmctl` command it tried without an Automation prompt, so no stable signing identity is required. The UTM command-line tool states that it does not work from SSH sessions or before login ([S10](../sources.md)). SSH execution inside the guest is a separate transport and has its own login/key prerequisites. The controller's local queue and local-command backend do not require an Aqua session merely because UTM control may. **Recording.** Record the observed UTM, macOS, backend, user-session and permission tuple during TASK-034 and TASK-016. A version list in a report is not qualification evidence.
 
 **Loss of session or capacity.** Session or host-capacity loss blocks new VM dispatch temporarily. A VM whose job processes or cleanup Haepari cannot confirm is quarantined.

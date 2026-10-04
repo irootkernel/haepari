@@ -36,8 +36,9 @@ type Control struct {
 }
 
 type VM struct {
-	UUID  string
-	State string
+	UUID        string
+	State       string
+	commandUUID string // Exact spelling from UTM; UUID remains canonical for identity comparisons.
 }
 
 // CommandFailure does not assert whether a power command took effect. Its caller
@@ -99,7 +100,7 @@ func (c Control) List(ctx context.Context) ([]VM, error) {
 			return nil, ErrUnavailable
 		}
 		seen[id] = true
-		vms = append(vms, VM{UUID: id, State: fields[1]})
+		vms = append(vms, VM{UUID: id, State: fields[1], commandUUID: fields[0]})
 	}
 	return vms, nil
 }
@@ -123,10 +124,13 @@ func (c Control) Inspect(ctx context.Context, uuid string) (VM, error) {
 }
 
 func (c Control) Status(ctx context.Context, uuid string) (string, error) {
-	if !uuidPattern.MatchString(uuid) {
-		return "", ErrUnavailable
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	vm, err := c.Inspect(ctx, uuid)
+	if err != nil {
+		return "", err
 	}
-	r, err := c.call(ctx, "status", strings.ToLower(uuid))
+	r, err := c.call(ctx, "status", vm.commandUUID)
 	if err != nil {
 		return "", err
 	}
@@ -137,13 +141,20 @@ func (c Control) Status(ctx context.Context, uuid string) (string, error) {
 	return state, nil
 }
 
-// Power issues exactly one command. The controller must claim its exact durable
-// power intent first. Cancellation or command success is not effect evidence.
+// Power resolves current membership and issues at most one power command. The
+// controller must claim its exact durable power intent first. Cancellation or
+// command success is not effect evidence.
 func (c Control) Power(ctx context.Context, uuid, operation string) error {
 	if !uuidPattern.MatchString(uuid) || operation != "start" && operation != "stop" {
 		return ErrUnavailable
 	}
-	_, err := c.call(ctx, operation, strings.ToLower(uuid))
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	vm, err := c.Inspect(ctx, uuid)
+	if err != nil {
+		return err
+	}
+	_, err = c.call(ctx, operation, vm.commandUUID)
 	return err
 }
 

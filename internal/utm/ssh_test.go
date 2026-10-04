@@ -36,7 +36,10 @@ func sshFixture() (SSH, managed.ResourceSpec, runner.GuestRequest) {
 	spec := managed.ResourceSpec{Schema: "haepari.resource/v1", ID: "vm-fixture", Kind: "utm-macos", ExecutionMode: "managed", Capacity: 1, Revision: 1, Adapter: managed.Adapter{QualificationReference: "fake-task014", UTMCtl: "/fake/utmctl"}, VM: &managed.VM{UTMVMUUID: vmID, MACAddress: vmMAC, AddressDiscovery: "dhcp-lease-by-mac", GuestJobRoot: "/private/guest/jobs"}, Guest: &managed.Guest{ConnectionReference: write("mapping.json", mapping), KnownHostsReference: pin}}
 	binary := []byte("pinned fixture runner")
 	sum := sha256.Sum256(binary)
-	s := SSH{Executable: "/usr/bin/ssh", Runner: binary, RunnerDigest: "sha256:" + hex.EncodeToString(sum[:]), Control: Control{Executable: "/fake/utmctl", Run: func(context.Context, string, ...string) (CommandResult, error) {
+	s := SSH{Executable: "/usr/bin/ssh", Runner: binary, RunnerDigest: "sha256:" + hex.EncodeToString(sum[:]), Control: Control{Executable: "/fake/utmctl", Run: func(_ context.Context, _ string, args ...string) (CommandResult, error) {
+		if args[0] == "list" {
+			return CommandResult{Stdout: "UUID Status Name\n" + vmID + " started VM\n"}, nil
+		}
 		return CommandResult{Stdout: "started", ExitCode: 0}, nil
 	}}}
 	request := runner.Request{Schema: "haepari.runner-request/v1", Identity: managed.LocalIdentity{JobID: "job-fixture", ResourceID: spec.ID, ConfigRevision: 1, LeaseGeneration: 1, RunID: "run-fixture", Nonce: "job-nonce"}, BootID: vmID, WorkDir: "/private/guest/jobs/job-fixture/workspace", Argv: []string{"/bin/printf", "literal ; $HOME ' \n"}, Environment: []string{"PATH=/usr/bin:/bin"}, Deadline: time.Now().Add(time.Minute).UTC(), RunSeconds: 30, TerminationSeconds: 2, LogDevice: 1, LogInode: 1}

@@ -158,7 +158,7 @@
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "6ade7508839d2e3a5824209ac2e6d3479aff955085601280c5fc892c7072592c"
+      "sha256": "7dc8ff4f2d4096d4ccc18a7e93cfa0e4c621c5b37496459542f125d04bf97619"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -192,8 +192,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 33486,
-      "sha256": "d342398d00dbec77bbfd8a8f812f7c64aa1a8600e54af3f415c5f0ac2ca3ac30"
+      "bytes": 34061,
+      "sha256": "974fd23bcadd3f2a6bc0b942b3e332f02c8d62f3fe2bebea288df0355211e738"
     },
     {
       "path": "examples/Makefile.example",
@@ -307,8 +307,8 @@
     },
     {
       "path": "records/TASK-013-utm-host-control.md",
-      "bytes": 4264,
-      "sha256": "68b861a1ec925df145999bfc50327182417ab1b3fc37d3f0afeccd43440aea83"
+      "bytes": 4722,
+      "sha256": "b94a0ba53c6fae49c81bcae3b0211419c4b9bda251ea0ce8d3a363644818f026"
     },
     {
       "path": "records/TASK-014-authenticated-guest-runner.md",

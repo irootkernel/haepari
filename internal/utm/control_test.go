@@ -15,6 +15,55 @@ const vmID = "11111111-1111-4111-8111-111111111111"
 const vmMAC = "aa:bb:cc:dd:ee:ff"
 
 var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
+	ginkgo.It("preserves observed UUID spelling for native commands", func() {
+		for _, nativeID := range []string{"ABCDEF01-ABCD-4ABC-8ABC-ABCDEF012345", "aBcDeF01-aBcD-4aBc-8aBc-aBcDeF012345"} {
+			var calls [][]string
+			c := Control{Executable: "/utmctl", Run: func(_ context.Context, _ string, args ...string) (CommandResult, error) {
+				calls = append(calls, append([]string{}, args...))
+				if args[0] == "list" {
+					return CommandResult{Stdout: "UUID Status Name\n" + nativeID + " started VM\n"}, nil
+				}
+				if len(args) != 2 || args[1] != nativeID {
+					return CommandResult{Stderr: "Error: Virtual machine not found.", ExitCode: 1}, nil
+				}
+				return CommandResult{Stdout: "started\n"}, nil
+			}}
+			canonicalID := strings.ToLower(nativeID)
+			vm, err := c.Inspect(context.Background(), canonicalID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(vm.UUID).To(gomega.Equal(canonicalID))
+			state, err := c.Status(context.Background(), canonicalID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(state).To(gomega.Equal("started"))
+			gomega.Expect(c.Power(context.Background(), canonicalID, "start")).To(gomega.Succeed())
+			gomega.Expect(c.Power(context.Background(), canonicalID, "stop")).To(gomega.Succeed())
+			var commands [][]string
+			for _, call := range calls {
+				if call[0] != "list" {
+					commands = append(commands, call)
+				}
+			}
+			gomega.Expect(commands).To(gomega.Equal([][]string{{"status", nativeID}, {"start", nativeID}, {"stop", nativeID}}))
+		}
+	})
+
+	ginkgo.It("refuses native commands when current membership is missing or case-ambiguous", func() {
+		nativeID := "ABCDEF01-ABCD-4ABC-8ABC-ABCDEF012345"
+		for _, output := range []string{"UUID Status Name\n", "UUID Status Name\n" + nativeID + " started VM\n" + strings.ToLower(nativeID) + " stopped VM\n"} {
+			var calls [][]string
+			c := Control{Executable: "/utmctl", Run: func(_ context.Context, _ string, args ...string) (CommandResult, error) {
+				calls = append(calls, append([]string{}, args...))
+				return CommandResult{Stdout: output}, nil
+			}}
+			_, err := c.Status(context.Background(), strings.ToLower(nativeID))
+			gomega.Expect(errors.Is(err, ErrUnavailable)).To(gomega.BeTrue())
+			for _, operation := range []string{"start", "stop"} {
+				gomega.Expect(errors.Is(c.Power(context.Background(), nativeID, operation), ErrUnavailable)).To(gomega.BeTrue())
+			}
+			gomega.Expect(calls).To(gomega.Equal([][]string{{"list"}, {"list"}, {"list"}}))
+		}
+	})
+
 	ginkgo.It("uses UUID argv and excludes names and forbidden operations", func() {
 		var calls [][]string
 		c := Control{Executable: "/Applications/UTM.app/Contents/MacOS/utmctl", Run: func(ctx context.Context, executable string, args ...string) (CommandResult, error) {
@@ -41,16 +90,22 @@ var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
 		}
 		gomega.Expect(c.Power(context.Background(), "name; command", "start")).NotTo(gomega.Succeed())
 		gomega.Expect(len(calls)).To(gomega.Equal(before))
-		gomega.Expect(calls[2:]).To(gomega.Equal([][]string{{"start", vmID}, {"stop", vmID}}))
+		gomega.Expect(calls[2:]).To(gomega.Equal([][]string{{"list"}, {"start", vmID}, {"list"}, {"stop", vmID}}))
 	})
 
 	ginkgo.It("rejects exit-zero automation errors, nonzero, loss and excessive output without retry", func() {
 		for _, result := range []CommandResult{{Stdout: "started", Stderr: "Error from event: permission denied"}, {Stdout: "started", ExitCode: 1}, {Stdout: strings.Repeat("a", commandLimit+1)}} {
 			calls := 0
-			c := Control{Executable: "/utmctl", Run: func(context.Context, string, ...string) (CommandResult, error) { calls++; return result, nil }}
+			c := Control{Executable: "/utmctl", Run: func(_ context.Context, _ string, args ...string) (CommandResult, error) {
+				calls++
+				if args[0] == "list" {
+					return CommandResult{Stdout: "UUID Status Name\n" + vmID + " started VM\n"}, nil
+				}
+				return result, nil
+			}}
 			_, err := c.Status(context.Background(), vmID)
 			gomega.Expect(errors.Is(err, ErrUnavailable)).To(gomega.BeTrue())
-			gomega.Expect(calls).To(gomega.Equal(1))
+			gomega.Expect(calls).To(gomega.Equal(2))
 		}
 		c := Control{Executable: "/utmctl", Run: func(context.Context, string, ...string) (CommandResult, error) {
 			return CommandResult{}, context.DeadlineExceeded
@@ -67,7 +122,10 @@ var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
 			gomega.Expect(err).To(gomega.HaveOccurred())
 		}
 		for _, output := range []string{"paused", "starting", "started\nstopped", "unknown"} {
-			c := Control{Executable: "/utmctl", Run: func(context.Context, string, ...string) (CommandResult, error) {
+			c := Control{Executable: "/utmctl", Run: func(_ context.Context, _ string, args ...string) (CommandResult, error) {
+				if args[0] == "list" {
+					return CommandResult{Stdout: "UUID Status Name\n" + vmID + " started VM\n"}, nil
+				}
 				return CommandResult{Stdout: output}, nil
 			}}
 			_, err := c.Status(context.Background(), vmID)

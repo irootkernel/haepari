@@ -32,7 +32,10 @@ var _ = ginkgo.Describe("IndividualDHCPLease", ginkgo.Label("unit"), func() {
 
 	ginkgo.It("uses a pre-start or renewed lease only with current identity and rechecked expiry", func() {
 		now := time.Unix(2000000000, 0)
-		c := Control{Executable: "/utmctl", Run: func(context.Context, string, ...string) (CommandResult, error) {
+		c := Control{Executable: "/utmctl", Run: func(_ context.Context, _ string, args ...string) (CommandResult, error) {
+			if args[0] == "list" {
+				return CommandResult{Stdout: "UUID Status Name\n" + vmID + " started VM\n"}, nil
+			}
 			return CommandResult{Stdout: "started"}, nil
 		}}
 		verify := func(_ context.Context, lease Lease, uuid, nonce string) (GuestIdentity, error) {
