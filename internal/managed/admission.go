@@ -72,9 +72,13 @@ func (l *Ledger) BindAdmissionInventory(key, objectID string, inventory []byte) 
 // Only uniqueness errors are conflicts. A disk, trigger or connection
 // failure must remain storage uncertainty so a caller reconciles the same key.
 func admissionError(err error) error {
+	return uniquenessError(err, "admission")
+}
+
+func uniquenessError(err error, operation string) error {
 	var failure *driver.Error
 	if errors.As(err, &failure) && (failure.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE || failure.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
-		return fmt.Errorf("%w: admission constraint: %v", ErrConflict, err)
+		return fmt.Errorf("%w: %s constraint: %v", ErrConflict, operation, err)
 	}
 	return err
 }

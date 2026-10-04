@@ -1,0 +1,178 @@
+// Package utm owns the host-side UTM command and address observation boundary.
+// Job leases and durable permission to issue power effects belong to the ledger.
+package utm
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+)
+
+var ErrUnavailable = errors.New("UTM prerequisite unavailable")
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+const commandLimit = 1 << 20
+
+type CommandResult struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
+type CommandRunner func(context.Context, string, ...string) (CommandResult, error)
+
+type Control struct {
+	Executable string
+	Run        CommandRunner
+}
+
+type VM struct {
+	UUID  string
+	State string
+}
+
+// CommandFailure does not assert whether a power command took effect. Its caller
+// must reconcile the durable intent using a new observation, never retry it.
+type CommandFailure struct {
+	Operation string
+	ExitCode  int
+}
+
+func (e *CommandFailure) Error() string {
+	return fmt.Sprintf("%s: UTM command failed (exit %d)", e.Operation, e.ExitCode)
+}
+func (e *CommandFailure) Unwrap() error { return ErrUnavailable }
+
+func (c Control) call(ctx context.Context, args ...string) (CommandResult, error) {
+	if !filepath.IsAbs(c.Executable) || filepath.Clean(c.Executable) != c.Executable {
+		return CommandResult{}, ErrUnavailable
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	run := c.Run
+	if run == nil {
+		run = runCommand
+	}
+	r, err := run(ctx, c.Executable, args...)
+	if err != nil || r.ExitCode != 0 || strings.Contains(r.Stderr, "Error from event") ||
+		len(r.Stdout) > commandLimit || len(r.Stderr) > commandLimit {
+		return r, &CommandFailure{Operation: args[0], ExitCode: r.ExitCode}
+	}
+	return r, nil
+}
+
+func (c Control) List(ctx context.Context) ([]VM, error) {
+	r, err := c.call(ctx, "list")
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSpace(r.Stdout), "\n")
+	if len(lines) == 0 || strings.Join(strings.Fields(lines[0]), " ") != "UUID Status Name" {
+		return nil, ErrUnavailable
+	}
+	vms := make([]VM, 0, len(lines)-1)
+	seen := make(map[string]bool)
+	for _, line := range lines[1:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 || !uuidPattern.MatchString(fields[0]) {
+			return nil, ErrUnavailable
+		}
+		id := strings.ToLower(fields[0])
+		if seen[id] {
+			return nil, ErrUnavailable
+		}
+		seen[id] = true
+		vms = append(vms, VM{UUID: id, State: fields[1]})
+	}
+	return vms, nil
+}
+
+// Inspect proves UUID membership without booting or editing the VM. Names are
+// intentionally discarded; they cannot authorize resource selection.
+func (c Control) Inspect(ctx context.Context, uuid string) (VM, error) {
+	if !uuidPattern.MatchString(uuid) {
+		return VM{}, ErrUnavailable
+	}
+	vms, err := c.List(ctx)
+	if err != nil {
+		return VM{}, err
+	}
+	for _, vm := range vms {
+		if strings.EqualFold(vm.UUID, uuid) {
+			return vm, nil
+		}
+	}
+	return VM{}, ErrUnavailable
+}
+
+func (c Control) Status(ctx context.Context, uuid string) (string, error) {
+	if !uuidPattern.MatchString(uuid) {
+		return "", ErrUnavailable
+	}
+	r, err := c.call(ctx, "status", strings.ToLower(uuid))
+	if err != nil {
+		return "", err
+	}
+	state := strings.TrimSpace(r.Stdout)
+	if state != "started" && state != "stopped" {
+		return "", ErrUnavailable
+	}
+	return state, nil
+}
+
+// Power issues exactly one command. The controller must claim its exact durable
+// power intent first. Cancellation or command success is not effect evidence.
+func (c Control) Power(ctx context.Context, uuid, operation string) error {
+	if !uuidPattern.MatchString(uuid) || operation != "start" && operation != "stop" {
+		return ErrUnavailable
+	}
+	_, err := c.call(ctx, operation, strings.ToLower(uuid))
+	return err
+}
+
+type boundedOutput struct {
+	bytes    []byte
+	overflow bool
+}
+
+func (b *boundedOutput) Write(p []byte) (int, error) {
+	n := len(p)
+	remaining := commandLimit - len(b.bytes)
+	if len(p) > remaining {
+		b.overflow = true
+		p = p[:remaining]
+	}
+	b.bytes = append(b.bytes, p...)
+	return n, nil // Drain excess output without keeping it in memory.
+}
+
+func runCommand(ctx context.Context, executable string, args ...string) (CommandResult, error) {
+	info, err := os.Lstat(executable)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		return CommandResult{}, ErrUnavailable
+	}
+	cmd := exec.CommandContext(ctx, executable, args...)
+	cmd.Env = []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+	cmd.WaitDelay = time.Second
+	var stdout, stderr boundedOutput
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err = cmd.Run()
+	r := CommandResult{Stdout: string(stdout.bytes), Stderr: string(stderr.bytes), ExitCode: -1}
+	if cmd.ProcessState != nil {
+		r.ExitCode = cmd.ProcessState.ExitCode()
+	}
+	if stdout.overflow || stderr.overflow {
+		return r, ErrUnavailable
+	}
+	return r, err
+}

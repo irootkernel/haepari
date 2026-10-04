@@ -17,7 +17,7 @@
   },
   "guest": {
     "connection_reference": "<approved-ssh-mapping>",
-    "known_hosts_reference": "<approved-pinned-host-key>"
+    "known_hosts_reference": "sha256:<known-hosts-file-sha256>:<absolute-dedicated-known-hosts-file>"
   },
   "execution_mode": "managed"
 }

@@ -1,6 +1,6 @@
 # Operator runbook
 
-The local recovery, isolated development service and advisory lock sections describe the current candidate. Other release and VM procedures remain planned; execute them only after their implementation and operator configuration exist. UTM-specific control arguments must come from the installed version's qualified `utmctl` help.
+The local recovery, isolated development service and advisory lock sections describe the current candidate. UTM host registration and fenced idle updates are implemented; guest execution and other release/VM procedures remain planned; execute them only after their implementation and operator configuration exist. UTM-specific control arguments must come from the installed version's qualified `utmctl` help.
 
 ## Provision the controller
 
@@ -138,3 +138,9 @@ For protected evidence, inspect `resource recover <id> --plan --action recollect
 If an owned root, receipt or native identity is corrupt or unverifiable, plans/apply fail closed. Preserve the root and permanent keys; compare saved immutable receipts and current inspected identity before seeking an owner-directed recovery. A bare PID, timeout, exit code or matching pathname supplies no deletion authority. A live old controller or collector must be observed stopped before retry; fixed recovery deadlines are not renewed by restart. Unregistered or unqualified VM inspection provides no apply token.
 
 For a finished, unprotected Job on a verified resource, save `inspect`'s Job revision and run `purge <job-id> --expected-revision <n> --json`. Save that original revision for interrupted retries. Purge records unavailable admission before deletion, checks every native incarnation, and preserves shared input objects until their other available references disappear. `complete=true` acknowledges the explicit operation. Subsequent same-key submit returns that unavailable Job; `run`/`wait` exit 2 and cannot rerun it. Saved cancellation mutations and cursor ownership remain permanent. Automatic retention expiry and host-wide cleanup are not implemented or authorized by this command.
+
+## Current UTM host registration
+
+Provision the persistent VM, its registered MAC and guest authentication separately. Do not create a VM or infer trust from its display name. Create a dedicated operator-owned known-hosts file with the exact alias `haepari-vm-<lowercase-VM-UUID>` and one `ssh-ed25519` public key. Bind its raw file SHA-256 and absolute path in `guest.known_hosts_reference` as specified by the [runner contract](contracts/resource-and-runner.md). Registration runs read-only UTM UUID inspection; missing identity or pin is `PREREQUISITE_UNAVAILABLE`, durable UUID/MAC duplication is `CONFLICT`, and storage uncertainty remains `STORAGE_UNAVAILABLE`. Reconcile uncertain registration by inspecting the exact resource before retrying.
+
+Inspect configuration and availability revisions before `resource update`; supply both expected revisions and a successor configuration revision. An occupied or pending/uncertain power-protected resource refuses the update, and an idle update preserves maintenance pause. Keep automatic-stop authorization false unless the operator permits interrupting that persistent VM when eligible. This checkpoint accepts no VM Jobs, resumes no VM and provides no VM removal/recovery command. Authenticated SSH, collection and recovery follow in TASK-014/TASK-015; the separate development-service campaign remains TASK-016.

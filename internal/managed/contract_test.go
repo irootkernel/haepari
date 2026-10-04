@@ -46,7 +46,7 @@ var _ = ginkgo.Describe("ProvisionalExamplesMatchParsers", ginkgo.Label("unit"),
 			replacements := map[string]string{"<verified-local-supervision-receipt>": "local-receipt", "<operator-owned-cleanup-policy>": "cleanup-policy",
 				"<observed-vm-uuid>": "11111111-1111-4111-8111-111111111111", "<vm-mac-address>": "aa:bb:cc:dd:ee:ff",
 				"<guest-owned-job-root>": "/var/haepari/jobs", "<verified-backend-receipt>": "backend-receipt",
-				"<approved-ssh-mapping>": "ssh-mapping", "<approved-pinned-host-key>": "host-key"}
+				"<approved-ssh-mapping>": "ssh-mapping", "<known-hosts-file-sha256>": digest, "<absolute-dedicated-known-hosts-file>": "/tmp/haepari-known-hosts"}
 			for from, to := range replacements {
 				data = []byte(strings.ReplaceAll(string(data), from, to))
 			}

@@ -147,7 +147,7 @@ func reserveVMHostPlaceTx(tx *sql.Tx, jobID, resourceID string, lease int64, gua
 		if v.pending && v.power == "stopped" {
 			var stage string
 			err := tx.QueryRow(`SELECT g.stage FROM managed_power_transitions p JOIN managed_power_progress g USING(operation_generation) WHERE p.target_resource_id=? AND p.state IN ('pending','uncertain')`, v.id).Scan(&stage)
-			if err == nil && stage != "stop_ready" && stage != "stop_issued" && stage != "stop_uncertain" {
+			if err == nil && stage != PowerStopReady && stage != PowerStopIssued && stage != PowerStopUncertain {
 				count++
 			} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return err
@@ -210,12 +210,12 @@ func reserveVMHostPlaceTx(tx *sql.Tx, jobID, resourceID string, lease int64, gua
 		return err
 	}
 	identity := PowerTransitionIdentity{OperationGeneration: generation, TargetJobID: jobID, TargetLeaseGeneration: lease, TargetResourceID: resourceID, TargetConfigRevision: target.config, TargetVMUUID: target.uuid}
-	stage := "start_ready"
+	stage := PowerStartReady
 	if victim != nil {
 		identity.VictimResourceID = victim.id
 		identity.VictimConfigRevision = victim.config
 		identity.VictimVMUUID = victim.uuid
-		stage = "stop_ready"
+		stage = PowerStopReady
 	}
 	raw, _ := json.Marshal(identity)
 	if _, err := tx.Exec(`INSERT INTO managed_power_transitions(operation_generation,victim_resource_id,target_resource_id,identity_json,state) VALUES(?,?,?,?,'pending')`, generation, identity.VictimResourceID, resourceID, raw); err != nil {
@@ -229,20 +229,108 @@ func reserveVMHostPlaceTx(tx *sql.Tx, jobID, resourceID string, lease int64, gua
 }
 
 type PowerIntent struct {
-	Identity PowerTransitionIdentity `json:"identity"`
-	State    string                  `json:"state"`
-	Stage    string                  `json:"stage"`
+	Identity              PowerTransitionIdentity `json:"identity"`
+	State                 string                  `json:"state"`
+	Stage                 string                  `json:"stage"`
+	commandReturned       bool
+	commandReturnRequired bool
+	hostControlled        bool
+}
+
+// The claim origin belongs to the transition, independently of replaceable
+// power observations. It is private ledger metadata, not a wire identity field.
+type powerTransitionRecord struct {
+	PowerTransitionIdentity
+	HostControlled bool `json:"host_controlled,omitempty"`
+}
+
+// CommandReturned reports a successful command return recorded for this exact
+// effect. It is not power-state or no-effect evidence.
+func (p PowerIntent) CommandReturned() bool { return p.commandReturned }
+
+// Power stages are internal durable vocabulary. The ledger owns which ready
+// stage permits a single effect; adapters only observe issued/uncertain stages.
+const (
+	PowerStopReady      = "stop_ready"
+	PowerStopIssued     = "stop_issued"
+	PowerStopUncertain  = "stop_uncertain"
+	PowerStartReady     = "start_ready"
+	PowerStartIssued    = "start_issued"
+	PowerStartUncertain = "start_uncertain"
+	PowerDone           = "done"
+	PowerFailedNoEffect = "failed_no_effect"
+)
+
+func (p PowerIntent) ReadyEffect() (string, bool) {
+	if p.State != "pending" {
+		return "", false
+	}
+	switch p.Stage {
+	case PowerStopReady:
+		return "stop", true
+	case PowerStartReady:
+		return "start", true
+	default:
+		return "", false
+	}
+}
+
+// IssuedPowerStage names the durable stage after a successful effect claim.
+// It supplies vocabulary only; ClaimPowerEffect owns permission to issue it.
+func IssuedPowerStage(effect string) (string, bool) {
+	switch effect {
+	case "stop":
+		return PowerStopIssued, true
+	case "start":
+		return PowerStartIssued, true
+	default:
+		return "", false
+	}
 }
 
 func powerIntentTx(q rowQuerier, generation int64) (PowerIntent, error) {
 	var p PowerIntent
-	var raw []byte
-	err := q.QueryRow(`SELECT p.identity_json,p.state,g.stage FROM managed_power_transitions p JOIN managed_power_progress g USING(operation_generation) WHERE p.operation_generation=?`, generation).Scan(&raw, &p.State, &p.Stage)
+	var raw, observation []byte
+	var hasObservation bool
+	err := q.QueryRow(`SELECT p.identity_json,p.state,g.stage,g.observation_json,g.observation_json IS NOT NULL FROM managed_power_transitions p JOIN managed_power_progress g USING(operation_generation) WHERE p.operation_generation=?`, generation).Scan(&raw, &p.State, &p.Stage, &observation, &hasObservation)
 	if err != nil {
 		return p, mapNoRows(err)
 	}
-	err = json.Unmarshal(raw, &p.Identity)
-	return p, err
+	var transition powerTransitionRecord
+	if err := json.Unmarshal(raw, &transition); err != nil {
+		return p, err
+	}
+	p.Identity = transition.PowerTransitionIdentity
+	p.hostControlled = transition.HostControlled
+	// SQL NULL is the qualified-adapter claim's absent observation. A present
+	// but unreadable or unrelated proof must not erase the host-return guard.
+	if !hasObservation {
+		if p.hostControlled && oneOf(p.Stage, PowerStopIssued, PowerStopUncertain, PowerStartIssued, PowerStartUncertain) {
+			return p, ErrBlocked
+		}
+		return p, nil
+	}
+	var proof PowerConfirmation
+	if json.Unmarshal(observation, &proof) != nil || proof.Identity != p.Identity {
+		return p, ErrBlocked
+	}
+	if proof.CommandReturnRequired != p.hostControlled {
+		return p, ErrBlocked
+	}
+	if samePowerEffect(proof.ExpectedStage, p.Stage) {
+		p.commandReturnRequired = proof.CommandReturnRequired
+		p.commandReturned = proof.CommandReturned
+	} else if !((p.Stage == PowerStartReady && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain)) ||
+		(p.Stage == PowerDone && oneOf(proof.ExpectedStage, PowerStartIssued, PowerStartUncertain)) ||
+		(p.Stage == PowerFailedNoEffect && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain, PowerStartIssued, PowerStartUncertain))) {
+		return p, ErrBlocked
+	}
+	return p, nil
+}
+
+func samePowerEffect(a, b string) bool {
+	return (oneOf(a, PowerStopIssued, PowerStopUncertain) && oneOf(b, PowerStopIssued, PowerStopUncertain)) ||
+		(oneOf(a, PowerStartIssued, PowerStartUncertain) && oneOf(b, PowerStartIssued, PowerStartUncertain))
 }
 func (l *Ledger) PowerIntent(generation int64) (PowerIntent, error) {
 	return powerIntentTx(l.db, generation)
@@ -286,7 +374,19 @@ func powerFenceTx(tx *sql.Tx, identity PowerTransitionIdentity) (PowerIntent, er
 // gets permission to issue a command. A lost reply requires observation, not a
 // second claim or command. No transaction remains open during the command.
 func (l *Ledger) ClaimPowerEffect(identity PowerTransitionIdentity, effect string) error {
-	if !identity.Valid() || !oneOf(effect, "stop", "start") {
+	return l.claimPowerEffect(identity, effect, false)
+}
+
+// ClaimHostPowerEffect binds the UTM controller's claim to a required durable
+// command return. Observers cannot bypass that requirement, including on reopen.
+// ClaimPowerEffect remains the trusted qualified-adapter reconciliation API.
+func (l *Ledger) ClaimHostPowerEffect(identity PowerTransitionIdentity, effect string) error {
+	return l.claimPowerEffect(identity, effect, true)
+}
+
+func (l *Ledger) claimPowerEffect(identity PowerTransitionIdentity, effect string, requireReturn bool) error {
+	stage, valid := IssuedPowerStage(effect)
+	if !identity.Valid() || !valid {
 		return ErrInvalid
 	}
 	tx, err := l.db.BeginTx(context.Background(), nil)
@@ -305,10 +405,22 @@ func (l *Ledger) ClaimPowerEffect(identity PowerTransitionIdentity, effect strin
 	if jobState != "preparing" || availability != "available" {
 		return ErrBlocked
 	}
-	if p.State != "pending" || p.Stage != effect+"_ready" {
+	readyEffect, ready := p.ReadyEffect()
+	if !ready || readyEffect != effect {
 		return ErrBlocked
 	}
-	if _, err := tx.Exec(`UPDATE managed_power_progress SET stage=? WHERE operation_generation=?`, effect+"_issued", identity.OperationGeneration); err != nil {
+	if p.hostControlled && !requireReturn {
+		return ErrBlocked
+	}
+	var observation []byte
+	if requireReturn {
+		observation, _ = json.Marshal(PowerConfirmation{Identity: identity, ExpectedStage: stage, CommandReturnRequired: true})
+		transition, _ := json.Marshal(powerTransitionRecord{PowerTransitionIdentity: identity, HostControlled: true})
+		if _, err := tx.Exec(`UPDATE managed_power_transitions SET identity_json=? WHERE operation_generation=?`, transition, identity.OperationGeneration); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE managed_power_progress SET stage=?,observation_json=? WHERE operation_generation=?`, stage, observation, identity.OperationGeneration); err != nil {
 		return err
 	}
 	if _, err := addEvent(tx, identity.TargetJobID, "power_effect_intent", map[string]any{"identity": identity, "effect": effect}); err != nil {
@@ -318,12 +430,56 @@ func (l *Ledger) ClaimPowerEffect(identity PowerTransitionIdentity, effect strin
 }
 
 type PowerConfirmation struct {
-	Identity       PowerTransitionIdentity
-	ExpectedStage  string
-	VictimPower    string
-	TargetPower    string
-	EvidenceDigest string
-	NoEffectProven bool
+	Identity              PowerTransitionIdentity
+	ExpectedStage         string
+	VictimPower           string
+	TargetPower           string
+	EvidenceDigest        string
+	NoEffectProven        bool
+	CommandReturned       bool
+	CommandReturnRequired bool
+}
+
+// RecordPowerCommandReturn is called only by the successful claimant after its
+// command has returned. Errors retain uncertainty; neither an error nor a later
+// desired status proves the command cannot execute late. The existing progress
+// blob keeps this proof across reopen without introducing another power stage.
+func (l *Ledger) RecordPowerCommandReturn(identity PowerTransitionIdentity, effect string, success bool, digest string) error {
+	issued, valid := IssuedPowerStage(effect)
+	if !identity.Valid() || !valid || !validDigest(digest) {
+		return ErrInvalid
+	}
+	tx, err := l.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	p, err := powerFenceTx(tx, identity)
+	if err != nil {
+		return err
+	}
+	if p.Stage != issued || p.State != "pending" || !p.commandReturnRequired || p.CommandReturned() {
+		return ErrStale
+	}
+	state, stage := p.State, p.Stage
+	if !success {
+		state, stage = "uncertain", PowerStartUncertain
+		if effect == "stop" {
+			stage = PowerStopUncertain
+		}
+	}
+	proof := PowerConfirmation{Identity: identity, ExpectedStage: stage, EvidenceDigest: digest, CommandReturned: success, CommandReturnRequired: true}
+	raw, _ := json.Marshal(proof)
+	if _, err := tx.Exec(`UPDATE managed_power_progress SET stage=?,observation_json=? WHERE operation_generation=?`, stage, raw, identity.OperationGeneration); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE managed_power_transitions SET state=? WHERE operation_generation=?`, state, identity.OperationGeneration); err != nil {
+		return err
+	}
+	if _, err := addEvent(tx, identity.TargetJobID, "power_command_returned", map[string]any{"identity": identity, "effect": effect, "success": success, "evidence_digest": digest}); err != nil {
+		return err
+	}
+	return l.commit(tx)
 }
 
 // ConfirmPower consumes a fresh, identity-bound adapter observation. Uncertain
@@ -344,25 +500,33 @@ func (l *Ledger) ConfirmPower(q PowerConfirmation) error {
 	if p.Stage != q.ExpectedStage || p.State == "reconciled" {
 		return ErrStale
 	}
+	// The host controller requires durable cessation of the claimed command in
+	// addition to fresh power observations. Other qualified adapters retain their
+	// existing responsibility to supply reconciled evidence to this trusted API.
+	if p.commandReturnRequired && !p.CommandReturned() {
+		return ErrBlocked
+	}
+	q.CommandReturnRequired = p.commandReturnRequired
+	q.CommandReturned = p.CommandReturned()
 	state, stage := "uncertain", p.Stage
-	if oneOf(p.Stage, "stop_issued", "stop_uncertain") {
+	if oneOf(p.Stage, PowerStopIssued, PowerStopUncertain) {
 		if q.TargetPower != "stopped" {
 			return ErrBlocked
 		}
-		stage = "stop_uncertain"
+		stage = PowerStopUncertain
 		if q.VictimPower == "stopped" {
-			state, stage = "pending", "start_ready"
+			state, stage = "pending", PowerStartReady
 		}
-	} else if oneOf(p.Stage, "start_issued", "start_uncertain") {
-		stage = "start_uncertain"
+	} else if oneOf(p.Stage, PowerStartIssued, PowerStartUncertain) {
+		stage = PowerStartUncertain
 		if q.TargetPower == "started" && (q.Identity.VictimResourceID == "" || q.VictimPower == "stopped") {
-			state, stage = "reconciled", "done"
+			state, stage = "reconciled", PowerDone
 		}
 	} else {
 		return ErrBlocked
 	}
-	if q.NoEffectProven && q.TargetPower == "stopped" && ((oneOf(p.Stage, "start_issued", "start_uncertain") && (q.Identity.VictimResourceID == "" || q.VictimPower == "stopped")) || (oneOf(p.Stage, "stop_issued", "stop_uncertain") && q.VictimPower == "started")) {
-		state, stage = "reconciled", "failed_no_effect"
+	if q.NoEffectProven && q.TargetPower == "stopped" && ((oneOf(p.Stage, PowerStartIssued, PowerStartUncertain) && (q.Identity.VictimResourceID == "" || q.VictimPower == "stopped")) || (oneOf(p.Stage, PowerStopIssued, PowerStopUncertain) && q.VictimPower == "started")) {
+		state, stage = "reconciled", PowerFailedNoEffect
 	}
 	raw, _ := json.Marshal(q)
 	if _, err := tx.Exec(`UPDATE managed_power_progress SET stage=?,observation_json=? WHERE operation_generation=?`, stage, raw, q.Identity.OperationGeneration); err != nil {

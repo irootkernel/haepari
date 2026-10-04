@@ -18,6 +18,7 @@ import (
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/snapshot"
 	"github.com/irootkernel/haepari/internal/state"
+	"github.com/irootkernel/haepari/internal/utm"
 )
 
 const protocol = "managed-execution/v1"
@@ -39,6 +40,7 @@ type runtimeServer struct {
 	// Serialize finished evidence reads/deletion and sealing through admission.
 	evidenceMu      sync.RWMutex
 	backendEvidence func(kind, id string) (evidenceBackend, error)
+	utmCommand      utm.CommandRunner // nil in production; the argv boundary is injectable for fake UTM
 	// Test barrier after a replay miss, before observing readiness. Nil in production.
 	beforeAvailabilityObservation func()
 	beforeWaitRead                func() // nil in production; subscribe/read race barrier
@@ -104,7 +106,7 @@ func reject(w http.ResponseWriter, op string, err error) {
 		status = http.StatusConflict
 	case errors.Is(err, managed.ErrInvalid), errors.Is(err, snapshot.ErrInvalid):
 		code = "INVALID_REQUEST"
-	case errors.Is(err, snapshot.ErrSourceUnavailable):
+	case errors.Is(err, snapshot.ErrSourceUnavailable), errors.Is(err, utm.ErrUnavailable):
 		code = "PREREQUISITE_UNAVAILABLE"
 	default:
 		code = "STORAGE_UNAVAILABLE"
@@ -116,7 +118,7 @@ func reject(w http.ResponseWriter, op string, err error) {
 		"NESTED_WAIT_REJECTED":        "A managed parent still holds capacity; blocking on nonterminal work is prohibited.",
 		"RESULT_UNAVAILABLE":          "The admission is known, but its retained result is unavailable; no new job was launched.",
 		"INVALID_REQUEST":             "The request is malformed or unsafe.",
-		"PREREQUISITE_UNAVAILABLE":    "The selected input source is unavailable; correct it before submitting again.",
+		"PREREQUISITE_UNAVAILABLE":    "A required input or backend prerequisite is unavailable; correct it before retrying.",
 		"CONFLICT":                    "The request conflicts with existing or changed input.",
 		"NOT_FOUND":                   "The requested job or resource was not found.",
 		"LOCK_EXPIRED":                "The advisory grant has ended or its generation is stale.",
@@ -217,17 +219,19 @@ func (s *runtimeServer) register(w http.ResponseWriter, r *http.Request) {
 		reject(w, "resource.register", err)
 		return
 	}
-	if spec.Kind != "local" && spec.Kind != "lock" {
-		reject(w, "resource.register", managed.ErrUnsupported)
-		return
-	}
 	if spec.Kind == "lock" {
 		if err := decodeLockJSON(raw, &input); err != nil {
 			reject(w, "resource.register", err)
 			return
 		}
 	}
-	if err := s.ledger.RegisterOnlyLocal(input.Spec); err != nil {
+	if spec.Kind == "utm-macos" {
+		if err := s.verifyVMRegistration(r.Context(), spec); err != nil {
+			reject(w, "resource.register", err)
+			return
+		}
+	}
+	if err := s.ledger.RegisterResource(input.Spec); err != nil {
 		reject(w, "resource.register", err)
 		return
 	}
@@ -331,7 +335,9 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		reject(w, "submit", err)
 		return
 	}
-	if job.Mode != "auto" || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 {
+	// Registration and host control precede TASK-014's authenticated guest
+	// execution. Never dispatch a registered VM through the local runner.
+	if resource.Kind != "local" || job.Mode != "auto" || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 {
 		reject(w, "submit", managed.ErrUnsupported)
 		return
 	}

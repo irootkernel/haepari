@@ -33,7 +33,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		{"resource inspect", "resource inspect <id> --json"},
 		{"resource pause", "resource pause <id> --expected-revision <n> [--expected-config-revision <n> --expected-lease-generation <n>] [--request-key <key>] [--reason <text>] --json"},
 		{"resource resume", "resource resume <id> --expected-revision <n> [--expected-config-revision <n> --expected-lease-generation <n>] [--request-key <key>] --json"},
-		{"resource update", "resource update --file <json> --expected-revision <n> --json"},
+		{"resource update", "resource update --file <lock-or-vm-json> --expected-revision <n> [--expected-availability-revision <n> (required for VM)] --json"},
 		{"resource remove", "resource remove <id> --expected-revision <n> --json"},
 		{"resource recover", "resource recover <id> --plan [--action recollect|dispose] --json | --plan-token <token> --request-key <key> --json"},
 		{"job recover", "job recover <id> --plan [--action reconcile|attest-stopped|attest-no-start] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},

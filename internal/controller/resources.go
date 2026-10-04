@@ -10,6 +10,17 @@ import (
 
 func (s *runtimeServer) resourceAvailability(w http.ResponseWriter, r *http.Request) {
 	op := "resource." + r.PathValue("action")
+	if r.PathValue("action") == "update" {
+		status, err := s.ledger.ResourceStatus(r.PathValue("id"))
+		if err != nil {
+			reject(w, op, err)
+			return
+		}
+		if status.Kind == "utm-macos" {
+			s.vmResourceUpdate(w, r)
+			return
+		}
+	}
 	if r.PathValue("action") == "recover" {
 		status, err := s.ledger.ResourceStatus(r.PathValue("id"))
 		if err != nil {

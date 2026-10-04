@@ -36,25 +36,25 @@ Accepted on 2026-09-28 on the owner's host; the observations are in the [probe r
 Requirement coverage: `HP-REQ-024`, `HP-REQ-025`.
 
 #### Implement
-- [ ] Register a `utm-macos` resource by VM UUID, MAC address and pinned SSH host key. Refuse an unknown UUID, and refuse a second resource with the same UUID or MAC address. Registration never creates, clones, boots or deletes a VM.
-- [ ] Implement the `utmctl` adapter (`status`, `start`, forced `stop`) with the rules in the [TASK-034 probe record](../records/TASK-034-utm-probe.md): a non-zero exit or `Error from event` on stderr is a failure, and `ip-address` is not used.
-- [ ] Apply operator-owned `vm.allow_automatic_stop` (default false) and the existing paused state as maintenance protection. Issue no automatic stop unless the durable victim/target power-transfer intent is current; reconcile ambiguous or stale responses before releasing protection.
-- [ ] Find the guest address in exactly one host DHCP lease entry for the registered MAC with a known, unexpired individual expiry. Permit a pre-start unexpired entry only after current VM, SSH host-key, guest MAC and boot/run identity checks; do not infer entry freshness from the lease file mtime.
-- [ ] Classify an exact registered VM's proven no-effect prerequisite failure as resource-local `vm_unavailable`. Fence the failure observation by current VM/resource identity and revision; never use this classification for an uncertain power operation, a stale registration or a failure after possible guest effects.
+- [x] Register a `utm-macos` resource by VM UUID, MAC address and pinned SSH host key. Refuse an unknown UUID, and refuse a second resource with the same UUID or MAC address. Registration never creates, clones, boots or deletes a VM.
+- [x] Implement the `utmctl` adapter (`status`, `start`, forced `stop`) with the rules in the [TASK-034 probe record](../records/TASK-034-utm-probe.md): a non-zero exit or `Error from event` on stderr is a failure, and `ip-address` is not used.
+- [x] Apply operator-owned `vm.allow_automatic_stop` (default false) and the existing paused state as maintenance protection. Issue no automatic stop unless the durable victim/target power-transfer intent is current; reconcile ambiguous or stale responses before releasing protection.
+- [x] Find the guest address in exactly one host DHCP lease entry for the registered MAC with a known, unexpired individual expiry. Permit a pre-start unexpired entry only after current VM, SSH host-key, guest MAC and boot/run identity checks; do not infer entry freshness from the lease file mtime.
+- [x] Classify an exact registered VM's proven no-effect prerequisite failure as resource-local `vm_unavailable`. Fence the failure observation by current VM/resource identity and revision; never use this classification for an uncertain power operation, a stale registration or a failure after possible guest effects.
 
 #### Do not
-- [ ] Do not clone, delete or edit a VM, use AppleScript, read UTM's data container, or select a VM by display name.
+- [x] Do not clone, delete or edit a VM, use AppleScript, read UTM's data container, or select a VM by display name.
 
 #### Verify
-- [ ] Use fake interface tests to verify registration refusals (unknown UUID, duplicate UUID or MAC), `utmctl` failure detection including exit 0 with `Error from event`, and expired, pre-start, renewed, missing or ambiguous leases. Test a paused victim, concurrent start, ineligible victims, stale response and unregistered VM exclusion. The real trial belongs to TASK-016.
-- [ ] Verify that a VM A lease or identity failure pauses only A, a stale observation cannot pause a newer A registration, an already quarantined A remains quarantined, and uncertain start/stop effects stay under power reconciliation. VM B and independent local resources remain eligible. The real trial belongs to TASK-016.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Use fake interface tests to verify registration refusals (unknown UUID, duplicate UUID or MAC), `utmctl` failure detection including exit 0 with `Error from event`, and expired, pre-start, renewed, missing or ambiguous leases. Test a paused victim, concurrent start, ineligible victims, stale response and unregistered VM exclusion. The real trial belongs to TASK-016.
+- [x] Verify that a VM A lease or identity failure pauses only A, a stale observation cannot pause a newer A registration, an already quarantined A remains quarantined, and uncertain start/stop effects stay under power reconciliation. VM B and independent local resources remain eligible. The real trial belongs to TASK-016.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-014
 

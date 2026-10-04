@@ -474,7 +474,7 @@ func (l *Ledger) RegisterResource(data []byte) error {
 	_, err = tx.Exec(`INSERT INTO managed_resources(id,kind,config_revision,capacity,vm_uuid,vm_mac,spec_json,idle_since_ns) VALUES(?,?,?,?,?,?,?,?)`,
 		r.ID, r.Kind, r.Revision, r.Capacity, vmUUID(r), vmMAC(r), canonical, time.Now().UTC().UnixNano())
 	if err != nil {
-		return fmt.Errorf("%w: resource registration: %v", ErrConflict, err)
+		return uniquenessError(err, "resource registration")
 	}
 	return l.commit(tx)
 }
@@ -541,7 +541,7 @@ func (l *Ledger) UpdateResource(data []byte, expectedConfigRevision, expectedAva
 	_, err = tx.Exec(`UPDATE managed_resources SET kind=?,config_revision=?,capacity=?,vm_uuid=?,vm_mac=?,spec_json=? WHERE id=?`,
 		r.Kind, r.Revision, r.Capacity, vmUUID(r), vmMAC(r), canonical, r.ID)
 	if err != nil {
-		return fmt.Errorf("%w: resource update: %v", ErrConflict, err)
+		return uniquenessError(err, "resource update")
 	}
 	return l.commit(tx)
 }

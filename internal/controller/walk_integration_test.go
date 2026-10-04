@@ -75,7 +75,7 @@ var _ = ginkgo.Describe("LocalWalkingSkeleton", ginkgo.Label("integration"), fun
 		}
 		defer c.Close()
 		resource := managed.ResourceSpec{Schema: "haepari.resource/v1", ID: "local-one", Kind: "local", ExecutionMode: "managed", Capacity: 1, Revision: 1, Adapter: managed.Adapter{QualificationReference: "isolated-integration"}, Cleanup: &managed.CleanupPolicy{PolicyReference: "owned-workspace"}}
-		for _, unsupported := range []managed.ResourceSpec{
+		for _, unqualified := range []managed.ResourceSpec{
 			func() managed.ResourceSpec {
 				r := resource
 				r.Kind, r.Cleanup = "utm-macos", nil
@@ -85,10 +85,10 @@ var _ = ginkgo.Describe("LocalWalkingSkeleton", ginkgo.Label("integration"), fun
 				return r
 			}(),
 		} {
-			encoded, _ := json.Marshal(unsupported)
+			encoded, _ := json.Marshal(unqualified)
 			var issue *client.Issue
-			if _, err := c.Register(context.Background(), encoded); !errors.As(err, &issue) || issue.Code != "UNSUPPORTED" {
-				t.Fatalf("unsupported resource admitted: %+v, %v", unsupported, err)
+			if _, err := c.Register(context.Background(), encoded); !errors.As(err, &issue) || issue.Code != "PREREQUISITE_UNAVAILABLE" {
+				t.Fatalf("unqualified resource admitted: %+v, %v", unqualified, err)
 			}
 		}
 		resourceJSON, _ := json.Marshal(resource)

@@ -4,7 +4,7 @@
   "revision_date": "2026-09-28",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 80,
+    "package_files_excluding_manifest": 81,
     "requirements": {
       "total": 81,
       "active": 64,
@@ -30,15 +30,15 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 66,
+    "markdown_documents": 67,
     "json_templates": 11,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 10812,
-      "sha256": "82cc7f4e74b86e7da7af97c574f3e0b960aca907e693786d8bb8249d3158a902"
+      "bytes": 11067,
+      "sha256": "e7d0673689d7692739c2ab563f38b71febdad2b4ae71e6d84a146a3b20ade070"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -47,8 +47,8 @@
     },
     {
       "path": "TODO.md",
-      "bytes": 21602,
-      "sha256": "04d668f1a646e12357300252db9ff6b244fda81dae3be13e92097493b937e447"
+      "bytes": 23253,
+      "sha256": "ca65242c04772e54189ba5ac7d6fbc6ce1766db93573b618fe22d7c20fb9ede0"
     },
     {
       "path": "aquarium-adoption.md",
@@ -158,7 +158,7 @@
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "e1558f831059d28f557abbfff895e36af2a2f73179d3a02e359450e66950f4f6"
+      "sha256": "52defa8c2bdcce7f741389208ebe4a04fb32a149d4088dc7a88f269a4b9e0cff"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -167,8 +167,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 40347,
-      "sha256": "267b748914ff3f225d20f5b3bb2c80495efd37ab18c77cca6f4bfdf24b16bb47"
+      "bytes": 41120,
+      "sha256": "55093eb7794bca72b2e75c4c94e4a362e3d2d7b355d0a6955d1aef8d899018c0"
     },
     {
       "path": "contracts/configuration.md",
@@ -192,8 +192,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 23394,
-      "sha256": "b04a4de1427a76a57f1720ead7ba3c68b6e7b5bc25a2a4d57777c2d7c01fa847"
+      "bytes": 24650,
+      "sha256": "09de13f12ca6d8cb364fc29537b08272c532b2d19363a229a8a9b111ee9f0222"
     },
     {
       "path": "examples/Makefile.example",
@@ -252,8 +252,8 @@
     },
     {
       "path": "examples/resource-macos.template.json",
-      "bytes": 641,
-      "sha256": "eea4f90e180f06ec71ae84f3c0effe85c6d72409dd21b8aa5b8ce38ac5de52fe"
+      "bytes": 685,
+      "sha256": "9598bbb3e747202d30e30d0685839866c917c645decba96d5d3116c2d7002faa"
     },
     {
       "path": "examples/result-local.template.json",
@@ -287,13 +287,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 23782,
-      "sha256": "1ed5bd5fd8ff56756e713b6b721178d6bb53ba554351d1e0748f080edbfca6ef"
+      "bytes": 25228,
+      "sha256": "830b28ee48dc63a51658a4922ce753cb7dc925a944763da368730cbc8ecbec0f"
     },
     {
       "path": "package-validation.md",
       "bytes": 8686,
-      "sha256": "b5304a78978ca247520334b9f81c1b6947e57be0f0b4c8556e19f8a61ad21d7a"
+      "sha256": "acd1080e6066d6747ad9b430b5bede4f6f09dd71454bb23c0048a305f203f17e"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -304,6 +304,11 @@
       "path": "records/TASK-012-managed-core-freeze.md",
       "bytes": 15072,
       "sha256": "1af5194c87d59a16776046f214e34f1e2338e0137318f311fa5f646399bb1315"
+    },
+    {
+      "path": "records/TASK-013-utm-host-control.md",
+      "bytes": 4264,
+      "sha256": "68b861a1ec925df145999bfc50327182417ab1b3fc37d3f0afeccd43440aea83"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
@@ -322,8 +327,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11490,
-      "sha256": "dde483141df5b685e7515de8cf81c155bc6242c9ba0732106bb893533898f115"
+      "bytes": 11495,
+      "sha256": "bc71ec760964d554014afe18550a54dc4d203e2755c49fca27868d1e7dedb58d"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -343,7 +348,7 @@
     {
       "path": "roadmap/EPIC-004.md",
       "bytes": 13160,
-      "sha256": "f08ed4363954438abd2221e7a47bb61af5b5764d9c51659b25b315978c4f40df"
+      "sha256": "79d537b0a4cc073d526881ed751028776e0aa2913b9b3a191189a81ef99b28a9"
     },
     {
       "path": "roadmap/EPIC-005.md",
