@@ -63,22 +63,24 @@ Requirement coverage: `HP-REQ-024`, `HP-REQ-025`.
 Requirement coverage: `HP-REQ-026`, `HP-REQ-027`, `HP-REQ-028`.
 
 #### Implement
-- [ ] Transfer the digest-pinned guest runner with each job's sealed bundle rather than preinstalling it in the guest. Use a fixed structured remote protocol, enforce known-hosts and guest identity (including the registered MAC-to-address lease), and start or reattach transient guest supervision.
-- [ ] Write guest run receipts (request, spawn intent, start, exit) by temporary file, file sync, rename and directory sync, as the [runner contract](../contracts/resource-and-runner.md#runner-receipts) specifies.
+- [x] Transfer the digest-pinned guest runner with each job's sealed bundle rather than preinstalling it in the guest. Use a fixed structured remote protocol, enforce known-hosts and guest identity (including the registered MAC-to-address lease), and start or reattach transient guest supervision.
+- [x] Write guest run receipts (request, spawn intent, start, exit) by temporary file, file sync, rename and directory sync, as the [runner contract](../contracts/resource-and-runner.md#runner-receipts) specifies.
 - [ ] When an authorized real guest with Remote Login is available, perform a harmless early smoke observation: start once over SSH, disconnect, reconnect by the same run identity, read the original receipts/output without executing again, then request cancellation and verify termination. Record it as exploratory evidence only; absence of this setup does not block fake-backend or local development and does not complete TASK-016.
 
+Optional real-guest branch remains unobserved: no current product registration/pin/mapping is verified for the SSH alias. This does not qualify TASK-016 or F2.
+
 #### Do not
-- [ ] Do not forward the host agent, copy host auth, require QEMU guest operations, or concatenate untrusted remote shell commands.
+- [x] Do not forward the host agent, copy host auth, require QEMU guest operations, or concatenate untrusted remote shell commands.
 
 #### Verify
-- [ ] Test wrong host/nonce/VM, argument encoding, transport loss, same-run reconnect, guest reboot, and cancelled SSH with a surviving workload.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Test wrong host/nonce/VM, argument encoding, transport loss, same-run reconnect, guest reboot, and cancelled SSH with a surviving workload.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-015
 

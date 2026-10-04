@@ -26,7 +26,7 @@ test-unit:
 	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --fail-on-pending --label-filter=unit ./cmd/haepari ./internal/client ./internal/managed ./internal/platform ./internal/runner ./internal/snapshot ./internal/state ./internal/utm
 
 test-int:
-	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration ./cmd/haepari ./internal/controller ./internal/managed ./internal/runner ./internal/store/sqlite
+	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration ./cmd/haepari ./internal/controller ./internal/managed ./internal/runner ./internal/store/sqlite ./internal/utm
 
 test-e2e:
 	+$(MAKE) build

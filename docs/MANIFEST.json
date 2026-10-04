@@ -4,7 +4,7 @@
   "revision_date": "2026-09-28",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 81,
+    "package_files_excluding_manifest": 82,
     "requirements": {
       "total": 81,
       "active": 64,
@@ -30,15 +30,15 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 67,
+    "markdown_documents": 68,
     "json_templates": 11,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 11067,
-      "sha256": "e7d0673689d7692739c2ab563f38b71febdad2b4ae71e6d84a146a3b20ade070"
+      "bytes": 11229,
+      "sha256": "4e55ae4ab0cd04ad0a9ef4a6672ebbcdf9cf8069391b1a08ddea66cbad4cdd05"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -152,13 +152,13 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 36263,
-      "sha256": "501e692ca50b442c22166190b2341dd6220a15be6594da9f1e2418b6d18b3942"
+      "bytes": 36563,
+      "sha256": "e5da4c67e9b98070370215d660b54072ee5edb832e366cf013a262aa59d03b7c"
     },
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "52defa8c2bdcce7f741389208ebe4a04fb32a149d4088dc7a88f269a4b9e0cff"
+      "sha256": "ddabd03738fe1105a4c10705092f1eae2b76659503cf286125be04368747941d"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -192,8 +192,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 24650,
-      "sha256": "09de13f12ca6d8cb364fc29537b08272c532b2d19363a229a8a9b111ee9f0222"
+      "bytes": 29333,
+      "sha256": "cc448298579bd21de8021865b214cdbe966335e5ace0f99be55ac036785ced92"
     },
     {
       "path": "examples/Makefile.example",
@@ -252,8 +252,8 @@
     },
     {
       "path": "examples/resource-macos.template.json",
-      "bytes": 685,
-      "sha256": "9598bbb3e747202d30e30d0685839866c917c645decba96d5d3116c2d7002faa"
+      "bytes": 727,
+      "sha256": "674486564b452bfc470a4ee3b4ddd26deaab98169bda619babb8f28dbf0e7923"
     },
     {
       "path": "examples/result-local.template.json",
@@ -287,13 +287,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 25228,
-      "sha256": "830b28ee48dc63a51658a4922ce753cb7dc925a944763da368730cbc8ecbec0f"
+      "bytes": 27427,
+      "sha256": "198d1344eefc791449b8dca742a965546a371d06de205d37e3aaa37645419869"
     },
     {
       "path": "package-validation.md",
       "bytes": 8686,
-      "sha256": "acd1080e6066d6747ad9b430b5bede4f6f09dd71454bb23c0048a305f203f17e"
+      "sha256": "539f078a2f9dc65c17472c6a19ebfa3d25567d4d4b6fa7ef57c844fb3bf617dc"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -309,6 +309,11 @@
       "path": "records/TASK-013-utm-host-control.md",
       "bytes": 4264,
       "sha256": "68b861a1ec925df145999bfc50327182417ab1b3fc37d3f0afeccd43440aea83"
+    },
+    {
+      "path": "records/TASK-014-authenticated-guest-runner.md",
+      "bytes": 3966,
+      "sha256": "c7f50e8abc5e51a01f9d4909567a3d0e0c413c87e5d86457f210fda7560d2f21"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
@@ -327,8 +332,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11495,
-      "sha256": "bc71ec760964d554014afe18550a54dc4d203e2755c49fca27868d1e7dedb58d"
+      "bytes": 11496,
+      "sha256": "d5efe184d88ae46240d049f958fac33ace03d64da15b1b53e8ade7abb7388322"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -347,8 +352,8 @@
     },
     {
       "path": "roadmap/EPIC-004.md",
-      "bytes": 13160,
-      "sha256": "79d537b0a4cc073d526881ed751028776e0aa2913b9b3a191189a81ef99b28a9"
+      "bytes": 13321,
+      "sha256": "3cfc81f6e97f7361007ff05c2d9c338800957eeb8f16b0fbd203ece358e3f5da"
     },
     {
       "path": "roadmap/EPIC-005.md",

@@ -16,7 +16,7 @@
     "qualification_reference": "<verified-backend-receipt>"
   },
   "guest": {
-    "connection_reference": "<approved-ssh-mapping>",
+    "connection_reference": "sha256:<ssh-mapping-file-sha256>:<absolute-private-mapping-file>",
     "known_hosts_reference": "sha256:<known-hosts-file-sha256>:<absolute-dedicated-known-hosts-file>"
   },
   "execution_mode": "managed"
