@@ -251,6 +251,10 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	sshAt := time.Now()
 	identity, err := s.vmCall(probe)
 	if err != nil {
+		var failure *utm.CommandFailure
+		if errors.As(err, &failure) && failure.HostPermissionDenied {
+			return s.vmNoEffect(c, "prepare_failure", false, "host_permission_unavailable", err)
+		}
 		return s.vmNoEffect(c, "prepare_failure", true, "", err)
 	}
 	steps = append(steps, managed.ResultStep{Step: "ssh_ready", DurationMillis: time.Since(sshAt).Milliseconds()})

@@ -588,6 +588,53 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		_, err = f.reserve(next)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	})
+	ginkgo.DescribeTable("pauses every available VM on a no-effect host Automation denial", func(deniedOperation string) {
+		f := nativeVMFixture(ginkgo.GinkgoT(), "false")
+		other := vmControllerSpec(ginkgo.GinkgoT(), "vm-other", 2, false)
+		paused := vmControllerSpec(ginkgo.GinkgoT(), "vm-maintenance", 3, false)
+		for _, spec := range []managed.ResourceSpec{other, paused} {
+			gomega.Expect(f.s.ledger.RegisterResource(mustJSONScheduling(spec))).To(gomega.Succeed())
+			f.control.states[spec.VM.UTMVMUUID] = "stopped"
+		}
+		_, err := f.s.ledger.SetAvailability(managed.AvailabilityRequest{ResourceID: paused.ID, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, Reason: "maintenance", MutationKey: "maintenance-pause"}, false)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		r, err := f.reserve(f.admit("vm-host-denied"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		native := f.control.command
+		f.s.utmCommand = func(ctx context.Context, exe string, args ...string) (utm.CommandResult, error) {
+			if args[0] == deniedOperation {
+				return utm.CommandResult{Stderr: "Error from event: (OSStatus error -1743.)"}, nil
+			}
+			return native(ctx, exe, args...)
+		}
+		sshCalls := 0
+		f.s.sshCommand = func(context.Context, string, []string, []byte) (utm.CommandResult, error) {
+			sshCalls++
+			return utm.CommandResult{}, errors.New("guest effect forbidden")
+		}
+		gomega.Expect(f.s.executeVM(r, f.job, f.object, time.Now().Add(10*time.Second))).To(gomega.Succeed())
+		result, err := f.s.ledger.Result(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Incomplete))
+		gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("not_needed")))
+		for _, id := range []string{f.spec.ID, other.ID} {
+			status, err := f.s.ledger.ResourceStatus(id)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(status.Availability).To(gomega.Equal("paused"))
+			gomega.Expect(status.Reason).To(gomega.Equal("host_permission_unavailable"))
+			gomega.Expect(status.Occupancy).To(gomega.BeZero())
+		}
+		status, err := f.s.ledger.ResourceStatus(paused.ID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(status.Reason).To(gomega.Equal("maintenance"))
+		local, err := f.s.ledger.ResourceStatus("local-a")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(local.Availability).To(gomega.Equal("available"))
+		gomega.Expect(sshCalls).To(gomega.BeZero())
+		gomega.Expect(f.control.effects).To(gomega.BeEmpty())
+		_, err = os.Stat(filepath.Join(f.guest, r.JobID))
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+	}, ginkgo.Entry("during membership lookup", "list"), ginkgo.Entry("during VM status", "status"))
 	ginkgo.It("settles a returned framework capacity rejection without quarantine or guest preparation", func() {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "false")
 		f.control.states[f.spec.VM.UTMVMUUID] = "stopped"

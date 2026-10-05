@@ -322,8 +322,8 @@
     },
     {
       "path": "records/TASK-015-vm-job-recovery.md",
-      "bytes": 3801,
-      "sha256": "89b56ced17cb982ee4fb9a724d416809edc41b8eb20f8a4007851243e5af88c5"
+      "bytes": 4340,
+      "sha256": "b2a90b1222e303230044dd22438828e7d75c8a6fee4a00189f14982380d0c11a"
     },
     {
       "path": "records/TASK-016-vm-contract-freeze.md",

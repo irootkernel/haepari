@@ -107,7 +107,10 @@ func (c Control) ResolveGuest(ctx context.Context, reader io.Reader, uuid, mac, 
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
 	state, err := c.Status(ctx, uuid)
-	if err != nil || state != "started" {
+	if err != nil {
+		return Lease{}, GuestIdentity{}, err
+	}
+	if state != "started" {
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
 	lease, err := ReadLease(reader, mac, now())
@@ -122,7 +125,10 @@ func (c Control) ResolveGuest(ctx context.Context, reader io.Reader, uuid, mac, 
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
 	state, err = c.Status(ctx, uuid)
-	if err != nil || state != "started" || !lease.Expires.After(now()) {
+	if err != nil {
+		return Lease{}, GuestIdentity{}, err
+	}
+	if state != "started" || !lease.Expires.After(now()) {
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
 	return lease, identity, nil

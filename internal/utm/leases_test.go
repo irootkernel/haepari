@@ -2,6 +2,7 @@ package utm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,6 +16,31 @@ func leaseFixture(expiry int64) string {
 }
 
 var _ = ginkgo.Describe("IndividualDHCPLease", ginkgo.Label("unit"), func() {
+	ginkgo.It("preserves host denial before and after guest identity proof", func() {
+		for _, deniedAt := range []int{1, 2} {
+			statuses, proofs := 0, 0
+			c := Control{Executable: "/utmctl", Run: func(_ context.Context, _ string, args ...string) (CommandResult, error) {
+				if args[0] == "list" {
+					return CommandResult{Stdout: "UUID Status Name\n" + vmID + " started VM\n"}, nil
+				}
+				statuses++
+				if statuses == deniedAt {
+					return CommandResult{Stderr: "Error from event: (OSStatus error -1743.)"}, nil
+				}
+				return CommandResult{Stdout: "started"}, nil
+			}}
+			now := time.Now()
+			verify := func(_ context.Context, lease Lease, uuid, nonce string) (GuestIdentity, error) {
+				proofs++
+				return GuestIdentity{VMUUID: uuid, MAC: vmMAC, Address: lease.Address, HostKey: "pin", BootID: vmID, Nonce: nonce, OS: "darwin", Arch: "arm64"}, nil
+			}
+			_, _, err := c.ResolveGuest(context.Background(), strings.NewReader(leaseFixture(now.Add(time.Hour).Unix())), vmID, vmMAC, "pin", "fresh", func() time.Time { return now }, verify)
+			var failure *CommandFailure
+			gomega.Expect(errors.As(err, &failure)).To(gomega.BeTrue())
+			gomega.Expect(failure.HostPermissionDenied).To(gomega.BeTrue())
+			gomega.Expect(proofs).To(gomega.Equal(deniedAt - 1))
+		}
+	})
 	ginkgo.It("requires exactly one known unexpired per-MAC lease", func() {
 		now := time.Unix(2000000000, 0)
 		valid := leaseFixture(now.Add(time.Hour).Unix())

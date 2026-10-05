@@ -20,6 +20,11 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 var frameworkLimitPattern = regexp.MustCompile(`(?:\(VZErrorDomain error 6\.\)|Error Domain=VZErrorDomain Code=6(?: |$))`)
 
+// UTM 4.7.5 reports errAEEventNotPermitted for denied Automation, including
+// an unavailable login context. Preserve that host-wide cause separately from
+// a VM lookup/status failure, without treating a power error as no effect.
+var hostPermissionPattern = regexp.MustCompile(`(?:\(OSStatus error -1743\.\)|Error Domain=NSOSStatusErrorDomain Code=-1743(?: |$))`)
+
 const commandLimit = 1 << 20
 
 type CommandResult struct {
@@ -44,9 +49,10 @@ type VM struct {
 // CommandFailure does not assert whether a power command took effect. Its caller
 // must reconcile the durable intent using a new observation, never retry it.
 type CommandFailure struct {
-	Operation      string
-	ExitCode       int
-	FrameworkLimit bool
+	Operation            string
+	ExitCode             int
+	FrameworkLimit       bool
+	HostPermissionDenied bool
 }
 
 func (e *CommandFailure) Error() string {
@@ -71,7 +77,9 @@ func (c Control) call(ctx context.Context, args ...string) (CommandResult, error
 		returned := err == nil || errors.As(err, &exitFailure) && exitFailure.ExitCode() >= 0
 		refused := returned && args[0] == "start" && ctx.Err() == nil && r.ExitCode >= 0 && len(r.Stderr) <= commandLimit &&
 			frameworkLimitPattern.MatchString(r.Stderr)
-		return r, &CommandFailure{Operation: args[0], ExitCode: r.ExitCode, FrameworkLimit: refused}
+		permissionDenied := returned && ctx.Err() == nil && len(r.Stderr) <= commandLimit &&
+			strings.Contains(r.Stderr, "Error from event") && hostPermissionPattern.MatchString(r.Stderr)
+		return r, &CommandFailure{Operation: args[0], ExitCode: r.ExitCode, FrameworkLimit: refused, HostPermissionDenied: permissionDenied}
 	}
 	return r, nil
 }

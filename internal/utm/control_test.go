@@ -15,6 +15,33 @@ const vmID = "11111111-1111-4111-8111-111111111111"
 const vmMAC = "aa:bb:cc:dd:ee:ff"
 
 var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
+	ginkgo.It("distinguishes a returned host Automation denial from VM errors and unknown command outcomes", func() {
+		for _, scenario := range []struct {
+			stderr string
+			lost   bool
+			want   bool
+		}{
+			{"Error from event: The operation couldn’t be completed. (OSStatus error -1743.)", false, true},
+			{"Error from event: Error Domain=NSOSStatusErrorDomain Code=-1743 UserInfo={}", false, true},
+			{"Error from event: permission denied", false, false},
+			{"Error from event: (OSStatus error -17430.)", false, false},
+			{"(OSStatus error -1743.)", false, false},
+			{"Error from event: (OSStatus error -1743.)", true, false},
+		} {
+			c := Control{Executable: "/utmctl", Run: func(_ context.Context, _ string, _ ...string) (CommandResult, error) {
+				var err error
+				if scenario.lost {
+					err = errors.New("lost command response")
+				}
+				return CommandResult{Stderr: scenario.stderr, ExitCode: 1}, err
+			}}
+			_, err := c.List(context.Background())
+			var failure *CommandFailure
+			gomega.Expect(errors.As(err, &failure)).To(gomega.BeTrue())
+			gomega.Expect(failure.HostPermissionDenied).To(gomega.Equal(scenario.want))
+			gomega.Expect(failure.FrameworkLimit).To(gomega.BeFalse())
+		}
+	})
 	ginkgo.It("preserves observed UUID spelling for native commands", func() {
 		for _, nativeID := range []string{"ABCDEF01-ABCD-4ABC-8ABC-ABCDEF012345", "aBcDeF01-aBcD-4aBc-8aBc-aBcDeF012345"} {
 			var calls [][]string
