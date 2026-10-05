@@ -13,6 +13,7 @@ import (
 // LocalPhase is an exact lease-bound intent or observation. Active event
 // payloads cannot be purged; terminal timings retain their useful projection.
 type LocalPhase struct {
+	AdapterSteps         []ResultStep              `json:"adapter_steps,omitempty"`
 	Schema               string                    `json:"schema"`
 	Identity             LocalIdentity             `json:"identity"`
 	Phase                string                    `json:"phase"`
@@ -43,6 +44,9 @@ func (l *Ledger) RecordLocalPhase(q LocalPhaseRequest) (Receipt, error) {
 	}
 	return l.mutate("local_phase_observation", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
 		if err := matchLocalIdentityTx(tx, p.Identity); err != nil {
+			return Receipt{}, err
+		}
+		if err := validatePhaseAdapterStepsTx(tx, p); err != nil {
 			return Receipt{}, err
 		}
 		var raw []byte
@@ -100,6 +104,18 @@ func (l *Ledger) RecordLocalPhase(q LocalPhaseRequest) (Receipt, error) {
 }
 
 func validLocalPhase(p LocalPhase) bool {
+	if len(p.AdapterSteps) > 0 {
+		if p.Phase != "prepare" || !p.Completed || len(p.AdapterSteps) > 3 {
+			return false
+		}
+		seen := map[string]bool{}
+		for _, step := range p.AdapterSteps {
+			if !oneOf(step.Step, "vm_start", "ssh_ready", "transfer") || step.DurationMillis < 0 || seen[step.Step] {
+				return false
+			}
+			seen[step.Step] = true
+		}
+	}
 	if (p.Phase != "collect" || !p.Completed) && (len(p.Logs) > 0 || len(p.EvidenceGaps) > 0) {
 		return false
 	}
@@ -210,9 +226,26 @@ func (l *Ledger) LocalPhases(jobID string) (map[string]LocalPhase, error) {
 	return localPhasesTx(tx, jobID)
 }
 
+// Preparation durations are observations, never permission to repeat effects.
+// Only the VM adapter supplies them; historical receipts omit this field.
+func validatePhaseAdapterStepsTx(tx *sql.Tx, p LocalPhase) error {
+	if len(p.AdapterSteps) == 0 {
+		return nil
+	}
+	var kind string
+	if err := tx.QueryRow(`SELECT kind FROM managed_resources WHERE id=?`, p.Identity.ResourceID).Scan(&kind); err != nil {
+		return err
+	}
+	if kind != "utm-macos" {
+		return ErrInvalid
+	}
+	return nil
+}
+
 func resultTimingsTx(tx *sql.Tx, jobID string) (*ResultTimings, error) {
 	var admitted int64
-	if err := tx.QueryRow(`SELECT admitted_at_ns FROM managed_jobs WHERE id=?`, jobID).Scan(&admitted); err != nil {
+	var kind string
+	if err := tx.QueryRow(`SELECT j.admitted_at_ns,r.kind FROM managed_jobs j JOIN managed_resources r ON r.id=j.resource_id WHERE j.id=?`, jobID).Scan(&admitted, &kind); err != nil {
 		return nil, err
 	}
 	timings := &ResultTimings{AdmittedAt: time.Unix(0, admitted).UTC().Format(time.RFC3339Nano), Phases: []ResultPhase{}, AdapterSteps: []ResultStep{}}
@@ -243,6 +276,15 @@ func resultTimingsTx(tx *sql.Tx, jobID string) (*ResultTimings, error) {
 			return nil, ErrBlocked
 		}
 		timings.Phases = append(timings.Phases, ResultPhase{Phase: name, StartedAt: p.StartedAt.UTC().Format(time.RFC3339Nano), EndedAt: p.ObservedAt.UTC().Format(time.RFC3339Nano)})
+		if err := validatePhaseAdapterStepsTx(tx, p); err != nil {
+			return nil, err
+		}
+		if kind == "utm-macos" {
+			timings.AdapterSteps = append(timings.AdapterSteps, p.AdapterSteps...)
+			if name == "collect" || name == "cleanup" {
+				timings.AdapterSteps = append(timings.AdapterSteps, ResultStep{Step: name, DurationMillis: p.ObservedAt.Sub(p.StartedAt).Milliseconds()})
+			}
+		}
 	}
 	return timings, nil
 }

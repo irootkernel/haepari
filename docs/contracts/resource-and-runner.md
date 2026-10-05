@@ -118,6 +118,10 @@ Recovery either proves the original execution state and finishes normal collecti
 
 The managed resource lease authorizes Job effects. The internal power-transition intent authorizes a capacity-driven stop of an idle victim; it cannot be inferred from the target Job lease alone. A recovery token prevents stale cooperating components from changing newer state; it is not an OS security barrier against same-user code.
 
+## VM timing observations
+
+Completed VM preparation may carry optional adapter-step durations in its existing phase receipt: `vm_start` covers the current controller's fenced native start through confirmation, `ssh_ready` covers authenticated identity resolution, and `transfer` covers pinned guest preparation including renewed identity checks. A restart consumes the recorded measurements; it does not repeat an effect to reconstruct a missing duration. VM result collection and cleanup durations project their durable phase start/end timestamps, including reconciliation time and unsuccessful or retained-evidence outcomes. These measurements change no deadlines, lease or verdict semantics. Historical phase receipts omit the optional field, local phases cannot supply it, and neither the phase nor result schema identifier changes. Real qualification of the installed timing candidate remains TASK-016.
+
 ## Host session and VM identity
 
 VM UUID identity comparisons are case-insensitive, and internal inventory keys are lowercase. Each `status`, `start` or `stop` first resolves the UUID from the current `utmctl list` and passes the exact observed spelling as a literal argument. Native UTM lookup can be case-sensitive. Membership lookup and the subsequent command share one ten-second deadline; missing membership or duplicate entries differing only in case refuse the operation before that subsequent command. Power commands remain single-effect calls without retry under the durable claim described below.

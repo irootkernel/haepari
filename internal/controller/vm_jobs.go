@@ -217,8 +217,13 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	}
 	// A power effect already has its durable claim. Advance only its next effect;
 	// uncertainty never permits resubmission, even before any guest Job exists.
+	steps := []managed.ResultStep{}
 	for _, p := range snapshot.AdapterIntents {
+		var startAt time.Time
 		for p.State != "reconciled" && time.Now().Before(prepareDeadline) {
+			if p.Stage == managed.PowerStartReady && startAt.IsZero() {
+				startAt = time.Now()
+			}
 			prior := managed.RecoveryDigest(p)
 			p, err = s.advanceVMPower(context.Background(), p.Identity)
 			if err != nil {
@@ -234,16 +239,21 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 		if p.Stage == managed.PowerFailedNoEffect {
 			return s.vmNoEffect(c, "prepare_failure", false, "host_vm_limit", nil)
 		}
+		if !startAt.IsZero() && p.Stage == managed.PowerDone {
+			steps = append(steps, managed.ResultStep{Step: "vm_start", DurationMillis: time.Since(startAt).Milliseconds()})
+		}
 	}
 	transport, err := s.vmSSH(spec)
 	if err != nil {
 		return s.vmNoEffect(c, "prepare_failure", true, "", err)
 	}
 	probe := runner.GuestRequest{Schema: "haepari.guest-request/v1", Operation: "identity", VMUUID: spec.VM.UTMVMUUID, MAC: spec.VM.MACAddress, JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: prepareDeadline, Request: runner.Request{Identity: c.identity}}
+	sshAt := time.Now()
 	identity, err := s.vmCall(probe)
 	if err != nil {
 		return s.vmNoEffect(c, "prepare_failure", true, "", err)
 	}
+	steps = append(steps, managed.ResultStep{Step: "ssh_ready", DurationMillis: time.Since(sshAt).Milliseconds()})
 	prepareContext, cancelPrepare := context.WithDeadline(context.Background(), prepareDeadline)
 	defer cancelPrepare()
 	snap, err := s.store.ReadContext(prepareContext, object)
@@ -349,19 +359,21 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 		return err
 	}
 	c.effects = true
+	transferAt := time.Now()
 	prepared, err := s.vmCall(q)
 	q.Files = nil
 	q.Inventory = nil
 	if err != nil {
 		return err
 	} // Reconciliation observes the original preparation; never retries it.
+	steps = append(steps, managed.ResultStep{Step: "transfer", DurationMillis: time.Since(transferAt).Milliseconds()})
 	if err = s.recordVMPrepared(&q, prepared); err != nil {
 		return err
 	}
 	c.mu.Lock()
 	c.vm = &q
 	c.mu.Unlock()
-	if err = s.endPhase(c, "prepare", managed.LocalPhase{Outcome: "complete"}); err != nil {
+	if err = s.endPhase(c, "prepare", managed.LocalPhase{Outcome: "complete", AdapterSteps: steps}); err != nil {
 		return err
 	}
 	c.mu.Lock()

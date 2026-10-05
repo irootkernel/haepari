@@ -56,6 +56,9 @@ func (s *runtimeServer) endPhase(c *localRunControl, phase string, completion ma
 	p.Outcome, p.ProtectedEvidence = completion.Outcome, completion.ProtectedEvidence
 	p.Artifacts, p.EvidenceCompleteness = completion.Artifacts, completion.EvidenceCompleteness
 	p.Logs, p.EvidenceGaps = completion.Logs, completion.EvidenceGaps
+	if completion.AdapterSteps != nil {
+		p.AdapterSteps = completion.AdapterSteps
+	}
 	var r managed.Receipt
 	var err error
 	if c.recoveryEvidence != nil {

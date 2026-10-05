@@ -441,6 +441,9 @@ func (l *Ledger) ResolveLocalPhase(q PhaseResolutionRequest) (Receipt, error) {
 		if err := matchLocalIdentityTx(tx, q.Record.Identity); err != nil {
 			return Receipt{}, err
 		}
+		if err := validatePhaseAdapterStepsTx(tx, q.Record); err != nil {
+			return Receipt{}, err
+		}
 		r, err := l.snapshotTx(tx, q.Record.Identity.JobID)
 		if err != nil {
 			return Receipt{}, err

@@ -57,7 +57,7 @@ EPIC-003 Canonical Outcomes: [managed core freeze](records/TASK-012-managed-core
 | [TASK-013](roadmap/EPIC-004.md#task-013) | Implement persistent VM registration and UTM control | TASK-007, TASK-003 | Active | Accepted |
 | [TASK-014](roadmap/EPIC-004.md#task-014) | Implement authenticated SSH and guest runner continuity | TASK-013, TASK-009 | Active | Accepted |
 | [TASK-015](roadmap/EPIC-004.md#task-015) | Integrate VM collection, job cleanup and recovery | TASK-014, TASK-010, TASK-011, TASK-012 | Active | Accepted |
-| [TASK-016](roadmap/EPIC-004.md#task-016) | Qualify the real macOS VM backend; freeze VM contract fields | TASK-015, TASK-034 | Active | Planned |
+| [TASK-016](roadmap/EPIC-004.md#task-016) | Qualify the real macOS VM backend; freeze VM contract fields | TASK-015, TASK-034 | Active | Accepted |
 | [TASK-017](roadmap/EPIC-005.md#task-017) | Publish the project Make and guest integration contract | TASK-008, TASK-012, TASK-015 | Active | Planned |
 | [TASK-018](roadmap/EPIC-005.md#task-018) | Implement environment locks and installation inventories | TASK-017 | Active | Planned |
 | [TASK-019](roadmap/EPIC-005.md#task-019) | Implement manual jobs and submitted installed-skill evidence | TASK-018, TASK-010 | Active | Planned |
@@ -82,7 +82,7 @@ Every active task other than TASK-028 is an actual prerequisite of a later activ
 TASK-002 defines provisional schemas; it does not freeze them. Three gates freeze the consumer contract, each after the evidence it depends on:
 
 - **F1, managed core contract (TASK-012).** Covers job, resource, result, event and envelope schemas; lifecycle/outcome enums; error codes; CLI exit codes; canonicalization; cursor semantics; and the advisory lock contract. It freezes after local failure and crash evidence (TASK-010, TASK-011, TASK-012), as defined in the [F1 decision record](records/TASK-012-managed-core-freeze.md); canonical TASK-012 acceptance makes that decision effective. TASK-017 builds the project Make contract on F1.
-- **F2, VM contract fields (TASK-016).** Covers `utm-macos` resource fields, guest runner protocol, host-session identity fields and the VM-specific job and result fields. They freeze after real UTM qualification.
+- **F2, VM contract fields (TASK-016).** Covers `utm-macos` resource fields, guest runner protocol, host-session identity fields and the VM-specific job and result fields. The [F2 decision record](records/TASK-016-vm-contract-freeze.md) defines the candidate inventory and qualified scope, including the owner-approved later checks in [deferred feedback](deferred-feedback.md). Canonical TASK-016 acceptance makes the freeze effective.
 - **F3, consumer integration contract (TASK-020).** Covers the project Make and guest entrypoint conventions, `haepari.environment-lock/v1`, installation inventories, the manual result format and migration evidence fields. It freezes after TASK-017 through TASK-020.
 
 F3 can freeze before F2, because TASK-020 does not wait for real UTM. If TASK-016 evidence forces a change to a guest entrypoint convention, that is a recorded contract change after the gate.

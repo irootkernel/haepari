@@ -114,23 +114,25 @@ Requirement coverage: `HP-REQ-029`, `HP-REQ-030`.
 
 Requirement coverage: `HP-REQ-031`, `HP-REQ-062` (freeze gate F2).
 
+**Owner-approved qualification deferrals (2026-10-05):** Actual registered DHCP lease-expiry rejection and host logout/post-login recovery are waived for the current TASK-016 campaign and tracked as [DF-001 and DF-002](../deferred-feedback.md). Both remain unobserved and must be verified before TASK-027 release acceptance. This scoped waiver permits current work to proceed; it does not record either check as passed or remove its later verification obligation.
+
 #### Implement
-- [ ] Under the development LaunchAgent from TASK-011, run the exact install/execute/failure/disconnect/cancel/collection/cleanup campaign on the installed UTM combination and the persistent VM. Then run a second job after verified cleanup and show that the first job's Haepari files are gone; a retained-evidence path must instead block reuse until recovery. Observe the TASK-016 prerequisites named in the [TASK-034 probe record](../records/TASK-034-utm-probe.md); the host guest limit needs three macOS VMs, so record it as unobserved if they are not available. An optional TASK-014 smoke observation is not this mandatory qualification.
-- [ ] Qualify DHCP lease expiry/renewal and pinned guest identity on the real backend. If enough authorized VMs exist, observe the paused-victim and fenced stop/start capacity paths; otherwise record those host-limit observations as unobserved while retaining their fake-backend proofs.
-- [ ] Freeze gate F2: freeze the `utm-macos` resource fields, guest runner protocol and host-session identity fields, recording each change since TASK-002 and its evidence.
+- [x] Under the development LaunchAgent from TASK-011, run the exact install/execute/failure/disconnect/cancel/collection/cleanup campaign on the installed UTM combination and the persistent VM. Then run a second job after verified cleanup and show that the first job's Haepari files are gone; a retained-evidence path must instead block reuse until recovery. Observe the TASK-016 prerequisites named in the [TASK-034 probe record](../records/TASK-034-utm-probe.md); the host guest limit needs three macOS VMs, so record it as unobserved if they are not available. An optional TASK-014 smoke observation is not this mandatory qualification.
+- [x] Qualify DHCP lease expiry/renewal and pinned guest identity on the real backend. If enough authorized VMs exist, observe the paused-victim and fenced stop/start capacity paths; otherwise record those host-limit observations as unobserved while retaining their fake-backend proofs.
+- [x] Freeze gate F2: freeze the `utm-macos` resource fields, guest runner protocol and host-session identity fields, recording each change since TASK-002 and its evidence.
 
 #### Do not
-- [ ] Do not treat mocked UTM or an SSH-only smoke test as full backend acceptance.
+- [x] Do not treat mocked UTM or an SSH-only smoke test as full backend acceptance.
 
 #### Verify
-- [ ] Retain actual platform, controller/runner, VM UUID and phase evidence. Require no host runtime changes outside declared owned resource state.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Retain actual platform, controller/runner, VM UUID and phase evidence. Require no host runtime changes outside declared owned resource state.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete, subject to the owner-approved qualification deferrals above.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## Epic acceptance
 

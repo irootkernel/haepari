@@ -56,10 +56,10 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 69,
+    "markdown_documents": 71,
     "json_templates": 11,
     "producer_request_drafts": 9,
-    "relative_links_checked": 510
+    "relative_links_checked": 528
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",

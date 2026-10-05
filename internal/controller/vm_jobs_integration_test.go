@@ -636,3 +636,46 @@ func vmTransportRequest(input []byte) runner.GuestRequest {
 		}
 	}
 }
+
+var _ = ginkgo.Describe("Task016VMAdapterTimings", ginkgo.Label("integration"), func() {
+	ginkgo.DescribeTable("persists observed VM adapter durations in the terminal result", func(started bool) {
+		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf timed > ../results/output.txt")
+		if !started {
+			f.control.states[f.spec.VM.UTMVMUUID] = "stopped"
+		}
+		native := f.s.sshCommand
+		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
+			q := vmTransportRequest(input)
+			if q.Operation == "identity" || q.Operation == "prepare" {
+				time.Sleep(20 * time.Millisecond)
+			}
+			return native(ctx, exe, args, input)
+		}
+		result := f.run("vm-timings")
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Pass))
+		names := []string{}
+		for _, step := range result.Timings.AdapterSteps {
+			names = append(names, step.Step)
+			gomega.Expect(step.DurationMillis).To(gomega.BeNumerically(">=", 0))
+			if step.Step == "ssh_ready" || step.Step == "transfer" {
+				gomega.Expect(step.DurationMillis).To(gomega.BeNumerically(">=", 20))
+			}
+		}
+		expected := []string{"ssh_ready", "transfer", "collect", "cleanup"}
+		if !started {
+			expected = append([]string{"vm_start"}, expected...)
+		}
+		gomega.Expect(names).To(gomega.Equal(expected))
+		phases, err := f.s.ledger.LocalPhases(result.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		for _, phase := range result.Timings.Phases {
+			if phase.Phase == "collect" || phase.Phase == "cleanup" {
+				p := phases[phase.Phase]
+				gomega.Expect(result.Timings.AdapterSteps).To(gomega.ContainElement(managed.ResultStep{Step: phase.Phase, DurationMillis: p.ObservedAt.Sub(p.StartedAt).Milliseconds()}))
+			}
+		}
+		again, err := f.s.ledger.Result(result.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(again).To(gomega.Equal(result))
+	}, ginkgo.Entry("already running VM", true), ginkgo.Entry("required fenced VM start", false))
+})

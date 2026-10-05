@@ -52,4 +52,8 @@ Documentation check results are recorded in [package validation](package-validat
 
 Follow-up candidates from EPIC-001 cold validation and EPIC-002 task reviews are recorded in [TODO](TODO.md). These documents do not change roadmap task status or acceptance.
 
+[Deferred feedback](deferred-feedback.md) owns small postponed follow-up checks and their re-entry conditions. It records the owner-approved TASK-016 qualification waivers for the current campaign; both deferred checks remain due before TASK-027 release acceptance. The roadmap remains the sole lifecycle authority.
+
+The [TASK-016 VM freeze decision](records/TASK-016-vm-contract-freeze.md) defines the candidate F2 field boundary, qualification scope and deferred checks. It becomes effective only with canonical TASK-016 acceptance.
+
 The [Mulgae integration contract](integrations/mulgae-review.md) defines the managed VM adoption boundary and how ordinary reviews queue on the advisory lock. It is planned downstream behavior, not a Haepari dependency or a claim about the installed Mulgae release.

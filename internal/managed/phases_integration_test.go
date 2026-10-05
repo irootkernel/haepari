@@ -49,6 +49,10 @@ var _ = ginkgo.Describe("Task010DurablePhases", ginkgo.Label("integration"), fun
 		p.Completed, p.Outcome, p.ObservedAt = true, "failed", time.Now().UTC()
 		end := LocalPhaseRequest{ExpectedRevision: started.JobRevision, Record: p, MutationKey: "phase-end"}
 		wrong = end
+		wrong.Record.AdapterSteps = []ResultStep{{Step: "ssh_ready", DurationMillis: 1}}
+		_, err = l.RecordLocalPhase(wrong)
+		gomega.Expect(errors.Is(err, ErrInvalid)).To(gomega.BeTrue())
+		wrong = end
 		wrong.Record.Deadline = wrong.Record.Deadline.Add(-time.Second)
 		_, err = l.RecordLocalPhase(wrong)
 		gomega.Expect(errors.Is(err, ErrConflict)).To(gomega.BeTrue())
