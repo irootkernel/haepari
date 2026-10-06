@@ -31,11 +31,23 @@ var _ = ginkgo.Describe("Task014NativeSSHProtocol", ginkgo.Label("integration"),
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(os.Chmod(root, 0700)).To(gomega.Succeed())
 		binaryPath := filepath.Join(root, "candidate")
-		build := exec.Command("go", "build", "-o", binaryPath, "../../cmd/haepari")
+		build := exec.Command("make", "build", "OUTPUT="+binaryPath)
+		build.Dir = "../.."
 		output, err := build.CombinedOutput()
 		gomega.Expect(err).NotTo(gomega.HaveOccurred(), string(output))
 		s.Runner, err = os.ReadFile(binaryPath)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// The SSH archive contains only the executable, request and digest.
+		// Its signature must remain valid without an adjacent app/Info.plist.
+		relocated := filepath.Join(root, "relocated", "haepari")
+		gomega.Expect(os.Mkdir(filepath.Dir(relocated), 0700)).To(gomega.Succeed())
+		gomega.Expect(os.WriteFile(relocated, s.Runner, 0700)).To(gomega.Succeed())
+		output, err = exec.Command("/usr/bin/codesign", "--verify", "--strict", relocated).CombinedOutput()
+		gomega.Expect(err).NotTo(gomega.HaveOccurred(), string(output))
+		output, err = exec.Command("/usr/bin/codesign", "--display", "--verbose=2", relocated).CombinedOutput()
+		gomega.Expect(err).NotTo(gomega.HaveOccurred(), string(output))
+		gomega.Expect(string(output)).To(gomega.ContainSubstring("Identifier=io.rootkernel.haepari"))
+		gomega.Expect(string(output)).NotTo(gomega.ContainSubstring("Info.plist=not bound"))
 		sum := sha256.Sum256(s.Runner)
 		s.RunnerDigest = "sha256:" + hex.EncodeToString(sum[:])
 		q.RunnerDigest = s.RunnerDigest

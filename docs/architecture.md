@@ -214,7 +214,7 @@ Control records use SQLite WAL with `synchronous=FULL` on a qualified local file
 **UTM host control.**
 
 - It needs the logged-in Aqua session. UTM checks each `utmctl` call with TCC; in the TASK-034 probe every check passed without a prompt.
-- UTM is controlled only through `utmctl`, from the `gui/<uid>` LaunchAgent. In the TASK-034 probe an ad-hoc-signed LaunchAgent ran every `utmctl` command it tried without an Automation prompt, so builds need no stable signing identity. Haepari uses neither AppleScript, which raised an Automation prompt in the probe, nor UTM's data container, which was unreadable.
+- UTM is controlled only through `utmctl`, from the `gui/<uid>` LaunchAgent. In the TASK-034 probe an ad-hoc-signed LaunchAgent ran every `utmctl` command it tried without an Automation prompt; this observation requires no signing certificate. The current distribution CLI embeds the stable identifier `io.rootkernel.haepari` and an Automation usage description before ad-hoc signing, so the same file can be transferred as a guest runner without app metadata. This packaging does not establish permission for a new installed candidate; TASK-016 must observe its exact service context. Haepari uses neither AppleScript, which raised an Automation prompt in the probe, nor UTM's data container, which was unreadable.
 - Local scheduling and SSH guest execution have independent prerequisites.
 
 **Host capacity.**

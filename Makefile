@@ -1,10 +1,10 @@
 .PHONY: build test test-prepare test-unit test-int test-e2e lint test-integration check test-macos-supervision test-utm
 
 GO ?= go
+OUTPUT ?= bin/haepari
 
 build:
-	@mkdir -p bin
-	$(GO) build -o bin/haepari ./cmd/haepari
+	GO="$(GO)" sh build/build.sh "$(OUTPUT)"
 
 test:
 	+$(MAKE) test-prepare

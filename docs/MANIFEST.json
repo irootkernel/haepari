@@ -152,13 +152,13 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 37626,
-      "sha256": "52125b7bfc2201d8b800bcba62bf68a6b06f377d1e0cd346aa2cdfd5df51750e"
+      "bytes": 37975,
+      "sha256": "213b27b89319cb6defd91778b2273fb2cc75184d37bf1a775dccd49d388bf5e2"
     },
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "1da0af7004a211b1ed4dea211885bca5c412cc1f127c9c1fb493df5e66cf607a"
+      "sha256": "1b3d8d39b5d93ac361cfabb56ad19c0de72269b1c6a2907a3d5a0fa02029a65f"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -192,8 +192,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 34970,
-      "sha256": "dc5cb25b32e27707d61cd8557378bc39bed4384587b330b0c98119c2b834d9ee"
+      "bytes": 35283,
+      "sha256": "6bc44c0b01785b436731e411d0e243ff45f5ba1debe7d281f7c90cfda1849c0c"
     },
     {
       "path": "deferred-feedback.md",
@@ -317,8 +317,8 @@
     },
     {
       "path": "records/TASK-014-authenticated-guest-runner.md",
-      "bytes": 4003,
-      "sha256": "fd3a5a017160cdaa8bfcff44ea150990fbdd8f57e20118109862c0700f0da97b"
+      "bytes": 5206,
+      "sha256": "690b22e43816fd2adc9d288e6d8f87eed2630af1409680ee5eb4e6d2cd7a1931"
     },
     {
       "path": "records/TASK-015-vm-job-recovery.md",
