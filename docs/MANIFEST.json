@@ -327,8 +327,8 @@
     },
     {
       "path": "records/TASK-016-vm-contract-freeze.md",
-      "bytes": 19116,
-      "sha256": "cab6a6546d8e52c409542df3ce1602a4382b9a825af71f5d4fba0ad769969959"
+      "bytes": 19051,
+      "sha256": "e8fefcdb8bad51239f5ed359ae97ce7c5cf2b25e8b5fc64c68ad089881280127"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
@@ -347,8 +347,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 11720,
-      "sha256": "aa3b9a1c6732b3a6d3cdffeafb8652f6b8652eef5f0b1377d4d9606aaad425a3"
+      "bytes": 11717,
+      "sha256": "8ff8260b8776d9eaf2f04b59381b44df43b037f55fe7af2d112b69c74a661f2d"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -368,7 +368,7 @@
     {
       "path": "roadmap/EPIC-004.md",
       "bytes": 13887,
-      "sha256": "ca8b3e9205757a195fbe7c05939dec6f58dafc606a15cf7921236e3e52e57a43"
+      "sha256": "5f8f4bd28fd78ad6107173d8e665044afc9797cd3bf6bfabd8e375cd993f7992"
     },
     {
       "path": "roadmap/EPIC-005.md",
