@@ -264,8 +264,9 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		})
 	}
-	ginkgo.It("reconciles one lost start reply after controller restart without issuing another workload", func() {
-		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf x >> ../results/output.txt; sleep .5")
+	ginkgo.DescribeTable("reconciles a lost start reply under the original run deadline without issuing another workload", func(runSeconds int64, startDelay, observerAbsence time.Duration, verdict managed.Verdict) {
+		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf x >> ../results/output.txt; sleep 4.5")
+		f.job.Deadlines.RunSeconds = runSeconds
 		native := f.s.sshCommand
 		starts := 0
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
@@ -281,9 +282,15 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 					_ = json.Unmarshal(data, &q)
 				}
 			}
+			if q.Operation == "start" {
+				time.Sleep(startDelay)
+			}
 			reply, err := native(ctx, exe, args, input)
 			if q.Operation == "start" {
 				starts++
+				gomega.Eventually(func() ([]byte, error) {
+					return os.ReadFile(filepath.Join(f.guest, q.Request.Identity.JobID, "workspace/results/output.txt"))
+				}, 3*time.Second, 25*time.Millisecond).Should(gomega.Equal([]byte("x")))
 				return reply, fmt.Errorf("lost SSH reply after exact guest start")
 			}
 			return reply, err
@@ -298,6 +305,17 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		snap, err := f.s.ledger.RecoverySnapshot(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		deadline := snap.Phases["run"].Deadline
+		var claim struct {
+			Deadline time.Time `json:"deadline"`
+		}
+		claimBytes, err := os.ReadFile(filepath.Join(f.guest, r.JobID, "launch.json"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(json.Unmarshal(claimBytes, &claim)).To(gomega.Succeed())
+		gomega.Expect(claim.Deadline).To(gomega.BeTemporally("==", deadline))
+		requestBefore, err := os.ReadFile(filepath.Join(f.guest, r.JobID, "request.json"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		time.Sleep(observerAbsence)
+		gomega.Expect(os.ReadFile(filepath.Join(f.guest, r.JobID, "request.json"))).To(gomega.Equal(requestBefore))
 		fresh, err := newRuntime(f.s.root, f.s.ledger, f.s.store)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		fresh.sshCommand = f.s.sshCommand
@@ -320,7 +338,10 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		fresh.workers.Wait()
 		result, err := fresh.ledger.Result(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Pass))
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(verdict))
+		if verdict == managed.Incomplete {
+			gomega.Expect(result.WorkloadOutcome).To(gomega.Equal(managed.WorkloadOutcome("timed_out")))
+		}
 		after, err := fresh.ledger.LocalIdentity(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(after).To(gomega.Equal(before))
@@ -331,6 +352,36 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		data, err := os.ReadFile(filepath.Join(f.s.root.Path, "jobs", r.JobID, "artifacts/results/output.txt"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(string(data)).To(gomega.Equal("x"))
+	},
+		ginkgo.Entry("successful original run", int64(10), time.Duration(0), time.Duration(0), managed.Pass),
+		ginkgo.Entry("delayed start and disconnected observer", int64(5), 750*time.Millisecond, 6500*time.Millisecond, managed.Incomplete),
+	)
+	ginkgo.It("preserves the deadline outcome with a connected observer after delayed start", func() {
+		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf x > ../results/output.txt; sleep 7")
+		f.job.Deadlines.RunSeconds = 5
+		native := f.s.sshCommand
+		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
+			archive := tar.NewReader(bytes.NewReader(input))
+			var q runner.GuestRequest
+			for {
+				h, err := archive.Next()
+				if err != nil {
+					break
+				}
+				if h.Name == "request.json" {
+					data, _ := io.ReadAll(archive)
+					_ = json.Unmarshal(data, &q)
+				}
+			}
+			if q.Operation == "start" {
+				time.Sleep(350 * time.Millisecond)
+			}
+			return native(ctx, exe, args, input)
+		}
+		result := f.run("vm-connected-deadline")
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Incomplete))
+		gomega.Expect(result.WorkloadOutcome).To(gomega.Equal(managed.WorkloadOutcome("timed_out")))
+		gomega.Expect(os.ReadFile(filepath.Join(f.s.root.Path, "jobs", "vm-connected-deadline", "artifacts/results/output.txt"))).To(gomega.Equal([]byte("x")))
 	})
 	ginkgo.DescribeTable("recovers a stopped partial preparation without preparing or executing again", func(unbound bool) {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "false")
@@ -560,8 +611,30 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		gomega.Expect(os.ReadFile(filepath.Join(f.guest, "vm-cleanup-failed/workspace/results/output.txt"))).To(gomega.Equal([]byte("safe")))
 	})
 
-	ginkgo.It("pauses only the exact unavailable VM before capacity return and requires explicit verified resume", func() {
+	ginkgo.DescribeTable("pauses only the exact unavailable VM before capacity return and requires explicit verified resume", func(mixedCase bool) {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf okay > ../results/output.txt")
+		if mixedCase {
+			oldUUID := f.spec.VM.UTMVMUUID
+			f.spec.VM.UTMVMUUID = "E837Aa72-4051-425A-8716-C2E7279C9DAE"
+			f.spec.VM.MACAddress = strings.ToUpper(f.spec.VM.MACAddress)
+			pin := strings.SplitN(f.spec.Guest.KnownHostsReference, ":", 3)[2]
+			data, err := os.ReadFile(pin)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			data = bytes.ReplaceAll(data, []byte(utm.HostAlias(oldUUID)), []byte(utm.HostAlias(f.spec.VM.UTMVMUUID)))
+			gomega.Expect(os.WriteFile(pin, data, 0600)).To(gomega.Succeed())
+			sum := sha256.Sum256(data)
+			f.spec.Guest.KnownHostsReference = "sha256:" + hex.EncodeToString(sum[:]) + ":" + pin
+			delete(f.control.states, oldUUID)
+			f.control.states[f.spec.VM.UTMVMUUID] = "started"
+			f.spec.Revision++
+			gomega.Expect(f.s.verifyVMRegistration(context.Background(), f.spec)).To(gomega.Succeed())
+			gomega.Expect(f.s.ledger.UpdateResource(mustJSONScheduling(f.spec), 1, 1)).To(gomega.Succeed())
+			gomega.Expect(f.run("vm-case-success").FinalVerdict).To(gomega.Equal(managed.Pass))
+			stored, err := f.s.vmSpec(f.spec.ID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(stored.VM.UTMVMUUID).To(gomega.Equal(f.spec.VM.UTMVMUUID))
+			gomega.Expect(stored.VM.MACAddress).To(gomega.Equal(f.spec.VM.MACAddress))
+		}
 		leases := f.s.vmLeases
 		f.s.vmLeases = func() (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("missing lease")), nil }
 		result := f.run("vm-unavailable")
@@ -587,7 +660,7 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		gomega.Expect(w.Code).To(gomega.Equal(200), w.Body.String())
 		_, err = f.reserve(next)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	})
+	}, ginkgo.Entry("canonical registration", false), ginkgo.Entry("mixed-case UUID and uppercase MAC update", true))
 	ginkgo.DescribeTable("pauses every available VM on a no-effect host Automation denial", func(deniedOperation string) {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "false")
 		other := vmControllerSpec(ginkgo.GinkgoT(), "vm-other", 2, false)

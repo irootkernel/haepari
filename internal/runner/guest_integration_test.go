@@ -89,6 +89,7 @@ var _ = ginkgo.Describe("Task014GuestContinuity", ginkgo.Label("integration"), f
 		q.Request = *prepared.Request
 		q.Files = nil
 		q.Inventory = nil
+		q.Deadline = q.Request.Deadline.Add(-time.Second)
 		guestOperation(q, "start")
 		var start *Start
 		gomega.Eventually(func() bool { r := guestOperation(q, "inspect"); start = r.Observation.Start; return start != nil }, 3*time.Second, 25*time.Millisecond).Should(gomega.BeTrue())
@@ -96,10 +97,15 @@ var _ = ginkgo.Describe("Task014GuestContinuity", ginkgo.Label("integration"), f
 		for i := 0; i < 3; i++ {
 			gomega.Expect(guestOperation(q, "start").Observation.Start).To(gomega.Equal(&original))
 		}
+		changedDeadline := q
+		changedDeadline.Operation = "start"
+		changedDeadline.Deadline = q.Deadline.Add(time.Second)
+		_, err := Guest(changedDeadline)
+		gomega.Expect(err).To(gomega.Equal(ErrConflict))
 		gomega.Eventually(func() string { return string(guestOperation(q, "output").Output) }, 3*time.Second, 25*time.Millisecond).Should(gomega.ContainSubstring("literal $HOME ; quote"))
 		wrong := q
 		wrong.Request.Identity.Nonce = "foreign"
-		_, err := Guest(wrong)
+		_, err = Guest(wrong)
 		gomega.Expect(err).To(gomega.HaveOccurred())
 		wrong = q
 		wrong.BootID = "old-boot"

@@ -437,6 +437,7 @@ func guestPayload(root *directory, name string, data []byte, executable bool) er
 }
 
 func launchGuest(d *directory, root string, q Request, digest string, deadline time.Time) error {
+	deadline = minTime(deadline, q.Deadline).UTC()
 	lock, err := d.open("launch.lock", unix.O_CREAT|unix.O_RDWR)
 	if err != nil {
 		return err
@@ -447,7 +448,7 @@ func launchGuest(d *directory, root string, q Request, digest string, deadline t
 	}
 	var claim guestLaunch
 	if err := d.read("launch.json", &claim); err == nil {
-		if claim.Binding != q.Binding() || claim.RunnerDigest != digest {
+		if claim.Binding != q.Binding() || claim.RunnerDigest != digest || claim.Deadline != nil && !claim.Deadline.Equal(deadline) {
 			return ErrConflict
 		}
 		return nil
@@ -464,7 +465,7 @@ func launchGuest(d *directory, root string, q Request, digest string, deadline t
 	if err != nil || "sha256:"+hex.EncodeToString(h.Sum(nil)) != digest {
 		return ErrConflict
 	}
-	claim.Binding, claim.RunnerDigest = q.Binding(), digest
+	claim.Binding, claim.RunnerDigest, claim.Deadline = q.Binding(), digest, &deadline
 	if !time.Now().Before(deadline) {
 		return ErrInvalid
 	}
@@ -507,8 +508,9 @@ func minTime(a, b time.Time) time.Time {
 }
 
 type guestLaunch struct {
-	Binding      Binding `json:"binding"`
-	RunnerDigest string  `json:"runner_digest"`
+	Binding      Binding    `json:"binding"`
+	RunnerDigest string     `json:"runner_digest"`
+	Deadline     *time.Time `json:"deadline,omitempty"`
 }
 
 // ValidateGuestObservation verifies receipt bindings at the host without

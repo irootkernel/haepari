@@ -158,7 +158,7 @@
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "06376cff0bd56b76e2592256f187ef2b71fa278e58dcafa1a286911a2a251f16"
+      "sha256": "d386f23711741ca38edb6eb47afc015312f8c9df212c1e7dd698a8ee9cff9327"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -192,8 +192,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 43763,
-      "sha256": "3cfbbdf40cce93fb5c8bccda763a441a429aeed7e622809c3fd4fc7a95d0d0b8"
+      "bytes": 44692,
+      "sha256": "e820e1da354f869d0141e12eb43010e33a176a85439f1940a4f4d3f8157f5233"
     },
     {
       "path": "deferred-feedback.md",

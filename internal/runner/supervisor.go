@@ -90,6 +90,10 @@ func StartRun(path string) (Observation, error) {
 }
 
 func supervise(d *directory, q Request, path string) (result error) {
+	runDeadline, err := executionDeadline(d, q)
+	if err != nil {
+		return err
+	}
 	var uncertainty error
 	var diagnosticErr error
 	defer func() { result = errors.Join(result, diagnosticErr) }()
@@ -183,13 +187,13 @@ func supervise(d *directory, q Request, path string) (result error) {
 		recordUncertainty("cancellation_observation", err)
 		return err
 	}
-	if !cancelledBeforeExec && time.Now().Before(q.Deadline) {
+	if !cancelledBeforeExec && time.Now().Before(runDeadline) {
 		if _, err := release.Write([]byte{'G'}); err != nil {
 			return err
 		}
 	}
 	release.Close()
-	deadline := time.Now().Add(min(time.Until(q.Deadline), time.Duration(q.RunSeconds)*time.Second))
+	deadline := minTime(runDeadline, time.Now().Add(time.Duration(q.RunSeconds)*time.Second))
 	tracker := newTracker(process.Identity)
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
@@ -322,6 +326,22 @@ func finish(d *directory, q Request, out managed.LocalOutcome, proven bool, reas
 		exit.Log = &logs[0]
 	}
 	return d.write("exit.json", exit)
+}
+
+// The prepared request remains immutable. A guest start fixes the controller's
+// narrower run deadline in its exclusive launch claim before spawning; local
+// runs have no such claim and use their original request deadline.
+func executionDeadline(d *directory, q Request) (time.Time, error) {
+	var claim guestLaunch
+	if err := d.read("launch.json", &claim); errors.Is(err, unix.ENOENT) {
+		return q.Deadline, nil
+	} else if err != nil {
+		return time.Time{}, err
+	}
+	if claim.Binding != q.Binding() || !guestDigest(claim.RunnerDigest) || claim.Deadline == nil || claim.Deadline.IsZero() || claim.Deadline.After(q.Deadline) {
+		return time.Time{}, ErrConflict
+	}
+	return *claim.Deadline, nil
 }
 
 func nativeOutcome(cmd *exec.Cmd, end nativeEnd, deadline time.Time) managed.LocalOutcome {
@@ -457,6 +477,13 @@ func execWorkload(path string) (result error) {
 	command, err := resolveCommand(q.Argv[0], q.WorkDir, q.Environment)
 	if err != nil {
 		return err
+	}
+	deadline, err := executionDeadline(d, q)
+	if err != nil {
+		return err
+	}
+	if !time.Now().Before(deadline) {
+		return ErrUnproven
 	}
 	gate.Close()
 	d.close()

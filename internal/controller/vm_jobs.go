@@ -247,7 +247,7 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	if err != nil {
 		return s.vmNoEffect(c, "prepare_failure", true, "", err)
 	}
-	probe := runner.GuestRequest{Schema: "haepari.guest-request/v1", Operation: "identity", VMUUID: spec.VM.UTMVMUUID, MAC: spec.VM.MACAddress, JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: prepareDeadline, Request: runner.Request{Identity: c.identity}}
+	probe := runner.GuestRequest{Schema: "haepari.guest-request/v1", Operation: "identity", VMUUID: strings.ToLower(spec.VM.UTMVMUUID), MAC: strings.ToLower(spec.VM.MACAddress), JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: prepareDeadline, Request: runner.Request{Identity: c.identity}}
 	sshAt := time.Now()
 	identity, err := s.vmCall(probe)
 	if err != nil {
@@ -405,6 +405,9 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 		return err
 	}
 	deadline := time.Now().Add(time.Duration(job.Deadlines.RunSeconds) * time.Second)
+	if q.Request.Deadline.Before(deadline) {
+		deadline = q.Request.Deadline
+	}
 	if err = s.beginPhase(c, "run", job.Deadlines.RunSeconds, deadline); err != nil {
 		return err
 	}
@@ -555,7 +558,7 @@ func (s *runtimeServer) observeVMReadiness(fence managed.AvailabilityRequest) (s
 	if err != nil {
 		return "", "", err
 	}
-	q := runner.GuestRequest{Schema: "haepari.guest-request/v1", Operation: "identity", VMUUID: spec.VM.UTMVMUUID, MAC: spec.VM.MACAddress, JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: time.Now().Add(10 * time.Second), Request: runner.Request{Identity: managed.LocalIdentity{ResourceID: spec.ID, ConfigRevision: spec.Revision}}}
+	q := runner.GuestRequest{Schema: "haepari.guest-request/v1", Operation: "identity", VMUUID: strings.ToLower(spec.VM.UTMVMUUID), MAC: strings.ToLower(spec.VM.MACAddress), JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: time.Now().Add(10 * time.Second), Request: runner.Request{Identity: managed.LocalIdentity{ResourceID: spec.ID, ConfigRevision: spec.Revision}}}
 	reply, err := s.vmCall(q)
 	if err != nil {
 		return "", "", managed.ErrBlocked
