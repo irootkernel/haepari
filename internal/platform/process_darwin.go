@@ -28,32 +28,32 @@ func ObserveProcess(pid int) (ProcessObservation, error) {
 		return ProcessObservation{}, errors.New("invalid process PID")
 	}
 	if err != nil {
-		return ProcessObservation{}, fmt.Errorf("invalid process observation: %w", err)
+		return ProcessObservation{}, &ProcessError{"boot_identity", pid, err}
 	}
 	before, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	if err != nil {
 		if errors.Is(err, unix.EIO) && errors.Is(unix.Kill(pid, 0), unix.ESRCH) {
 			return ProcessObservation{}, unix.ESRCH
 		}
-		return ProcessObservation{}, err
+		return ProcessObservation{}, &ProcessError{"process_snapshot_before", pid, err}
 	}
 	pgid, err := unix.Getpgid(pid)
 	if err != nil {
-		return ProcessObservation{}, err
+		return ProcessObservation{}, &ProcessError{"getpgid", pid, err}
 	}
 	sid, err := unix.Getsid(pid)
 	if err != nil {
-		return ProcessObservation{}, err
+		return ProcessObservation{}, &ProcessError{"getsid", pid, err}
 	}
 	after, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	if err != nil {
 		if errors.Is(err, unix.EIO) && errors.Is(unix.Kill(pid, 0), unix.ESRCH) {
 			return ProcessObservation{}, unix.ESRCH
 		}
-		return ProcessObservation{}, err
+		return ProcessObservation{}, &ProcessError{"process_snapshot_after", pid, err}
 	}
 	if before.Proc.P_pid != int32(pid) || after.Proc.P_pid != int32(pid) || before.Proc.P_starttime != after.Proc.P_starttime || int(after.Eproc.Pgid) != pgid {
-		return ProcessObservation{}, errors.New("process incarnation changed during observation")
+		return ProcessObservation{}, &ProcessError{"process_incarnation", pid, errors.New("process incarnation changed during observation")}
 	}
 	return ProcessObservation{Identity: ProcessIdentity{boot, pid, after.Proc.P_starttime.Sec, int64(after.Proc.P_starttime.Usec), pgid, sid, after.Eproc.Ucred.Uid}, ParentPID: int(after.Eproc.Ppid), Zombie: after.Proc.P_stat == 5}, nil
 }
@@ -64,7 +64,7 @@ func ObserveProcess(pid int) (ProcessObservation, error) {
 func ProcessCensus() ([]ProcessObservation, error) {
 	list, err := unix.SysctlKinfoProcSlice("kern.proc.uid", os.Geteuid())
 	if err != nil {
-		return nil, err
+		return nil, &ProcessError{"process_list", 0, err}
 	}
 	result := make([]ProcessObservation, 0, len(list))
 	for _, p := range list {
@@ -91,7 +91,10 @@ func SignalProcess(expected ProcessIdentity, signal unix.Signal) error {
 		return err
 	}
 	if current.Identity != expected {
-		return errors.New("process identity no longer matches")
+		return &ProcessError{"signal_identity", expected.PID, errors.New("process identity no longer matches")}
 	}
-	return unix.Kill(expected.PID, signal)
+	if err := unix.Kill(expected.PID, signal); err != nil {
+		return &ProcessError{"signal", expected.PID, err}
+	}
+	return nil
 }

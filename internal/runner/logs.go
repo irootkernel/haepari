@@ -10,7 +10,7 @@ import (
 	"github.com/irootkernel/haepari/internal/managed"
 )
 
-const DefaultLogBytes int64 = 256 << 20
+const DefaultLogBytes int64 = managed.GuestRecoveryLogBytes
 
 type LogManifest struct {
 	Artifact     managed.ResultArtifact `json:"artifact"`

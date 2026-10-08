@@ -325,6 +325,11 @@ func guestFiles(parent, d *directory, q GuestRequest, reply GuestReply, c *guest
 		return reply, err
 	}
 	defer f.Close()
+	return readGuestFile(f, q, reply)
+}
+
+func readGuestFile(f *os.File, q GuestRequest, reply GuestReply) (GuestReply, error) {
+	var err error
 	var before, after unix.Stat_t
 	if unix.Fstat(int(f.Fd()), &before) != nil || before.Size < 0 || before.Size > 1<<30 || q.Offset < 0 || q.Offset > before.Size {
 		return reply, ErrInvalid
@@ -419,6 +424,10 @@ func guestCopyUntil(dst io.Writer, src io.Reader, deadline time.Time) (int64, er
 	return total, ErrUnproven
 }
 func guestRemove(parent int, name string, deadline time.Time) error {
+	return guestRemoveBound(parent, name, deadline, nil)
+}
+
+func guestRemoveBound(parent int, name string, deadline time.Time, expected *managed.RetainedPath) error {
 	if !time.Now().Before(deadline) {
 		return ErrUnproven
 	}
@@ -426,7 +435,14 @@ func guestRemove(parent int, name string, deadline time.Time) error {
 	if err := unix.Fstatat(parent, name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
 	}
+	if expected != nil && (!expected.Directory || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR || uint64(st.Dev) != expected.Device || st.Ino != expected.Inode) {
+		return ErrConflict
+	}
 	if uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR {
+		boundary("guest_cleanup_unlink_file")
+		if !time.Now().Before(deadline) {
+			return ErrUnproven
+		}
 		return unix.Unlinkat(parent, name, 0)
 	}
 	fd, err := unix.Openat(parent, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
@@ -435,6 +451,10 @@ func guestRemove(parent int, name string, deadline time.Time) error {
 	}
 	f := os.NewFile(uintptr(fd), name)
 	defer f.Close()
+	var opened unix.Stat_t
+	if unix.Fstat(fd, &opened) != nil || opened.Dev != st.Dev || opened.Ino != st.Ino {
+		return ErrConflict
+	}
 	for {
 		entries, e := f.ReadDir(128)
 		if e != nil && e != io.EOF {
@@ -453,8 +473,15 @@ func guestRemove(parent int, name string, deadline time.Time) error {
 	if unix.Fstatat(parent, name, &current, unix.AT_SYMLINK_NOFOLLOW) != nil || current.Dev != st.Dev || current.Ino != st.Ino {
 		return ErrConflict
 	}
+	boundary("guest_cleanup_unlink_directory")
+	if !time.Now().Before(deadline) {
+		return ErrUnproven
+	}
 	if err = unix.Unlinkat(parent, name, unix.AT_REMOVEDIR); err != nil {
 		return err
+	}
+	if expected != nil {
+		boundary("guest_cleanup_root_unlinked")
 	}
 	return unix.Fsync(parent)
 }

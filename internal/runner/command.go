@@ -17,6 +17,9 @@ const usage = "usage: haepari runner start/inspect/watch/cancel --request <absol
 
 // Command is shared by the executable and native integration subprocesses.
 func Command(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 2 && args[0] == "guest-recovery" && args[1] == "--stdio" {
+		return GuestRecoveryCommand(os.Stdin, stdout, stderr)
+	}
 	if len(args) == 2 && args[0] == "guest" && args[1] == "--stdio" {
 		return GuestCommand(os.Stdin, stdout, stderr)
 	}

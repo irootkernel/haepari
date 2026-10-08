@@ -134,7 +134,7 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	if q.Evidence != nil || q.Action != "" && (!q.Plan || q.Action != "recollect" && q.Action != "dispose") {
+	if q.Plan && q.Evidence != nil || q.Action != "" && (!q.Plan || q.Action != "recollect" && q.Action != "dispose" && q.Action != "attest-guest-stopped") {
 		reject(w, op, managed.ErrInvalid)
 		return
 	}
@@ -145,7 +145,9 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		}
 		var plan resourceRecoveryPlan
 		var err error
-		if q.Action != "" {
+		if q.Action == "attest-guest-stopped" {
+			plan, err = s.planGuestAttestation(id)
+		} else if q.Action != "" {
 			plan, err = s.planEvidenceRecovery(id, q.Action)
 		} else {
 			plan, err = s.planResourceRecovery(id)
@@ -200,6 +202,14 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 	token, err := s.readRecoveryToken(q.PlanToken)
 	if err != nil {
 		reject(w, op, err)
+		return
+	}
+	if token.Action == "attest-guest-stopped" {
+		s.applyGuestAttestation(w, r, id, q, token)
+		return
+	}
+	if q.Evidence != nil {
+		reject(w, op, managed.ErrInvalid)
 		return
 	}
 	if token.Action == "recollect" || token.Action == "dispose" {

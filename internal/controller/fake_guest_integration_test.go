@@ -56,20 +56,20 @@ func (b fakeGuestBackend) owner(id managed.LocalIdentity) (fakeGuestOwner, error
 	if d.Decode(&proof) != nil || proof.VMUUID != fakeGuestUUID || proof.Boot != "bounded-fake-guest-boot" || proof.Identity != id {
 		return proof, managed.ErrBlocked
 	}
-	root, err := b.host.Observe(id)
+	root, err := b.host.Observe(id, "dispose")
 	if err != nil || root != proof.HostRoot {
 		return proof, managed.ErrBlocked
 	}
 	return proof, nil
 }
-func (b fakeGuestBackend) Observe(id managed.LocalIdentity) (managed.RetainedPath, error) {
+func (b fakeGuestBackend) Observe(id managed.LocalIdentity, action string) (managed.RetainedPath, error) {
 	if _, err := b.owner(id); err != nil {
 		return managed.RetainedPath{}, err
 	}
-	return b.guest.Observe(id)
+	return b.guest.Observe(id, action)
 }
 func (b fakeGuestBackend) Collect(j managed.EvidenceRecoveryJob, destination string) collectionAttempt {
-	root, err := b.Observe(j.Identity)
+	root, err := b.Observe(j.Identity, "recollect")
 	if err != nil || root != j.Root {
 		return collectionAttempt{}
 	}
@@ -116,7 +116,7 @@ func protectedGuestFixture() (*runtimeServer, managed.Receipt, managed.Result) {
 		bytes, err := os.ReadFile(filepath.Join(hostJob, "workspace/results/output.txt"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(os.WriteFile(filepath.Join(guestJob, "workspace/results/output.txt"), bytes, 0600)).To(gomega.Succeed())
-		root, err := (localEvidenceBackend{s}).Observe(c.identity)
+		root, err := (localEvidenceBackend{s}).Observe(c.identity, "recollect")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		proof, _ := json.Marshal(fakeGuestOwner{fakeGuestUUID, "bounded-fake-guest-boot", c.identity, root})
 		gomega.Expect(os.WriteFile(filepath.Join(guestJob, "fake-guest.json"), proof, 0600)).To(gomega.Succeed())

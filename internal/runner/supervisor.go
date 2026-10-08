@@ -21,8 +21,9 @@ type nativeEnd struct {
 	at  time.Time
 }
 
-var spawnBoundary func(string)             // nil in production; native crash tests only
-var processCensus = platform.ProcessCensus // native tests can inject observation failure
+var spawnBoundary func(string)                      // nil in production; native crash tests only
+var processCensus = platform.ProcessCensus          // native tests can inject observation failure
+var observeStartedProcess = platform.ObserveProcess // native tests can inject initial observation failure
 func boundary(name string) {
 	if spawnBoundary != nil {
 		spawnBoundary(name)
@@ -88,7 +89,18 @@ func StartRun(path string) (Observation, error) {
 	return view, errors.Join(err, readErr)
 }
 
-func supervise(d *directory, q Request, path string) error {
+func supervise(d *directory, q Request, path string) (result error) {
+	var uncertainty error
+	var diagnosticErr error
+	defer func() { result = errors.Join(result, diagnosticErr) }()
+	recordUncertainty := func(operation string, err error) {
+		if err != nil && uncertainty == nil {
+			// Preserve the triggering observation rather than replacing it
+			// with a later stop failure. Never turn later absence into proof.
+			uncertainty = err
+			diagnosticErr = recordNativeDiagnostic(d, q, operation, err)
+		}
+	}
 	log, err := d.open("output.log", unix.O_WRONLY|unix.O_APPEND)
 	if err != nil {
 		return err
@@ -152,12 +164,15 @@ func supervise(d *directory, q Request, path string) error {
 	boundary("after_spawn")
 	ended := make(chan nativeEnd, 1)
 	go func() { err := cmd.Wait(); ended <- nativeEnd{err, time.Now()} }()
-	process, err := platform.ObserveProcess(cmd.Process.Pid)
+	process, err := observeStartedProcess(cmd.Process.Pid)
 	if err != nil {
+		recordUncertainty("start_observation", err)
 		return err
 	}
 	if process.Identity.PGID != cmd.Process.Pid || process.Identity.SID != cmd.Process.Pid || process.Identity.BootID != q.BootID {
-		return ErrInvalid
+		err := &platform.ProcessError{Operation: "process_incarnation", PID: cmd.Process.Pid, Err: ErrInvalid}
+		recordUncertainty("start_observation", err)
+		return err
 	}
 	if err := d.write("start.json", Start{Schema: managed.RunnerSchema("start"), Binding: q.Binding(), Process: process.Identity, StartedAt: time.Now().UTC()}); err != nil {
 		return err
@@ -165,6 +180,7 @@ func supervise(d *directory, q Request, path string) error {
 	boundary("after_start")
 	cancelledBeforeExec, err := cancellation(d, q)
 	if err != nil {
+		recordUncertainty("cancellation_observation", err)
 		return err
 	}
 	if !cancelledBeforeExec && time.Now().Before(q.Deadline) {
@@ -182,7 +198,6 @@ func supervise(d *directory, q Request, path string) error {
 	var stopping time.Time
 	cancelledBeforeOutcome := false
 	killed := false
-	var uncertainty error
 	for {
 		if !logComplete {
 			select {
@@ -229,13 +244,9 @@ func supervise(d *directory, q Request, path string) error {
 			boundary("after_outcome")
 		}
 		alive, scanErr := tracker.scan()
-		if scanErr != nil {
-			uncertainty = scanErr
-		}
+		recordUncertainty("process_census", scanErr)
 		cancelled, cancelErr := cancellation(d, q)
-		if cancelErr != nil {
-			uncertainty = cancelErr
-		}
+		recordUncertainty("cancellation_observation", cancelErr)
 		// Uncertainty can require a stop without a cancellation request.
 		// Preserve the native outcome unless durable cancellation preceded it.
 		if cancelled && outcome == nil {
@@ -243,9 +254,7 @@ func supervise(d *directory, q Request, path string) error {
 		}
 		if stopping.IsZero() && (end != nil || cancelled || !time.Now().Before(deadline) || uncertainty != nil) {
 			stopping = time.Now()
-			if err := tracker.signal(unix.SIGTERM); err != nil {
-				uncertainty = err
-			}
+			recordUncertainty("signal_term", tracker.signal(unix.SIGTERM))
 		}
 		if end != nil && len(alive) == 0 && scanErr == nil {
 			// Probe only; never signal an old PGID after reaping the leader.
@@ -263,16 +272,14 @@ func supervise(d *directory, q Request, path string) error {
 				return finish(d, q, *outcome, true, "", end.at, collector.manifest())
 			}
 			if groupErr != nil && !errors.Is(groupErr, unix.EPERM) && !errors.Is(groupErr, unix.ESRCH) {
-				uncertainty = groupErr
+				recordUncertainty("group_probe", groupErr)
 			}
 		}
 		if !stopping.IsZero() {
 			budget := time.Duration(q.TerminationSeconds) * time.Second
 			if !killed && time.Since(stopping) >= min(2*time.Second, budget/2) {
 				killed = true
-				if err := tracker.signal(unix.SIGKILL); err != nil {
-					uncertainty = err
-				}
+				recordUncertainty("signal_kill", tracker.signal(unix.SIGKILL))
 			}
 			if time.Since(stopping) >= budget {
 				if !logComplete {

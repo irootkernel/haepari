@@ -44,6 +44,7 @@ type runtimeServer struct {
 	sshCommand      utm.SSHRunner
 	vmLeases        func() (io.ReadCloser, error)       // nil selects the native macOS DHCP database
 	vmWrite         func(*os.File, []byte) (int, error) // nil is the ordinary durable collector; tests inject ENOSPC
+	vmSyncParents   func(string, string) error          // nil syncs the publication chain; tests inject sync failure
 	vmHostLimit     int                                 // zero defaults to one; bounded at two
 	utmCommand      utm.CommandRunner                   // nil in production; the argv boundary is injectable for fake UTM
 	// Test barrier after a replay miss, before observing readiness. Nil in production.
@@ -405,7 +406,7 @@ func (s *runtimeServer) inspect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data["result"] = result
-		supplementary, err := s.ledger.SupplementaryEvidence(id)
+		supplementary, err := s.ledger.PublicSupplementaryEvidence(id)
 		if err != nil {
 			reject(w, "inspect", err)
 			return

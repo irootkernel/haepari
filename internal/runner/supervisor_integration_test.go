@@ -52,6 +52,9 @@ func launchFixture(root, point string) (*exec.Cmd, <-chan error) {
 		if strings.HasPrefix(point, "census-") {
 			args = []string{"runner-census-fixture", strings.TrimPrefix(point, "census-"), filepath.Join(root, "request.json")}
 		}
+		if strings.HasPrefix(point, "initial-") {
+			args = []string{"runner-initial-observation-fixture", strings.TrimPrefix(point, "initial-"), filepath.Join(root, "request.json")}
+		}
 		if point == "cancel-before-exec" {
 			args = []string{"runner-cancel-fixture", filepath.Join(root, "request.json")}
 		}
@@ -444,7 +447,15 @@ var _ = ginkgo.Describe("Task009UncertaintyOutcome", ginkgo.Label("integration")
 			gomega.Expect(view.Exit).NotTo(gomega.BeNil())
 			gomega.Expect(view.Exit.TerminationProven).To(gomega.BeFalse())
 			gomega.Expect(view.Exit.Reason).To(gomega.Equal("native_observation_uncertain"))
-			_, err := os.Stat(filepath.Join(root, "cancel.json"))
+			d, err := openDirectory(root)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			var diagnostic nativeDiagnostic
+			gomega.Expect(d.read("native-diagnostic.json", &diagnostic)).To(gomega.Succeed())
+			d.close()
+			gomega.Expect(diagnostic.Binding).To(gomega.Equal(view.Exit.Binding))
+			gomega.Expect(diagnostic.Operation).To(gomega.Equal("process_census"))
+			gomega.Expect(diagnostic.ErrorCode).To(gomega.Equal("unproven"))
+			_, err = os.Stat(filepath.Join(root, "cancel.json"))
 			gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 			gomega.Expect(view.Exit.Outcome.NativeExitCode).NotTo(gomega.BeNil())
 			gomega.Expect(*view.Exit.Outcome.NativeExitCode).To(gomega.Equal(outcome.code))

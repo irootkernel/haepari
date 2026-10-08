@@ -22,7 +22,7 @@ func retainedPath(fd int, name string, directory bool) (managed.RetainedPath, er
 	return managed.RetainedPath{Path: name, Device: uint64(st.Dev), Inode: st.Ino, Directory: directory}, nil
 }
 
-func (s *runtimeServer) evidenceRecoveryBasis(id string) (managed.ResourceRecoverySnapshot, []managed.EvidenceRecoveryJob, error) {
+func (s *runtimeServer) evidenceRecoveryBasis(id, action string) (managed.ResourceRecoverySnapshot, []managed.EvidenceRecoveryJob, error) {
 	snap, err := s.ledger.ResourceRecoverySnapshot(id)
 	if err != nil {
 		return snap, nil, err
@@ -51,11 +51,21 @@ func (s *runtimeServer) evidenceRecoveryBasis(id string) (managed.ResourceRecove
 				return snap, nil, managed.ErrBlocked
 			}
 		}
-		root, err := backend.Observe(*b.Identity)
+		root, err := backend.Observe(*b.Identity, action)
 		if err != nil {
 			return snap, nil, err
 		}
-		jobs = append(jobs, managed.EvidenceRecoveryJob{JobID: j.JobID, ResultDigest: managed.RecoveryDigest(b.Result), Identity: *b.Identity, Root: root, Protected: b.Result.ProtectedEvidence, Outputs: b.Spec.Workload.RequiredOutputs})
+		job := managed.EvidenceRecoveryJob{JobID: j.JobID, ResultDigest: managed.RecoveryDigest(b.Result), Identity: *b.Identity, Root: root, Protected: b.Result.ProtectedEvidence, Outputs: b.Spec.Workload.RequiredOutputs}
+		if _, native := backend.(vmEvidenceBackend); native {
+			attestation, found, e := s.vmAttestation(j.JobID)
+			if e != nil {
+				return snap, nil, e
+			}
+			if found {
+				job.GuestLogLimitBytes = attestation.Attestation.Basis.Request.LogLimitBytes
+			}
+		}
+		jobs = append(jobs, job)
 	}
 	if len(jobs) == 0 {
 		return snap, nil, managed.ErrBlocked
@@ -65,8 +75,12 @@ func (s *runtimeServer) evidenceRecoveryBasis(id string) (managed.ResourceRecove
 
 func (s *runtimeServer) planEvidenceRecovery(id, action string) (resourceRecoveryPlan, error) {
 	p := resourceRecoveryPlan{Schema: "haepari.recovery-plan/v1", Action: action, ObservedAt: time.Now().UTC(), Unknowns: []string{}, Effects: []string{}, EvidenceLoss: []managed.ProtectedEvidence{}}
-	snap, jobs, err := s.evidenceRecoveryBasis(id)
+	snap, jobs, err := s.evidenceRecoveryBasis(id, action)
 	p.Snapshot = snap
+	if errors.Is(err, errVMNativeTermination) {
+		p.Unknowns = append(p.Unknowns, err.Error())
+		return p, nil
+	}
 	if err != nil {
 		return p, err
 	}
@@ -125,7 +139,7 @@ func (s *runtimeServer) applyEvidenceRecovery(w http.ResponseWriter, r *http.Req
 	}
 	s.evidenceMu.Lock()
 	defer s.evidenceMu.Unlock()
-	snap, jobs, err := s.evidenceRecoveryBasis(id)
+	snap, jobs, err := s.evidenceRecoveryBasis(id, token.Action)
 	if err != nil {
 		reject(w, op, err)
 		return
@@ -174,7 +188,12 @@ func (s *runtimeServer) applyEvidenceRecovery(w http.ResponseWriter, r *http.Req
 
 func (s *runtimeServer) resumeEvidenceRecovery(q managed.EvidenceRecoveryIntent) error {
 	// A live old controller could still finish an unobserved filesystem effect.
-	if !controllerOwnerStopped(managed.LocalPhase{ControllerOwner: &q.Owner}) {
+	sameAttestationController := false
+	if q.Action == "attest-guest-stopped" {
+		current, err := platform.ObserveProcess(os.Getpid())
+		sameAttestationController = err == nil && current.Identity == q.Owner
+	}
+	if !sameAttestationController && !controllerOwnerStopped(managed.LocalPhase{ControllerOwner: &q.Owner}) {
 		return managed.ErrBlocked
 	}
 	deadline := time.Time{}
@@ -197,6 +216,9 @@ func (s *runtimeServer) resumeEvidenceRecovery(q managed.EvidenceRecoveryIntent)
 }
 
 func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent) error {
+	if q.Action == "attest-guest-stopped" {
+		return s.executeGuestAttestation(q)
+	}
 	snap, err := s.ledger.ResourceRecoverySnapshot(q.ResourceID)
 	if err != nil {
 		return err
@@ -248,7 +270,13 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 			}
 			continue
 		}
-		root, err := backend.Observe(j.Identity)
+		observeAction := q.Action
+		if o.Stage == "collected" {
+			// Durable supplementary evidence is verified below. An earlier
+			// unobserved cleanup needs health, not another source-file read.
+			observeAction = "dispose"
+		}
+		root, err := backend.Observe(j.Identity, observeAction)
 		if err != nil {
 			return err
 		}
@@ -270,6 +298,7 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 			}
 			r.ActiveOwner = nil
 			o.Artifacts = collected.artifacts
+			o.GuestArtifacts = collected.guestArtifacts
 			o.ArtifactRoot = destination
 			if status != phaseInTime || !collected.complete {
 				o.Stage = "failed"
@@ -299,6 +328,17 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 						return context.DeadlineExceeded
 					}
 					f, err := openOwnedEvidence(s.root.Path, j.JobID, o.ArtifactRoot+"/"+a.Path)
+					if err != nil {
+						return err
+					}
+					_, err = checkedArtifactUntil(f, &a, a.Path, j.CleanupDeadline)
+					f.Close()
+					if err != nil {
+						return err
+					}
+				}
+				for _, a := range o.GuestArtifacts {
+					f, err := openOwnedEvidence(s.root.Path, j.JobID, o.ArtifactRoot+"-native/"+a.Path)
 					if err != nil {
 						return err
 					}

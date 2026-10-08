@@ -118,8 +118,8 @@ test "${actual%% *}" = "$digest"
 "$scratch/haepari" runner guest --stdio < "$scratch/request.json"
 '`
 
-func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Lease, q runner.GuestRequest) (runner.GuestReply, error) {
-	var reply runner.GuestReply
+func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease Lease, q any, recovery bool) ([]byte, error) {
+	var reply []byte
 	if !filepath.IsAbs(s.Executable) || filepath.Clean(s.Executable) != s.Executable || len(s.Runner) == 0 || len(s.Runner) > 64<<20 {
 		return reply, ErrUnavailable
 	}
@@ -151,7 +151,11 @@ func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Leas
 	if err != nil {
 		return reply, err
 	}
-	args := []string{"-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + pin.Name(), "-o", "GlobalKnownHostsFile=/dev/null", "-o", "HostKeyAlias=" + HostAlias(spec.VM.UTMVMUUID), "-o", "HostKeyAlgorithms=ssh-ed25519", "-o", "UpdateHostKeys=no", "-o", "VerifyHostKeyDNS=no", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "IdentityAgent=none", "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no", "-o", "NumberOfPasswordPrompts=0", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", "-i", mapping.IdentityFile, "-p", strconv.Itoa(mapping.Port), "-l", mapping.User, "--", lease.Address.String(), guestBootstrap}
+	bootstrap := guestBootstrap
+	if recovery {
+		bootstrap = guestRecoveryBootstrap
+	}
+	args := []string{"-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + pin.Name(), "-o", "GlobalKnownHostsFile=/dev/null", "-o", "HostKeyAlias=" + HostAlias(spec.VM.UTMVMUUID), "-o", "HostKeyAlgorithms=ssh-ed25519", "-o", "UpdateHostKeys=no", "-o", "VerifyHostKeyDNS=no", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "IdentityAgent=none", "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no", "-o", "NumberOfPasswordPrompts=0", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", "-i", mapping.IdentityFile, "-p", strconv.Itoa(mapping.Port), "-l", mapping.User, "--", lease.Address.String(), bootstrap}
 	data, err := json.Marshal(q)
 	if err != nil || len(data) > runner.GuestWireLimit {
 		return reply, ErrUnavailable
@@ -182,7 +186,18 @@ func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Leas
 	if err != nil || r.ExitCode != 0 || len(r.Stdout) > commandLimit || len(r.Stderr) > commandLimit {
 		return reply, ErrUnavailable
 	}
-	envelope, err := managed.DecodeEnvelope([]byte(r.Stdout))
+	return []byte(r.Stdout), nil
+}
+
+var guestRecoveryBootstrap = strings.Replace(guestBootstrap, "runner guest --stdio", "runner guest-recovery --stdio", 1)
+
+func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Lease, q runner.GuestRequest) (runner.GuestReply, error) {
+	var reply runner.GuestReply
+	raw, err := s.exchangeWire(ctx, spec, lease, q, false)
+	if err != nil {
+		return reply, err
+	}
+	envelope, err := managed.DecodeEnvelope(raw)
 	if err != nil || !envelope.OK || envelope.Operation != "runner.guest" {
 		return reply, ErrUnavailable
 	}

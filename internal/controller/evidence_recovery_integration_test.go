@@ -92,7 +92,7 @@ var _ = ginkgo.Describe("Task012EvidenceRecovery", ginkgo.Label("integration"), 
 	}
 	ginkgo.It("withholds reuse while an interrupted supplementary collector has a live native owner", func() {
 		s, r, _ := protectedLocalFixture()
-		snap, jobs, err := s.evidenceRecoveryBasis(r.ResourceID)
+		snap, jobs, err := s.evidenceRecoveryBasis(r.ResourceID, "recollect")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		owner, err := platform.ObserveProcess(os.Getpid())
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

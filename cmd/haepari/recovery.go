@@ -38,8 +38,8 @@ func recoverManaged(kind string, args []string, stdout, stderr io.Writer) int {
 	if kind == "resource" {
 		limit = 90
 	}
-	validAction := *action == "" || kind == "resource" && (*action == "recollect" || *action == "dispose") || kind == "job" && (*action == "reconcile" || *action == "attest-stopped" || *action == "attest-no-start")
-	if len(*key) > limit || kind == "resource" && *evidencePath != "" || !validAction {
+	validAction := *action == "" || kind == "resource" && (*action == "recollect" || *action == "dispose" || *action == "attest-guest-stopped") || kind == "job" && (*action == "reconcile" || *action == "attest-stopped" || *action == "attest-no-start")
+	if len(*key) > limit || !validAction {
 		fmt.Fprintln(stderr, "invalid recovery action, evidence flags or request key length")
 		return 2
 	}

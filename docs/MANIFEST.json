@@ -37,8 +37,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 11825,
-      "sha256": "7e4b27efe0e1b92745b37afef1da720dbe1f81a6f1a751ae4b9499808cee3412"
+      "bytes": 11959,
+      "sha256": "eecdf6f29f04f0098badbd020e4966f0c19b6b5718c6a4399f2d2b720086505c"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -158,17 +158,17 @@
     {
       "path": "checks.json",
       "bytes": 1828,
-      "sha256": "1b3d8d39b5d93ac361cfabb56ad19c0de72269b1c6a2907a3d5a0fa02029a65f"
+      "sha256": "06376cff0bd56b76e2592256f187ef2b71fa278e58dcafa1a286911a2a251f16"
     },
     {
       "path": "contracts/artifact-and-profile.md",
-      "bytes": 18764,
-      "sha256": "3209fb191eee2497b5345eb570d286874fc03504aa9813235a2f362a037e3595"
+      "bytes": 18846,
+      "sha256": "9d59e54c42b18be199628433d16b113eb48127e7c3a98650456c0d35a3c4173d"
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 41579,
-      "sha256": "afa4e17d71bf4d6a0ec800ebf2c2b2b6c13fa36f6313afd1c248b1cd5903aba8"
+      "bytes": 41700,
+      "sha256": "2ecadf4be445cbd742487b70c0da7c16b045a1202a89620e1569618f64e042a5"
     },
     {
       "path": "contracts/configuration.md",
@@ -192,13 +192,13 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 35283,
-      "sha256": "6bc44c0b01785b436731e411d0e243ff45f5ba1debe7d281f7c90cfda1849c0c"
+      "bytes": 43763,
+      "sha256": "3cfbbdf40cce93fb5c8bccda763a441a429aeed7e622809c3fd4fc7a95d0d0b8"
     },
     {
       "path": "deferred-feedback.md",
-      "bytes": 3862,
-      "sha256": "a108320108d02ddf6c532bfde3e93084a13773182453a316d7458a660e1fc900"
+      "bytes": 5779,
+      "sha256": "ff40f35e879b25bb23fe02b498b7e9475e4001ce5267f18c23986de3869c7124"
     },
     {
       "path": "examples/Makefile.example",
@@ -292,13 +292,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 29159,
-      "sha256": "030b888246a405024d1934dcf12069da882f98235751dfb23ca8067d01c64772"
+      "bytes": 31649,
+      "sha256": "df295b71358a112ad9dbf0e911941babae3932fe387812ac8c012b99159b552f"
     },
     {
       "path": "package-validation.md",
       "bytes": 8686,
-      "sha256": "f9fee5f0c3c96169e2e87b5cead0958d7ca0bcef1ec0fc0f7a6f428e0ed395eb"
+      "sha256": "b6953a693980655c7a4b9b5832dd1750ffc1d192aa4e557ea35e048bfec58dd6"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -327,8 +327,8 @@
     },
     {
       "path": "records/TASK-016-vm-contract-freeze.md",
-      "bytes": 12059,
-      "sha256": "92622a665146fbbc8835d20ed92fe558e900c9f4cc52339c7ab5aede9cc32b3e"
+      "bytes": 19116,
+      "sha256": "cab6a6546d8e52c409542df3ce1602a4382b9a825af71f5d4fba0ad769969959"
     },
     {
       "path": "records/TASK-034-utm-probe.md",
@@ -367,8 +367,8 @@
     },
     {
       "path": "roadmap/EPIC-004.md",
-      "bytes": 13847,
-      "sha256": "ea5d7d24b375ff18b73671e32d31ddaffe29759060eec81b4729e06fc58c5927"
+      "bytes": 13887,
+      "sha256": "ca8b3e9205757a195fbe7c05939dec6f58dafc606a15cf7921236e3e52e57a43"
     },
     {
       "path": "roadmap/EPIC-005.md",

@@ -71,13 +71,17 @@ func (s *runtimeServer) artifactManifest(id string) (managed.ArtifactManifest, e
 	if err != nil {
 		return m, err
 	}
-	m.Supplementary, err = s.ledger.SupplementaryEvidence(id)
+	m.Supplementary, err = s.ledger.PublicSupplementaryEvidence(id)
+	if err != nil {
+		return m, err
+	}
+	private, err := s.ledger.SupplementaryEvidence(id)
 	if err != nil {
 		return m, err
 	}
 	count := len(m.Result.Artifacts)
-	for _, record := range m.Supplementary {
-		count += len(record.Artifacts)
+	for _, record := range private {
+		count += len(record.Artifacts) + len(record.GuestArtifacts)
 	}
 	if count > 3000 {
 		return m, managed.ErrBlocked
@@ -98,23 +102,28 @@ func (s *runtimeServer) artifactManifest(id string) (managed.ArtifactManifest, e
 		}
 		m.Files = append(m.Files, delivery)
 	}
-	for _, record := range m.Supplementary {
-		for _, a := range record.Artifacts {
-			name := record.ArtifactRoot + "/" + a.Path
-			f, err := openOwnedEvidence(s.root.Path, id, name)
-			if err != nil {
-				return m, err
+	for _, record := range private {
+		for _, set := range []struct {
+			root  string
+			files []managed.ResultArtifact
+		}{{record.ArtifactRoot, record.Artifacts}, {record.ArtifactRoot + "-native", record.GuestArtifacts}} {
+			for _, a := range set.files {
+				name := set.root + "/" + a.Path
+				f, err := openOwnedEvidence(s.root.Path, id, name)
+				if err != nil {
+					return m, err
+				}
+				entry, err := checkedArtifact(f, &a, name)
+				delivery, tokenErr := s.bindArtifactPage(id, entry, f)
+				f.Close()
+				if err != nil {
+					return m, err
+				}
+				if tokenErr != nil {
+					return m, tokenErr
+				}
+				m.Files = append(m.Files, delivery)
 			}
-			entry, err := checkedArtifact(f, &a, name)
-			delivery, tokenErr := s.bindArtifactPage(id, entry, f)
-			f.Close()
-			if err != nil {
-				return m, err
-			}
-			if tokenErr != nil {
-				return m, tokenErr
-			}
-			m.Files = append(m.Files, delivery)
 		}
 	}
 	if len(m.Files) > 3000 {
@@ -127,6 +136,9 @@ func (s *runtimeServer) artifactManifest(id string) (managed.ArtifactManifest, e
 	if !missingLogAllowed(o) {
 		f, _, _, err := openPrivateLog(s.root.Path, id, o.RunID)
 		if err != nil {
+			if err == errLogMissing && supplementaryGuestLog(m, private) {
+				return m, nil
+			}
 			return m, err
 		}
 		var expected *managed.ResultArtifact
@@ -145,6 +157,27 @@ func (s *runtimeServer) artifactManifest(id string) (managed.ArtifactManifest, e
 		m.Files = append(m.Files, delivery)
 	}
 	return m, nil
+}
+
+// A declared original collection gap stays in the immutable result. A
+// separately verified guest log may be delivered under its supplementary path;
+// it does not impersonate the original host log or excuse a lost accepted log.
+func supplementaryGuestLog(m managed.ArtifactManifest, private []managed.EvidenceRecoveryOutcome) bool {
+	declared := false
+	for _, gap := range m.Result.EvidenceGaps {
+		declared = declared || gap.Path == "output.log" && gap.Reason == "guest_log_uncollected"
+	}
+	if !declared {
+		return false
+	}
+	for _, record := range private {
+		for _, file := range record.GuestArtifacts {
+			if file.Path == "output.log" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *runtimeServer) artifacts(w http.ResponseWriter, r *http.Request) {

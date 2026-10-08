@@ -261,6 +261,17 @@ func (s *runtimeServer) purgeJobContext(ctx context.Context, id string, revision
 				for _, a := range record.Artifacts {
 					allowed[record.ArtifactRoot+"/"+a.Path] = true
 				}
+				if len(record.GuestArtifacts) > 0 {
+					nativeRoot := record.ArtifactRoot + "-native"
+					allowed[nativeRoot+"/"] = true
+					if !seen[nativeRoot] {
+						names = append(names, nativeRoot)
+						seen[nativeRoot] = true
+					}
+					for _, a := range record.GuestArtifacts {
+						allowed[nativeRoot+"/"+a.Path] = true
+					}
+				}
 			}
 			for _, name := range names {
 				if err = planBulkPaths(ctx, fd, name, allowed, &q.Paths); err != nil {

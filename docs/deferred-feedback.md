@@ -2,7 +2,7 @@
 
 This document owns small follow-up checks intentionally postponed from current work. Entries do not allocate roadmap tasks or change lifecycle status; [the roadmap](roadmap.md) remains the sole lifecycle authority.
 
-The owner approved the two TASK-016 qualification deferrals below on 2026-10-05. They are waived for the current TASK-016 campaign so work can proceed, and must be verified later, before TASK-027 release acceptance. A deferred check is unobserved, not passed, and is not permanently removed from backend qualification.
+The owner approved the three TASK-016 qualification deferrals below on 2026-10-05. They are waived for the current TASK-016 campaign so work can proceed, and must be verified later, before TASK-027 release acceptance. A deferred check is unobserved, not passed, and is not permanently removed from backend qualification.
 
 ## DF-001: Real DHCP lease-expiry rejection
 
@@ -23,3 +23,13 @@ The owner approved the two TASK-016 qualification deferrals below on 2026-10-05.
 - **Re-entry condition:** Before TASK-027 release acceptance, or earlier when changing the LaunchAgent or host-session recovery boundary, arrange an owner-coordinated logout and same-account login window. Disclose any UTM shutdown prompt and obtain the applicable authority before VM power effects; do not force-close applications or discard unsaved work.
 - **Required verification:** Bind the installed candidate, native host session, LaunchAgent and VM identity; observe actual logout and the resulting service/control availability; confirm safe handling of uncertain work and cleanup. After login, verify the new native session and exact service candidate, re-establish guest identity, recover only original uncertain executions, and verify a subsequent complete VM Job without duplicate execution.
 - **Owner:** Haepari maintainer, with the operator controlling logout and login.
+
+## DF-003: Multi-day DHCP lease currency
+
+- **Disposition:** Deferred; owner-approved waiver for the current TASK-016 campaign only.
+- **Requirement owners:** [TASK-016](roadmap/EPIC-004.md#task-016), [TASK-034 prerequisites](records/TASK-034-utm-probe.md#task-016-prerequisites-not-observed-here), [lease validity and guest identity](contracts/resource-and-runner.md#host-session-and-vm-identity).
+- **Reason:** The current bounded campaign observed renewal and authenticated identity on the same guest boot over approximately two hours. Continuous operation for days was not demonstrated; the owner chose to reserve the longer observation window for later verification.
+- **Remaining uncertainty:** Currency of the registered MAC's individual DHCP lease after days of uninterrupted VM operation remains unobserved. The shorter renewal campaign and automated renewed-lease tests do not prove this prerequisite. This is separate from DF-001's expired-lease rejection.
+- **Re-entry condition:** Before TASK-027 release acceptance, or earlier when changing lease selection or expiry/identity validation, arrange an owner-approved multi-day observation of the designated persistent VM. Record the start and end native guest boot/uptime, registered UUID/MAC, and actual lease renewal; restarting the VM resets the continuous observation window.
+- **Required verification:** Bind the installed candidate and registered VM; prove the same native boot across the multi-day window, a unique individually unexpired registered-MAC lease with observed renewal, pinned SSH and current guest MAC/platform/boot identity, and no alternate address-discovery path. Complete a bounded VM Job with verified collection/cleanup and a subsequent successful Job. Preserve uncertainty and block dispatch if lease or identity proof is unavailable.
+- **Owner:** Haepari maintainer, with the operator authorizing the long-running VM window.

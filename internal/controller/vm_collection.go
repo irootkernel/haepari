@@ -31,13 +31,16 @@ func (s *runtimeServer) vmWorkerStopped(q runner.GuestRequest) bool {
 	return err == nil && reply.Control != nil && reply.Control.Stopped
 }
 func (s *runtimeServer) collectVMFile(q runner.GuestRequest, name, target string, deadline time.Time, remaining int64) (managed.ResultArtifact, error) {
+	return s.collectVMFileUsing(q, name, target, deadline, remaining, s.vmCall)
+}
+func (s *runtimeServer) collectVMFileUsing(q runner.GuestRequest, name, target string, deadline time.Time, remaining int64, call func(runner.GuestRequest) (runner.GuestReply, error)) (managed.ResultArtifact, error) {
 	result := managed.ResultArtifact{Path: name}
 	q.Operation = "file"
 	q.Path = name
 	q.Offset = 0
 	q.ExpectedFile = nil
 	q.Deadline = deadline
-	first, err := s.vmCall(q)
+	first, err := call(q)
 	if err != nil {
 		return result, err
 	}
@@ -50,12 +53,42 @@ func (s *runtimeServer) collectVMFile(q runner.GuestRequest, name, target string
 		return result, err
 	}
 	expected := managed.ResultArtifact{Path: name, SizeBytes: metadata.Size, SHA256: metadata.SHA256}
+	syncParents := func() error {
+		observeRetentionBoundary("guest-copy-before-directory-sync")
+		if !time.Now().Before(deadline) {
+			return runner.ErrUnproven
+		}
+		stop := filepath.Join(s.root.Path, "jobs", q.Request.Identity.JobID)
+		var e error
+		if s.vmSyncParents != nil {
+			e = s.vmSyncParents(target, stop)
+		} else {
+			e = syncVMParentsUntil(target, stop, deadline)
+		}
+		if e == nil && !time.Now().Before(deadline) {
+			e = runner.ErrUnproven
+		}
+		return e
+	}
 	if old, e := os.OpenFile(target, os.O_RDONLY|unix.O_NOFOLLOW, 0); e == nil {
 		defer old.Close()
 		if _, e = privateLogStat(int(old.Fd()), false); e != nil {
 			return result, e
 		}
-		return checkedArtifactUntil(old, &expected, name, deadline)
+		artifact, e := checkedArtifactUntil(old, &expected, name, deadline)
+		if e != nil {
+			return result, e
+		}
+		if !time.Now().Before(deadline) {
+			return result, runner.ErrUnproven
+		}
+		if e = old.Sync(); e != nil {
+			return result, e
+		}
+		if e = syncParents(); e != nil {
+			return result, e
+		}
+		return artifact, nil
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return result, e
 	}
@@ -106,7 +139,7 @@ func (s *runtimeServer) collectVMFile(q runner.GuestRequest, name, target string
 		if len(reply.Output) == 0 {
 			return result, managed.ErrBlocked
 		}
-		reply, err = s.vmCall(q)
+		reply, err = call(q)
 		if err != nil {
 			return result, err
 		}
@@ -114,13 +147,20 @@ func (s *runtimeServer) collectVMFile(q runner.GuestRequest, name, target string
 	if hex.EncodeToString(h.Sum(nil)) != metadata.SHA256 {
 		return result, managed.ErrBlocked
 	}
+	if !time.Now().Before(deadline) {
+		return result, runner.ErrUnproven
+	}
 	if err = f.Sync(); err != nil {
 		return result, err
+	}
+	if !time.Now().Before(deadline) {
+		return result, runner.ErrUnproven
 	}
 	if err = platform.PublishExclusive(parent, nonce, filepath.Base(target)); err != nil {
 		return result, err
 	}
-	if err = syncVMParents(target, filepath.Join(s.root.Path, "jobs", q.Request.Identity.JobID)); err != nil {
+	observeRetentionBoundary("guest-copy-published")
+	if err = syncParents(); err != nil {
 		return result, err
 	}
 	result.SizeBytes = metadata.Size
@@ -128,10 +168,16 @@ func (s *runtimeServer) collectVMFile(q runner.GuestRequest, name, target string
 	return result, nil
 }
 func syncVMParents(name, stop string) error {
+	return syncVMParentsUntil(name, stop, time.Time{})
+}
+func syncVMParentsUntil(name, stop string, deadline time.Time) error {
 	if name == stop || !strings.HasPrefix(filepath.Clean(name), filepath.Clean(stop)+string(filepath.Separator)) {
 		return managed.ErrInvalid
 	}
 	for dir := filepath.Dir(name); ; dir = filepath.Dir(dir) {
+		if !deadline.IsZero() && !time.Now().Before(deadline) {
+			return runner.ErrUnproven
+		}
 		f, err := os.OpenFile(dir, os.O_RDONLY|unix.O_NOFOLLOW, 0)
 		if err != nil {
 			return err

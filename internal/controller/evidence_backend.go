@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 // A backend owns source identity, collection, cleanup and readiness facts.
 // Local and authenticated VM backends share this recovery choreography.
 type evidenceBackend interface {
-	Observe(managed.LocalIdentity) (managed.RetainedPath, error)
+	Observe(managed.LocalIdentity, string) (managed.RetainedPath, error)
 	Collect(managed.EvidenceRecoveryJob, string) collectionAttempt
 	Cleanup(managed.EvidenceRecoveryJob) error
 	Health(managed.ResourceRecoverySnapshot) (any, bool)
@@ -40,7 +41,7 @@ func (s *runtimeServer) evidenceBackendFor(kind, id string) (evidenceBackend, er
 
 type localEvidenceBackend struct{ s *runtimeServer }
 
-func (b localEvidenceBackend) Observe(id managed.LocalIdentity) (managed.RetainedPath, error) {
+func (b localEvidenceBackend) Observe(id managed.LocalIdentity, _ string) (managed.RetainedPath, error) {
 	owned, err := b.s.inspectRecoveryRoot(id)
 	if err != nil || !owned {
 		return managed.RetainedPath{}, managed.ErrBlocked
@@ -54,7 +55,7 @@ func (b localEvidenceBackend) Observe(id managed.LocalIdentity) (managed.Retaine
 }
 
 func (b localEvidenceBackend) Collect(j managed.EvidenceRecoveryJob, destination string) collectionAttempt {
-	root, err := b.Observe(j.Identity)
+	root, err := b.Observe(j.Identity, "recollect")
 	if err != nil || root != j.Root {
 		return collectionAttempt{}
 	}
@@ -63,7 +64,7 @@ func (b localEvidenceBackend) Collect(j managed.EvidenceRecoveryJob, destination
 }
 
 func (b localEvidenceBackend) Cleanup(j managed.EvidenceRecoveryJob) error {
-	root, err := b.Observe(j.Identity)
+	root, err := b.Observe(j.Identity, "dispose")
 	if err != nil || root != j.Root {
 		return managed.ErrBlocked
 	}
@@ -88,7 +89,14 @@ type vmEvidenceBackend struct {
 	resourceID string
 }
 
-func (b vmEvidenceBackend) Observe(id managed.LocalIdentity) (managed.RetainedPath, error) {
+var errVMNativeTermination = fmt.Errorf("%w: original guest native termination proof is required for evidence collection and cleanup; a stopped filesystem worker or controller attestation does not supply it", managed.ErrBlocked)
+
+func (b vmEvidenceBackend) Observe(id managed.LocalIdentity, action string) (managed.RetainedPath, error) {
+	if q, found, err := b.s.vmAttestation(id.JobID); err != nil {
+		return managed.RetainedPath{}, err
+	} else if found {
+		return b.observeAttested(q, id, action)
+	}
 	q, err := b.s.vmBinding(id.JobID)
 	if err != nil || q.Request.Identity != id || id.ResourceID != b.resourceID {
 		return managed.RetainedPath{}, managed.ErrBlocked
@@ -102,9 +110,53 @@ func (b vmEvidenceBackend) Observe(id managed.LocalIdentity) (managed.RetainedPa
 	if q.Root != nil && *q.Root != *reply.Root {
 		return managed.RetainedPath{}, managed.ErrBlocked
 	}
-	return *reply.Root, nil
+	root := *reply.Root
+	if action == "dispose" && reply.Control.Phase == "cleanup" {
+		// A completed deletion can lose its host reply. The original control
+		// receipt and native health check can prove that effect without opening
+		// or adopting a replacement Job directory.
+		q.Operation = "health"
+		q.Root = &root
+		q.Deadline = time.Now().Add(5 * time.Second)
+		health, err := b.s.vmCall(q)
+		if err != nil {
+			// Do not overwrite the cleanup control phase with a root request
+			// when health is unknown: an absent source may already be deleted.
+			return managed.RetainedPath{}, err
+		}
+		if health.Reusable {
+			return root, nil
+		}
+	}
+	// Partial preparation can be disposed only behind the guest retirement
+	// barrier. It has no native request to inspect and cannot supply outputs.
+	if action == "dispose" && reply.Control.Retired && reply.Control.NativeRequest == nil {
+		return root, nil
+	}
+	q.Operation = "root"
+	q.Root = &root
+	q.Deadline = time.Now().Add(5 * time.Second)
+	reply, err = b.s.vmCall(q)
+	if err != nil {
+		return managed.RetainedPath{}, err
+	}
+	if reply.Root == nil || *reply.Root != root || reply.Control == nil || !reply.Control.Stopped {
+		return managed.RetainedPath{}, managed.ErrBlocked
+	}
+	view := reply.Observation
+	// Match the guest file/cleanup and health prerequisites. Current owner
+	// absence cannot upgrade an immutable false native termination receipt.
+	if view == nil || !(view.Exit != nil && view.Exit.TerminationProven || action == "dispose" && reply.Control.Retired && view.State == "prepared" && view.Intent == nil) {
+		return managed.RetainedPath{}, errVMNativeTermination
+	}
+	return root, nil
 }
 func (b vmEvidenceBackend) Collect(j managed.EvidenceRecoveryJob, destination string) collectionAttempt {
+	if q, found, err := b.s.vmAttestation(j.JobID); err != nil {
+		return collectionAttempt{}
+	} else if found {
+		return b.collectAttested(q, j, destination)
+	}
 	q, err := b.s.vmBinding(j.JobID)
 	if err != nil || q.Request.Identity != j.Identity {
 		return collectionAttempt{}
@@ -122,6 +174,11 @@ func (b vmEvidenceBackend) Collect(j managed.EvidenceRecoveryJob, destination st
 	return collected
 }
 func (b vmEvidenceBackend) Cleanup(j managed.EvidenceRecoveryJob) error {
+	if q, found, err := b.s.vmAttestation(j.JobID); err != nil {
+		return err
+	} else if found {
+		return b.cleanupAttested(q, j)
+	}
 	q, err := b.s.vmBinding(j.JobID)
 	if err != nil || q.Request.Identity != j.Identity {
 		return managed.ErrBlocked
@@ -144,6 +201,19 @@ func (b vmEvidenceBackend) Health(snap managed.ResourceRecoverySnapshot) (any, b
 		if err != nil {
 			facts[j.JobID] = "guest ownership unavailable"
 			healthy = false
+			continue
+		}
+		if a, found, e := b.s.vmAttestation(j.JobID); e != nil {
+			healthy = false
+			facts[j.JobID] = false
+			continue
+		} else if found {
+			a.Operation = "health"
+			a.Deadline = time.Now().Add(5 * time.Second)
+			reply, e := b.s.vmRecoveryCall(a)
+			ok := e == nil && reply.Reusable
+			facts[j.JobID] = ok
+			healthy = healthy && ok
 			continue
 		}
 		q.Operation = "health"

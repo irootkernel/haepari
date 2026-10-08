@@ -209,10 +209,11 @@ func prepareOwnedLocal(s *runtimeServer, deadline time.Time, work func() error) 
 }
 
 type collectionAttempt struct {
-	artifacts []managed.ResultArtifact
-	complete  bool
-	expired   bool
-	unproven  bool // remote filesystem owner could still be acting
+	guestArtifacts []managed.ResultArtifact
+	artifacts      []managed.ResultArtifact
+	complete       bool
+	expired        bool
+	unproven       bool // remote filesystem owner could still be acting
 }
 
 type phaseStatus uint8

@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const receiptLimit = 2 << 20
+const receiptLimit = managed.GuestRecoveryReceiptBytes
 
 type directory struct{ file *os.File }
 
@@ -166,7 +166,8 @@ func (d *directory) write(name string, value any) error {
 		if !bytes.Equal(prior, data) {
 			return ErrConflict
 		}
-		return nil
+		boundary("receipt_before_directory_sync")
+		return d.file.Sync()
 	} else if !errors.Is(err, unix.ENOENT) {
 		return err
 	}
@@ -204,6 +205,8 @@ func (d *directory) write(name string, value any) error {
 	} else if err != nil {
 		return err
 	}
+	boundary("receipt_published")
+	boundary("receipt_before_directory_sync")
 	return d.file.Sync()
 }
 

@@ -11,14 +11,16 @@ import (
 )
 
 type EvidenceRecoveryJob struct {
-	JobID           string              `json:"job_id"`
-	ResultDigest    string              `json:"result_digest"`
-	Identity        LocalIdentity       `json:"identity"`
-	Root            RetainedPath        `json:"root"`
-	Protected       []ProtectedEvidence `json:"protected_evidence"`
-	Outputs         []string            `json:"required_outputs"`
-	CollectDeadline time.Time           `json:"collect_deadline"`
-	CleanupDeadline time.Time           `json:"cleanup_deadline"`
+	GuestLogLimitBytes int64               `json:"guest_log_limit_bytes,omitempty"`
+	GuestAttestation   json.RawMessage     `json:"guest_attestation,omitempty"`
+	JobID              string              `json:"job_id"`
+	ResultDigest       string              `json:"result_digest"`
+	Identity           LocalIdentity       `json:"identity"`
+	Root               RetainedPath        `json:"root"`
+	Protected          []ProtectedEvidence `json:"protected_evidence"`
+	Outputs            []string            `json:"required_outputs"`
+	CollectDeadline    time.Time           `json:"collect_deadline"`
+	CleanupDeadline    time.Time           `json:"cleanup_deadline"`
 }
 
 type EvidenceRecoveryIntent struct {
@@ -37,12 +39,14 @@ type EvidenceRecoveryIntent struct {
 }
 
 type EvidenceRecoveryOutcome struct {
-	JobID        string           `json:"job_id"`
-	ResultDigest string           `json:"result_digest"`
-	Stage        string           `json:"stage"`
-	ArtifactRoot string           `json:"artifact_root,omitempty"`
-	Artifacts    []ResultArtifact `json:"artifacts"`
-	Gap          string           `json:"gap,omitempty"`
+	Attestation    json.RawMessage  `json:"attestation,omitempty"`
+	GuestArtifacts []ResultArtifact `json:"guest_artifacts,omitempty"`
+	JobID          string           `json:"job_id"`
+	ResultDigest   string           `json:"result_digest"`
+	Stage          string           `json:"stage"`
+	ArtifactRoot   string           `json:"artifact_root,omitempty"`
+	Artifacts      []ResultArtifact `json:"artifacts"`
+	Gap            string           `json:"gap,omitempty"`
 }
 type EvidenceRecoveryReceipt struct {
 	Schema      string                    `json:"schema"`
@@ -87,7 +91,7 @@ func evidenceResolvedTx(tx *sql.Tx, result Result) (bool, error) {
 }
 
 func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
-	if q.Schema != "haepari.evidence-recovery-intent/v1" || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
+	if q.Schema != "haepari.evidence-recovery-intent/v1" || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose", "attest-guest-stopped") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
 		return false
 	}
 	if q.RecordedAt.IsZero() || q.Action == "dispose" && q.AuthorityReference != "request:"+q.MutationKey {
@@ -96,6 +100,9 @@ func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
 	seen := map[string]bool{}
 	for _, j := range q.Jobs {
 		if !ValidRequestKey(j.JobID) || seen[j.JobID] || j.Identity.JobID != j.JobID || j.Identity.LeaseGeneration <= 0 || j.Identity.Nonce == "" || !validRecoveryDigest(j.ResultDigest) || j.Root.Path != "" || j.Root.Inode == 0 || !j.Root.Directory || j.CollectDeadline.Before(q.RecordedAt) || !j.CleanupDeadline.After(j.CollectDeadline) {
+			return false
+		}
+		if j.GuestLogLimitBytes < 0 || j.GuestLogLimitBytes > GuestRecoveryLogBytes || (q.Action == "attest-guest-stopped") != (len(j.GuestAttestation) > 0) || len(j.GuestAttestation) > 2<<20 {
 			return false
 		}
 		seen[j.JobID] = true
@@ -112,13 +119,20 @@ func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) b
 	}
 	for i, o := range r.Jobs {
 		j := q.Jobs[i]
-		if o.JobID != j.JobID || o.ResultDigest != j.ResultDigest || !oneOf(o.Stage, "pending", "collected", "resolved", "failed") || r.Complete && oneOf(o.Stage, "pending", "collected") || q.Action == "dispose" && len(o.Artifacts) > 0 {
+		if o.JobID != j.JobID || o.ResultDigest != j.ResultDigest || !oneOf(o.Stage, "pending", "collected", "resolved", "failed", "attested") || r.Complete && oneOf(o.Stage, "pending", "collected") || q.Action == "dispose" && len(o.Artifacts) > 0 {
 			return false
 		}
 		if o.ArtifactRoot != "" && o.ArtifactRoot != "recovery-"+q.MutationKey {
 			return false
 		}
 		if o.Stage == "failed" && o.Gap == "" || o.Stage != "failed" && o.Gap != "" || o.Stage == "pending" && (o.ArtifactRoot != "" || len(o.Artifacts) != 0) || q.Action == "dispose" && o.ArtifactRoot != "" {
+			return false
+		}
+		if q.Action == "attest-guest-stopped" {
+			if !oneOf(o.Stage, "pending", "attested", "failed") || (o.Stage == "attested") != (len(o.Attestation) > 0) || len(o.Artifacts) > 0 || len(o.GuestArtifacts) > 0 || o.ArtifactRoot != "" {
+				return false
+			}
+		} else if o.Stage == "attested" || len(o.Attestation) > 0 {
 			return false
 		}
 		paths := []string{}
@@ -129,6 +143,21 @@ func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) b
 			}
 			bytes += a.SizeBytes
 			paths = append(paths, a.Path)
+		}
+		for _, a := range o.GuestArtifacts {
+			limit, valid := GuestRecoveryArtifactLimit(a.Path, j.GuestLogLimitBytes)
+			if !valid || a.SizeBytes < 0 || a.SizeBytes > limit || !validDigest(a.SHA256) {
+				return false
+			}
+		}
+		if len(o.GuestArtifacts) > 0 {
+			names := []string{}
+			for _, a := range o.GuestArtifacts {
+				names = append(names, a.Path)
+			}
+			if !uniquePaths(names) || q.Action != "recollect" || o.ArtifactRoot == "" {
+				return false
+			}
 		}
 		if len(paths) > 0 && !uniquePaths(paths) {
 			return false
@@ -230,7 +259,7 @@ func (l *Ledger) RecordEvidenceRecovery(q EvidenceRecoveryIntent, r EvidenceReco
 	if receipt != nil {
 		for i, o := range receipt.Jobs {
 			n := r.Jobs[i]
-			if oneOf(o.Stage, "resolved", "failed") && !reflect.DeepEqual(o, n) || o.Stage == "collected" && (n.Stage == "pending" || !reflect.DeepEqual(o.Artifacts, n.Artifacts) || o.ArtifactRoot != n.ArtifactRoot) {
+			if oneOf(o.Stage, "resolved", "failed", "attested") && !reflect.DeepEqual(o, n) || o.Stage == "collected" && (n.Stage == "pending" || !reflect.DeepEqual(o.Artifacts, n.Artifacts) || !reflect.DeepEqual(o.GuestArtifacts, n.GuestArtifacts) || o.ArtifactRoot != n.ArtifactRoot) {
 				return ErrConflict
 			}
 		}
@@ -309,6 +338,22 @@ func (l *Ledger) PendingEvidenceRecovery() ([]EvidenceRecoveryIntent, error) {
 }
 
 func (l *Ledger) SupplementaryEvidence(id string) ([]EvidenceRecoveryOutcome, error) {
+	return l.supplementaryEvidence(id, false)
+}
+
+func (l *Ledger) PublicSupplementaryEvidence(id string) ([]PublicRecoveryOutcome, error) {
+	private, err := l.supplementaryEvidence(id, true)
+	if err != nil {
+		return nil, err
+	}
+	public := []PublicRecoveryOutcome{}
+	for _, o := range private {
+		public = append(public, PublicRecoveryOutcome{o.JobID, o.ResultDigest, o.Stage, o.ArtifactRoot, o.Artifacts, o.Gap})
+	}
+	return public, nil
+}
+
+func (l *Ledger) supplementaryEvidence(id string, public bool) ([]EvidenceRecoveryOutcome, error) {
 	if !ValidRequestKey(id) {
 		return nil, ErrInvalid
 	}
@@ -334,7 +379,7 @@ func (l *Ledger) SupplementaryEvidence(id string) ([]EvidenceRecoveryOutcome, er
 			return nil, ErrBlocked
 		}
 		for _, o := range r.Jobs {
-			if o.JobID == id {
+			if o.JobID == id && (!public || q.Action != "attest-guest-stopped") {
 				out = append(out, o)
 			}
 		}

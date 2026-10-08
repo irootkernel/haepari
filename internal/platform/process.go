@@ -1,5 +1,20 @@
 package platform
 
+import "fmt"
+
+// ProcessError preserves the native observation stage without embedding
+// process arguments, environment or paths in durable runner diagnostics.
+type ProcessError struct {
+	Operation string
+	PID       int
+	Err       error
+}
+
+func (e *ProcessError) Error() string {
+	return fmt.Sprintf("%s (pid %d): %v", e.Operation, e.PID, e.Err)
+}
+func (e *ProcessError) Unwrap() error { return e.Err }
+
 // ProcessIdentity binds a native observation to one process incarnation.
 // A PID or a kernel session pointer alone is not an ownership identity.
 type ProcessIdentity struct {

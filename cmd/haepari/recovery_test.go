@@ -31,7 +31,6 @@ var _ = ginkgo.Describe("Task011CLIValidation", ginkgo.Label("unit"), func() {
 		}
 		for _, flags := range [][]string{
 			{"--plan", "--action", "attest-stopped", "--json"},
-			{"--plan-token", "token", "--request-key", "saved-key", "--evidence-file", "never-opened.json", "--json"},
 		} {
 			var out, diagnostic bytes.Buffer
 			gomega.Expect(run(append([]string{"resource", "recover", "resource-id"}, flags...), &out, &diagnostic)).To(gomega.Equal(2))
@@ -63,11 +62,13 @@ var _ = ginkgo.Describe("Task011CLIValidation", ginkgo.Label("unit"), func() {
 		} {
 			file := filepath.Join(parent, "evidence.json")
 			gomega.Expect(os.WriteFile(file, []byte(raw), 0600)).To(gomega.Succeed())
-			var out, diagnostic bytes.Buffer
-			gomega.Expect(run([]string{"job", "recover", "job-id", "--plan-token", "token", "--request-key", "saved-key", "--evidence-file", file, "--json"}, &out, &diagnostic)).To(gomega.Equal(2))
-			gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring("evidence"))
-			gomega.Expect(diagnostic.String()).NotTo(gomega.ContainSubstring("connect"))
-			gomega.Expect(out.Len()).To(gomega.BeZero())
+			for _, kind := range []string{"job", "resource"} {
+				var out, diagnostic bytes.Buffer
+				gomega.Expect(run([]string{kind, "recover", "job-id", "--plan-token", "token", "--request-key", "saved-key", "--evidence-file", file, "--json"}, &out, &diagnostic)).To(gomega.Equal(2))
+				gomega.Expect(diagnostic.String()).To(gomega.ContainSubstring("evidence"))
+				gomega.Expect(diagnostic.String()).NotTo(gomega.ContainSubstring("connect"))
+				gomega.Expect(out.Len()).To(gomega.BeZero())
+			}
 		}
 	})
 	ginkgo.It("rejects service action flag conflicts before reading a plan or operating launchd", func() {
