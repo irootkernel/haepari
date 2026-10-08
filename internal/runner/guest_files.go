@@ -315,7 +315,8 @@ func guestFiles(parent, d *directory, q GuestRequest, reply GuestReply, c *guest
 		if err := c.save(); err != nil {
 			return reply, err
 		}
-		if err := guestRemove(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline); err != nil {
+		boundary("guest_cleanup_bound_root")
+		if err := guestRemoveBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, c.value.Root); err != nil {
 			return reply, err
 		}
 		return reply, nil
@@ -513,7 +514,8 @@ func cleanupGuestPreparation(parent *directory, q GuestRequest, root *managed.Re
 	if root.Device != uint64(st.Dev) || root.Inode != uint64(st.Ino) || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR {
 		return ErrConflict
 	}
-	return guestRemove(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline)
+	boundary("guest_cleanup_bound_preparation")
+	return guestRemoveBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, root)
 }
 
 // Retirement serializes with launch through the same durable worker inode. A

@@ -192,8 +192,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 44692,
-      "sha256": "e820e1da354f869d0141e12eb43010e33a176a85439f1940a4f4d3f8157f5233"
+      "bytes": 45130,
+      "sha256": "57bcafbd1015c4bf4e999166a9097370474435f7be35156f434ac489fac74d22"
     },
     {
       "path": "deferred-feedback.md",

@@ -88,6 +88,8 @@ The native VM controller fixture also checks a delayed start against the saved a
 
 These fixtures operate no actual SSH server or UTM VM, configure no service and qualify neither Remote Login/authentication nor TASK-016/F2. `make test-utm` remains an explicit unavailable qualification gate. Operational run identities and exact candidate/check bindings stay in private workflow evidence.
 
+`Task015GuestCleanup` injects a directory replacement after original-root validation and immediately before deletion for both a completed native workload and partial preparation. It requires a conflict, preserved replacement sentinel and original bytes, and ordinary guest health refusal of reuse. The partial case directly exercises the retired-preparation deletion helper; existing VM recovery fixtures cover its retirement/control dispatch. The replacement is a controlled local filesystem race, not a live VM observation.
+
 ## TASK-016 VM timing observations
 
 `Task016VMAdapterTimings` exercises both a running VM and a required fenced start through the scripted native guest fixture. It checks measured authentication/transfer latency, durable result projection, collection/cleanup phase elapsed durations and immutable result replay. `VMPreparationStepValidation` rejects unobserved, foreign, repeated and negative preparation durations; the local phase integration fixture rejects VM-only observations on a local resource. These checks operate no real VM and do not freeze F2. The separately authorized installed-service campaign must bind the exact deployed executable and environment before backend acceptance.

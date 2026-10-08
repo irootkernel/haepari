@@ -14,10 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/snapshot"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	"golang.org/x/sys/unix"
 )
 
 func guestFixture(script string) (GuestRequest, string) {
@@ -156,4 +158,73 @@ var _ = ginkgo.Describe("Task014GuestContinuity", ginkgo.Label("integration"), f
 		_, err = os.Stat(filepath.Join(root, "workspace/effect.txt"))
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 	})
+})
+
+var _ = ginkgo.Describe("Task015GuestCleanup", ginkgo.Label("integration"), func() {
+	ginkgo.DescribeTable("preserves a replacement root introduced immediately before cleanup", func(partial bool) {
+		q, parent := guestFixture("true")
+		stopped := partial
+		defer func() {
+			if !stopped {
+				ginkgo.Fail("guest fixture termination unproven; retain " + parent)
+				return
+			}
+			os.RemoveAll(parent)
+		}()
+		root := filepath.Join(parent, q.Request.Identity.JobID)
+		original := root + "-retained"
+		ownedFile := "owned.txt"
+		if partial {
+			gomega.Expect(os.Mkdir(root, 0700)).To(gomega.Succeed())
+			gomega.Expect(os.WriteFile(filepath.Join(root, ownedFile), []byte("owned"), 0600)).To(gomega.Succeed())
+		} else {
+			q.Request = *guestOperation(q, "prepare").Request
+			q.Files, q.Inventory = nil, nil
+			guestOperation(q, "start")
+			gomega.Eventually(func() bool {
+				view := guestOperation(q, "watch").Observation
+				return view.Exit != nil && view.Exit.TerminationProven
+			}, 6*time.Second, 25*time.Millisecond).Should(gomega.BeTrue())
+			stopped = true
+			ownedFile = "workspace/input.txt"
+		}
+		before, err := os.ReadFile(filepath.Join(root, ownedFile))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		p, err := openDirectory(parent)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer p.close()
+		var st unix.Stat_t
+		gomega.Expect(unix.Fstatat(int(p.file.Fd()), q.Request.Identity.JobID, &st, unix.AT_SYMLINK_NOFOLLOW)).To(gomega.Succeed())
+		bound := &managed.RetainedPath{Device: uint64(st.Dev), Inode: uint64(st.Ino), Directory: true}
+		target := "guest_cleanup_bound_root"
+		if partial {
+			target = "guest_cleanup_bound_preparation"
+		}
+		previous := spawnBoundary
+		defer func() { spawnBoundary = previous }()
+		replaced := false
+		spawnBoundary = func(name string) {
+			if name != target {
+				return
+			}
+			gomega.Expect(replaced).To(gomega.BeFalse())
+			gomega.Expect(os.Rename(root, original)).To(gomega.Succeed())
+			gomega.Expect(os.Mkdir(root, 0700)).To(gomega.Succeed())
+			gomega.Expect(os.WriteFile(filepath.Join(root, "foreign.txt"), []byte("preserve"), 0600)).To(gomega.Succeed())
+			replaced = true
+		}
+		if partial {
+			err = cleanupGuestPreparation(p, q, bound)
+		} else {
+			q.Operation = "cleanup"
+			_, err = Guest(q)
+		}
+		gomega.Expect(err).To(gomega.Equal(ErrConflict))
+		gomega.Expect(replaced).To(gomega.BeTrue())
+		gomega.Expect(os.ReadFile(filepath.Join(root, "foreign.txt"))).To(gomega.Equal([]byte("preserve")))
+		gomega.Expect(os.ReadFile(filepath.Join(original, ownedFile))).To(gomega.Equal(before))
+		if !partial {
+			gomega.Expect(guestOperation(q, "health").Reusable).To(gomega.BeFalse())
+		}
+	}, ginkgo.Entry("completed native workload", false), ginkgo.Entry("partial preparation", true))
 })
