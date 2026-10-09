@@ -40,6 +40,12 @@ Haepari uses this one VM for every VM job and never resets it ([ADR-0018](archit
 
 Register the VM in Haepari as a `utm-macos` resource with its UTM UUID, MAC address, pinned SSH host key and guest job root. Automatic force-stop for host capacity is disabled by default; set `vm.allow_automatic_stop=true` only after deciding that this VM's persistent guest services and operator work may be interrupted while it is eligible and idle. Pause the resource for maintenance regardless of that policy. The address comes from a unique unexpired host DHCP lease entry for the MAC, as the [TASK-034 probe record](records/TASK-034-utm-probe.md) observed; a pre-start lease still needs current guest identity checks. Never disable host-key checking to make a connection work.
 
+## Planned operational-readiness changes
+
+[EPIC-009](roadmap/EPIC-009.md) has a separate [execution dossier](TODO-VM-OPERATIONAL-READINESS.md). TASK-036 owns safe observation/reconciliation and explicit missing-output, cross-boot and evidence-loss decisions; TASK-037 owns cold readiness, bounded transport/runner storage and minimum global-limit selection. None is available merely because the plan is registered. The current same-boot recovery rules below remain authoritative until their contract decisions and implementation are delivered.
+
+TASK-038–039 require approved exact candidate/service/resource scope and finite live budgets. Service registration or a running LaunchAgent is not a health result: require the control socket and a successful public read-only observation before workload. Do not bypass permissions, relocate binaries or manually delete guest files to unblock a campaign. The dossier states restoration, evidence and escalation requirements; DF-001–003 remain separate release obligations.
+
 ## Current VM Job recovery
 
 Use only a registered UUID/MAC with the exact private mapping and dedicated host-key pin described by the [guest protocol](contracts/resource-and-runner.md#ssh-and-guest-supervision). The ordinary SSH alias is insufficient. Automatic development Jobs use the same submit/wait/cancel commands as local Jobs; no real backend qualification is implied. Select the foreground host limit with `daemon run --host-macos-guest-limit 1|2` (default 1). VM removal remains unsupported.

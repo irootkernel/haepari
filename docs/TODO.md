@@ -1,6 +1,10 @@
-# Follow-up candidates
+# Follow-up candidates and execution dossiers
 
-These are independent follow-up candidates for the managed local core. They are candidates, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle.
+The structural entries below are independent follow-up candidates for the managed local core, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle. Adopted execution dossiers are indexed separately.
+
+## Adopted execution dossiers
+
+- [VM operational readiness](TODO-VM-OPERATIONAL-READINESS.md): the Detailed SOT for [EPIC-009](roadmap/EPIC-009.md), TASK-036–039. It owns the integration map, decisions, task handoffs and campaign acceptance; current lifecycle remains in the roadmap. Preserve it during execution and promote durable outcomes before approved closeout.
 
 ## Structural TODO candidates
 

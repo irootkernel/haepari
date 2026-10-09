@@ -1,6 +1,6 @@
 # Package validation: Design Revision 3.4
 
-Date: 2026-10-05. These are documentation-only checks of the current tree, not product tests or acceptance. The Revision 3.4 transition-table correction is recorded in [revision notes](REVISION-NOTES.md). Product and host checks are recorded by their owning tasks.
+Date: 2026-10-09. These are documentation-only checks of the current tree, not product tests or acceptance. The Revision 3.4 transition-table correction is recorded in [revision notes](REVISION-NOTES.md). Product and host checks are recorded by their owning tasks.
 
 The documentation results below come from [`tools/validate_docs.py`](tools/validate_docs.py), a standard-library script included in this package. Git index checks are recorded separately.
 
@@ -12,7 +12,7 @@ The documentation results below come from [`tools/validate_docs.py`](tools/valid
 | Check | Result |
 | --- | --- |
 | UTF-8, balanced code fences and JSON syntax | Passed |
-| Relative links and anchors (539 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (583 links, GitHub-style anchors) | Passed |
 | Roadmap DAG | Passed. See below. |
 | Task titles, roadmap versus epic files | Passed |
 | Requirement–task–case traceability, both directions | Passed. See below. |
@@ -31,8 +31,8 @@ The documentation results below come from [`tools/validate_docs.py`](tools/valid
 - The graph is acyclic.
 - No active task depends on a deferred task.
 - TASK-028 is the only active task without a successor. TASK-035 feeds TASK-012 (freeze gate F1) and TASK-021. TASK-034, now Accepted, has no prerequisite and feeds TASK-016.
-- The roadmap names the tasks that collect real UTM evidence and the tasks a missing UTM environment blocks. The DAG closure of the first set equals the second: TASK-016, TASK-027 and TASK-028. TASK-034's host probe is already Accepted.
-- The longest prerequisite chain has 21 tasks.
+- The roadmap names the tasks that collect real UTM evidence and the tasks a missing UTM environment blocks. The DAG closure of the first set equals the second: TASK-016, TASK-017–028, TASK-038 and TASK-039. TASK-036–037 remain developable without real UTM; accepted TASK-016 is not reopened by this graph. TASK-034's host probe is already Accepted.
+- The longest prerequisite chain has 25 tasks. EPIC-009 precedes EPIC-005; TASK-039 feeds TASK-017.
 
 **Traceability.** The script checks all of the following:
 
@@ -49,12 +49,12 @@ The documentation results below come from [`tools/validate_docs.py`](tools/valid
 | Item | Total | Active | Deferred |
 | --- | --- | --- | --- |
 | Requirements | 81 | 64 | 17 |
-| Epics | 8 | 7 | 1 |
-| Tasks | 35 | 31 | 4 |
+| Epics | 9 | 8 | 1 |
+| Tasks | 39 | 35 | 4 |
 | ADRs | 18 | 16 | 2 |
 | Verification cases | 85 | 65 (V01–V65) | 20 (E01–E20) |
 
-The package also holds 71 Markdown documents, 11 JSON design templates, nine unsent producer request drafts and one validation script. This documentation validator executes no product test; the separate [TASK-004 host gate](records/TASK-004-macos-supervision.md) records its own observed cases.
+The package also holds 73 Markdown documents, 11 JSON design templates, nine unsent producer request drafts and one validation script. This documentation validator executes no product test; the separate [TASK-004 host gate](records/TASK-004-macos-supervision.md) records its own observed cases.
 
 ## Limits of these checks
 
@@ -63,7 +63,7 @@ The deferred-term and qualified-ID checks are lexical. The five Revision 3.4 con
 The following are outside this documentation validator:
 
 - Haepari product tests, run separately by `make check`
-- host platform experiments, recorded for [TASK-004](records/TASK-004-macos-supervision.md) and [TASK-034](records/TASK-034-utm-probe.md); VM qualification remains pending
+- host platform experiments and VM campaigns: historical TASK-004/TASK-034/TASK-016 records retain their scope; corrected-candidate TASK-038 and real-project TASK-039 observations remain planned
 - provider calls
 - the Aquarium documentation inspector
 

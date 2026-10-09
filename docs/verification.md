@@ -2,6 +2,14 @@
 
 No case in this document is marked executed. The TASK-034 host probe ([record](records/TASK-034-utm-probe.md)) observed some of the behavior behind V47 and V58, but it is not a case execution. Each implementation task supplies focused evidence; the final release combines the exact artifact identities and results. Passing unit tests does not prove real UTM control, installed skill behavior, or human observations.
 
+## Operational readiness before consumer integration
+
+[EPIC-009](roadmap/EPIC-009.md) and its [execution dossier](TODO-VM-OPERATIONAL-READINESS.md#campaign-and-acceptance-matrix) add task-specific scenarios under the existing V01–V65 vocabulary. TASK-036–037 require focused failure/identity/deadline tests and the common gate; TASK-038 requires exact installed-candidate real-VM observations; TASK-039 requires one selected real-project cycle before TASK-017. These are planned checks, not newly executed cases.
+
+The campaign covers cold readiness, missing versus uncollected evidence, cancellation/timeout, SSH observation loss, controller restart, guest reboot, orphaned power intent, 50 MiB logs, 30-Job soak, two VM Jobs plus local progress at global limit three, identity refusals and project reuse. Record times/calls/bytes/storage and exact source/executable/runner identities. D1–D3 must be resolved before changing their affected assertions; the current verdict and evidence rules remain in force until then.
+
+Guest reboot does not verify host logout. DF-001–003 retain their separate TASK-027 obligations. A missing campaign observation blocks TASK-038 or TASK-039; neither historical TASK-016 evidence nor successful fixtures substitute for it.
+
 ## Layers
 
 | Layer | Scope | Environment |

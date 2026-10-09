@@ -6,12 +6,14 @@ Haepari is an independent Go CLI and local daemon for durable resource schedulin
 
 Design revision: 3.4, dated 2026-09-28. Revision 3 adopted a managed-first scope; external leases and linked segments remain preserved deferred designs. Revision 3.1 corrected roadmap prerequisites, completed the managed transition and configuration contracts, fixed the macOS service and durability decisions, and moved the changes needed from Aquarium and Mulgae into [external requests](to-external.md). Revision 3.2 records the owner's decisions: advisory named locks for Mulgae reviews, VM tests in the development loop, and the MIT license. Revision 3.3 uses one persistent VM per resource without per-job reset ([ADR-0018](architecture-decision-records/0018-persistent-vm-no-reset.md)), drops the signing requirement and records the TASK-034 UTM probe. [Revision notes](REVISION-NOTES.md) and [review disposition](review-disposition.md) describe the changes. Revision 3.4 resolves pre-implementation VM power, evidence retention, verdict, DHCP lease and advisory-grant ownership contracts, and adds an optional early SSH smoke observation without changing F2. The product target remains v0.1.0.
 
+The planned [EPIC-009](roadmap/EPIC-009.md) precedes consumer integration. Its [execution dossier](TODO-VM-OPERATIONAL-READINESS.md) consolidates corrective work, decisions, feedback ownership and real-VM/pilot acceptance. It does not qualify the current HEAD or alter the historical TASK-016 acceptance.
+
 ## Read in this order
 
 1. [Requirements](requirements.md) defines the release scope and observable acceptance criteria.
 2. [Architecture](architecture.md) defines ownership, persistence, scheduling, and recovery.
 3. [Architecture decision records](architecture-decision-records/README.md) records the selected trade-offs.
-4. [Roadmap](roadmap.md) orders seven active epics and 31 active implementation tasks (35 in total); one epic and four tasks are deferred, with stable existing IDs.
+4. [Roadmap](roadmap.md) orders eight active epics and 35 active implementation tasks (39 in total); one epic and four tasks are deferred, with stable existing IDs.
 5. [CLI and job contract](contracts/cli-and-jobs.md), [resource and runner contract](contracts/resource-and-runner.md), [artifact and environment contract](contracts/artifact-and-profile.md), [configuration contract](contracts/configuration.md) and [lock contract](contracts/locks.md) define the supported boundary; the [external lease contract](contracts/external-leases.md) is deferred. The [managed transition table](contracts/managed-transitions.md) defines lifecycle and capacity changes.
 6. [Verification](verification.md), [traceability](traceability.md), and [operations](operations.md) define test evidence and operator procedures. The [TASK-004 supervision record](records/TASK-004-macos-supervision.md) and [TASK-034 probe record](records/TASK-034-utm-probe.md) hold the observed host and UTM behaviour.
 7. [Aquarium adoption plan](aquarium-adoption.md) describes the separate consumer rollout. [External requests](to-external.md) lists the changes Haepari needs from Aquarium and Mulgae. [Handoffs](handoffs/README.md) provides development and producer request templates.
@@ -50,7 +52,7 @@ External facts are identified in [sources](sources.md). Architecture choices and
 
 Documentation check results are recorded in [package validation](package-validation.md) and reproducible with `docs/tools/validate_docs.py`. The Aquarium-owned inspector warning is tracked in [external requests](to-external.md) §1.3.
 
-Follow-up candidates from EPIC-001 cold validation and EPIC-002 task reviews are recorded in [TODO](TODO.md). These documents do not change roadmap task status or acceptance.
+Follow-up candidates from EPIC-001 cold validation and EPIC-002 task reviews, and the adopted EPIC-009 execution dossier, are indexed in [TODO](TODO.md). The dossier integrates execution requirements and links canonical product owners; neither it nor the TODO index owns roadmap lifecycle. At approved closeout, promote durable outcomes before removing a temporary dossier and replacing its links.
 
 [Deferred feedback](deferred-feedback.md) owns small postponed follow-up checks and their re-entry conditions. It records the owner-approved TASK-016 qualification waivers for the current campaign; all three deferred checks remain due before TASK-027 release acceptance. The roadmap remains the sole lifecycle authority.
 

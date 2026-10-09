@@ -17,6 +17,10 @@ Cross-project IDs are always qualified: `Haepari:TASK-0nn`, `Aquarium:TASK-0nn`,
 - Aquarium commit `910ef29` ("[DOC] Plan Haepari VM adoption and legacy channel retirement") committed the Aquarium:EPIC-019 plan, including `docs/todo/TODO-HAEPARI-VM-ADOPTION.md`. HEAD is now `0c5330b`.
 - The committed plan still describes the Haepari Design Revision 2 scope and a per-job VM reset.
 
+### Operational-readiness handoff boundary
+
+Haepari [EPIC-009](roadmap/EPIC-009.md) adds a candidate-qualified backend campaign and real-project pilot before its consumer integration work. TASK-039 records pilot lessons and hands §1.2 alignment to the Aquarium owner; it does not edit Aquarium or accept Aquarium:TASK-086. The same distinction applies to Mulgae lock adoption: its owner decides adoption timing and native integration. Candidate-class pilot evidence is not the released producer handoff required by TASK-028 or a substitute for consumer acceptance.
+
 ### 1.1 Commit a planning baseline (done)
 
 Done: Aquarium commit `910ef29` committed the Aquarium:EPIC-019 plan. The Haepari handoff and the Sorage packets can cite it, or the later commit that applies §1.2.

@@ -93,3 +93,9 @@ These fixtures operate no actual SSH server or UTM VM, configure no service and 
 ## TASK-016 VM timing observations
 
 `Task016VMAdapterTimings` exercises both a running VM and a required fenced start through the scripted native guest fixture. It checks measured authentication/transfer latency, durable result projection, collection/cleanup phase elapsed durations and immutable result replay. `VMPreparationStepValidation` rejects unobserved, foreign, repeated and negative preparation durations; the local phase integration fixture rejects VM-only observations on a local resource. These checks operate no real VM and do not freeze F2. The separately authorized installed-service campaign must bind the exact deployed executable and environment before backend acceptance.
+
+## Planned operational qualification
+
+EPIC-009 is defined in [the roadmap](docs/roadmap.md); its [execution dossier](docs/TODO-VM-OPERATIONAL-READINESS.md#campaign-and-acceptance-matrix) owns the required corrected-candidate and real-project observations. TASK-036–037 use focused checks and the existing common gate. TASK-038 will replace the real-UTM stub with a tracked, public-CLI campaign under separately bounded live authority; the current Makefile still returns an explicit prerequisite failure. TASK-039 will add minimal submission helpers and one real-project cycle, while TASK-017 retains the full project Make contract.
+
+The future campaign requires exact candidate/resource inputs, finite budgets, cold start, failure/cancel/disconnect/restart/reboot recovery, large output, a 30-Job soak and the two-VM/global-three profile. Missing prerequisites must fail that selected gate, without a successful skip, private-helper dependency or host fallback. This plan changes neither executable Make targets nor the enrollment of the ordinary local gate.

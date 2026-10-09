@@ -36,6 +36,7 @@ Requirement coverage: `HP-REQ-056`, `HP-REQ-057`.
 
 #### Implement
 - [ ] Reconcile requirements, architecture, CLI help, examples, security guidance, project-owned testing, migration and legacy-retirement boundaries against implemented behavior.
+- [ ] Reconcile stale implementation/candidate wording and command availability across public and maintainer documents, using the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) without rewriting historical records as current observations.
 
 #### Do not
 - [ ] Do not describe planned capabilities as shipped or leave executable-looking unmarked placeholders.

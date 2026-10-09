@@ -4,6 +4,8 @@ Support project-owned VM suites and complete installation-unit evidence, then fr
 
 Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). These checklists define implementation acceptance only.
 
+TASK-017 consumes the accepted operational qualification and real-project pilot from [EPIC-009](EPIC-009.md). Its full Make/environment-lock/manual integration remains here; the earlier pilot supplies minimal CLI helpers and observations, not a substitute for these tasks. F3 therefore follows real usage.
+
 ## TASK-017
 
 ### Publish the project Make and guest integration contract

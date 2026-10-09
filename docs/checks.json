@@ -17,7 +17,7 @@
     "worktree_diff_check": "passed",
     "schema_validation": "not run; no standalone JSON Schema documents exist (Go decoder tests are separate)",
     "stated_counts_match": "passed",
-    "collision_id_review_lines": "8 lines listed for manual review (not a failure)"
+    "collision_id_review_lines": "11 lines listed for manual review (not a failure)"
   },
   "roadmap_dag": {
     "sinks": [
@@ -25,10 +25,22 @@
     ],
     "utm_gated": [
       "TASK-016",
+      "TASK-017",
+      "TASK-018",
+      "TASK-019",
+      "TASK-020",
+      "TASK-021",
+      "TASK-022",
+      "TASK-023",
+      "TASK-024",
+      "TASK-025",
+      "TASK-026",
       "TASK-027",
-      "TASK-028"
+      "TASK-028",
+      "TASK-038",
+      "TASK-039"
     ],
-    "longest_chain": 21
+    "longest_chain": 25
   },
   "counts": {
     "requirements": {
@@ -37,13 +49,13 @@
       "deferred": 17
     },
     "epics": {
-      "total": 8,
-      "active": 7,
+      "total": 9,
+      "active": 8,
       "deferred": 1
     },
     "tasks": {
-      "total": 35,
-      "active": 31,
+      "total": 39,
+      "active": 35,
       "deferred": 4
     },
     "adrs": {
@@ -56,10 +68,10 @@
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 71,
+    "markdown_documents": 73,
     "json_templates": 11,
     "producer_request_drafts": 9,
-    "relative_links_checked": 539
+    "relative_links_checked": 583
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",

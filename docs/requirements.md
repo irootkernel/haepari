@@ -328,6 +328,19 @@ Implementation owner: `TASK-035`.
 Acceptance: Locks consume no managed resource or global capacity, grant no execution permit, and never run or observe the holder's work. A nested managed caller cannot acquire a lock. Documentation states that callers who skip the lock are outside its guarantee.
 Implementation owner: `TASK-035`.
 
+## Operational-readiness follow-up ownership
+
+[EPIC-009](roadmap/EPIC-009.md) adds corrective implementation and qualification contributions to existing active requirements. Original implementation owners and accepted evidence remain recorded above; the [traceability table](traceability.md) maps every additional task. No new requirement or implemented behavior is asserted by this plan.
+
+| Contribution | Requirement coverage and boundary |
+| --- | --- |
+| TASK-036 | Failure/evidence/recovery and frozen semantics: HP-REQ-018–022, HP-REQ-024–025, HP-REQ-027–030, HP-REQ-062. Master resolves missing-output, changed-boot and evidence-loss decisions before affected implementation. |
+| TASK-037 | Startup, transfer, runner retention and minimum limits: HP-REQ-011, HP-REQ-019, HP-REQ-022–024, HP-REQ-026–027, HP-REQ-050–051, HP-REQ-062. General configuration and performance qualification stay with TASK-023. |
+| TASK-038 | Exact installed-candidate qualification: HP-REQ-011, HP-REQ-018–031, HP-REQ-050–051, HP-REQ-059, HP-REQ-062. Required real campaign rows cannot pass from fixtures or historical results. |
+| TASK-039 | Real-project submission/evidence loop: HP-REQ-009–011, HP-REQ-014–015, HP-REQ-018–019, HP-REQ-021–022, HP-REQ-032, HP-REQ-034–035, HP-REQ-059, HP-REQ-062. Full Make, skill, manual and migration integration remains in EPIC-005. |
+
+The [dossier decisions](TODO-VM-OPERATIONAL-READINESS.md#decisions-before-affected-implementation) are proposals requiring their stated owner decisions. Existing verdicts, protected-evidence rules and F1/F2 shapes remain authoritative until recorded contract/version changes are accepted. Host logout remains DF-002; guest reboot is a separate operational campaign scenario.
+
 ## Deferred external-execution requirements
 
 The following IDs are retained for post-v0.1.0 design. Their checkboxes and acceptance text do not count toward v0.1.0. B1 and B2 in the deferred lease contract block implementation re-entry.

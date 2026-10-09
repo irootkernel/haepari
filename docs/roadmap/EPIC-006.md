@@ -12,6 +12,7 @@ Requirement coverage: `HP-REQ-045`, `HP-REQ-046`.
 
 #### Implement
 - [ ] Execute the mandatory failure matrix across admissions, leases, runners, events, manual state and terminal settlement with deterministic, bounded fault injection.
+- [ ] Evaluate repeated settlement/receipt-import paths, filesystem durability primitives and test-only export/substitute paths identified by the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition). Consolidate only where a concrete invariant or drift justifies it; no universal backend abstraction is prescribed.
 
 #### Do not
 - [ ] Do not use sleeps alone as concurrency proof or rerun unknown external effects to make a flaky test pass.
@@ -36,6 +37,7 @@ Requirement coverage: `HP-REQ-047`, `HP-REQ-048`, `HP-REQ-049`.
 
 #### Implement
 - [ ] Audit socket/path ownership, registered host commands, scoped input snapshots, SSH identity, secret references, evidence redaction and offline/live separation.
+- [ ] Check event-visible metadata versus private replay authority and investigate concrete error-classification/atomicity scenarios from the [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition); metadata alone is not mutation authorization.
 
 #### Do not
 - [ ] Do not claim same-user sandboxing or automatic rollback of external messages, database writes or charges.
@@ -59,6 +61,8 @@ Requirement coverage: `HP-REQ-050`, `HP-REQ-051`.
 
 #### Implement
 - [ ] Implement/configure input, output, event and phase bounds; measure controller memory/log streaming; execute local backend on qualified macOS targets and test control without Aquarium dependencies.
+- [ ] Complete the general operator configuration loader and doctor diagnostics declared by the configuration contract, including explicit retention policy. TASK-037 owns only minimum startup global-limit selection and safe runner payload disposal; automatic deletion must preserve protected evidence and permanent replay identities.
+- [ ] Verify running-VM log usability and measure idle lock-clock writes, native process-census cost, controller/collection performance and check duration. Preserve clock, process-identity and evidence guarantees before optimizing; [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) records which claims still need measurement.
 
 #### Do not
 - [ ] Do not hide output truncation or publish unmeasured performance/platform claims.
@@ -81,6 +85,7 @@ Requirement coverage: `HP-REQ-052`, `HP-REQ-053`.
 
 #### Implement
 - [ ] Exercise Haepari schema migration under exclusive ownership, consistent backup/recovery, too-new rejection and candidate execution with an isolated state/socket.
+- [ ] Review repeated migration/replay authority and retained-event allowlists from the [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition). Preserve existing-store and legacy-evidence safety; this plan does not authorize deleting migration history.
 
 #### Do not
 - [ ] Do not replace the stable controller running its own campaign or downgrade a live SQLite store.
