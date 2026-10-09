@@ -42,14 +42,16 @@ func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.Jo
 			}
 		}
 		observed := managed.LocalPhase{Outcome: "complete"}
-		if collect.EvidenceCompleteness != "complete" || len(collect.ProtectedEvidence) > 0 {
+		if !collectionAllowsCleanup(job, collect) {
 			observed.Outcome, observed.ProtectedEvidence = "failed", collect.ProtectedEvidence
 		} else {
 			err, status := boundedPhaseWithWorker(deadline, s.detached, func(work func()) bool {
 				return s.startJobWorker(c.identity.JobID, work)
 			}, func() error {
-				err := removeTreeUntil(workspace, deadline)
-				if os.IsNotExist(err) {
+				err := s.cleanupLocalWorkspace(c.identity, job, out.Started, workspace, deadline)
+				// A missing v2 prepared pathname does not prove deletion of
+				// its bound directory; it may have moved with retained evidence.
+				if os.IsNotExist(err) && (!managed.AbsenceAware(job) || !out.Started) {
 					return nil
 				}
 				return err
@@ -62,7 +64,7 @@ func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.Jo
 				observed.Outcome = "failed"
 			}
 			if observed.Outcome != "complete" {
-				if _, err := os.Lstat(workspace); !os.IsNotExist(err) {
+				if _, err := os.Lstat(workspace); managed.AbsenceAware(job) && out.Started || !os.IsNotExist(err) {
 					observed.ProtectedEvidence = []managed.ProtectedEvidence{{Path: "workspace", Reason: "cleanup_interrupted", RecoveryReference: "job:" + c.identity.JobID}}
 				}
 			}

@@ -49,7 +49,7 @@ For each task, implement the smallest complete change, run focused checks before
 
 ## Decisions before affected implementation
 
-Master owns the semantic choices below. TASK-036 prepares their concrete contract proposals; its acceptance requires resolution and review. Until a decision is recorded, existing behavior and evidence protections remain authoritative.
+Master approved D1–D3 for EPIC-009 execution: positively absent outputs may permit INCOMPLETE with verified cleanup and reuse; same-resource cross-boot recovery uses a separate fenced capability; no new evidence-loss escape is added. TASK-036 implements and reviews these decisions under the owning F1/F2 deltas. Existing v1 admissions and terminal history remain authoritative for their original policy.
 
 | Decision | Proposed question and constraint | Work blocked until resolved |
 | --- | --- | --- |

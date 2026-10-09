@@ -129,6 +129,7 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 		}
 	}()
 	runtime.startWorker(func() { runtime.schedule(workerCtx) })
+	runtime.startWorker(func() { runtime.reconcilePeriodically(workerCtx) })
 	runtime.startWorker(func() { runtime.scheduleLocks(workerCtx) })
 	err = server.Serve(listener)
 	if ctx.Err() != nil || errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {

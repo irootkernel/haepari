@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -21,7 +22,7 @@ func (b vmEvidenceBackend) observeAttested(q runner.GuestRecoveryRequest, id man
 		allowed := false
 		if err == nil && snap.EvidenceIntent != nil && snap.EvidenceIntent.Action == "recollect" && snap.EvidenceReceipt != nil {
 			for _, o := range snap.EvidenceReceipt.Jobs {
-				if o.JobID == id.JobID && o.Stage == "collected" && len(o.GuestArtifacts) == 7 {
+				if o.JobID == id.JobID && o.Stage == "collected" && completeGuestRecoveryInventory(q, o.GuestArtifacts) {
 					allowed = true
 				}
 			}
@@ -58,6 +59,9 @@ func (b vmEvidenceBackend) attestedIntent(j managed.EvidenceRecoveryJob) (manage
 	return managed.EvidenceRecoveryIntent{}, managed.ErrBlocked
 }
 func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j managed.EvidenceRecoveryJob, destination string) collectionAttempt {
+	if !attestedAbsenceBinding(q, j) {
+		return collectionAttempt{}
+	}
 	if _, err := b.attestedIntent(j); err != nil {
 		return collectionAttempt{}
 	}
@@ -78,6 +82,10 @@ func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j mana
 	var total int64
 	for _, name := range j.Outputs {
 		v, err := b.s.collectVMFileUsing(q.Guest, name, filepath.Join(destination, name), j.CollectDeadline, (1<<30)-total, call)
+		if errors.Is(err, errOutputAbsent) && j.AbsenceBinding != nil {
+			a.absentOutputs = append(a.absentOutputs, managed.EvidenceAbsentOutput{Path: name, ObservedAt: time.Now().UTC()})
+			continue
+		}
 		if err != nil {
 			a.complete = false
 			return a
@@ -86,6 +94,12 @@ func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j mana
 		total += v.SizeBytes
 	}
 	for _, name := range []string{"output.log", "guest.json", "request.json", "intent.json", "start.json", "outcome.json", "exit.json"} {
+		if name != "output.log" && q.Attestation.Basis.Digests[name] == "" {
+			if q.Schema != "haepari.guest-recovery-request/v2" {
+				return collectionAttempt{}
+			}
+			continue // Explicit absence remains bound in the immutable v2 basis.
+		}
 		guest := q.Guest
 		guest.Area = "receipt"
 		if name == "output.log" {
@@ -97,7 +111,7 @@ func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j mana
 			return a
 		}
 		v, err := b.s.collectVMFileUsing(guest, name, filepath.Join(destination+"-native", name), j.CollectDeadline, limit, call)
-		if err != nil || name != "output.log" && "sha256:"+v.SHA256 != q.Attestation.Basis.Digests[name] || name == "output.log" && q.Attestation.Basis.Observation.Exit.Log != nil && v != q.Attestation.Basis.Observation.Exit.Log.Artifact {
+		if err != nil || name != "output.log" && "sha256:"+v.SHA256 != q.Attestation.Basis.Digests[name] || name == "output.log" && q.Attestation.Basis.Observation.Exit != nil && q.Attestation.Basis.Observation.Exit.Log != nil && v != q.Attestation.Basis.Observation.Exit.Log.Artifact {
 			a.complete = false
 			return a
 		}
@@ -116,11 +130,11 @@ func (b vmEvidenceBackend) cleanupAttested(q runner.GuestRecoveryRequest, j mana
 	}
 	var collected *managed.EvidenceRecoveryOutcome
 	for i := range receipt.Jobs {
-		if receipt.Jobs[i].JobID == j.JobID && receipt.Jobs[i].Stage == "collected" && len(receipt.Jobs[i].GuestArtifacts) == 7 {
+		if receipt.Jobs[i].JobID == j.JobID && receipt.Jobs[i].Stage == "collected" && completeGuestRecoveryInventory(q, receipt.Jobs[i].GuestArtifacts) {
 			collected = &receipt.Jobs[i]
 		}
 	}
-	if collected == nil {
+	if collected == nil || !attestedAbsenceBinding(q, j) {
 		return managed.ErrBlocked
 	}
 	// Revalidate all supplementary bytes immediately before the effect as well
@@ -150,6 +164,9 @@ func (b vmEvidenceBackend) cleanupAttested(q runner.GuestRecoveryRequest, j mana
 	q.Operation = "cleanup"
 	q.MutationKey = intent.MutationKey
 	q.CollectionDigest = managed.RecoveryDigest(collected)
+	for _, absent := range collected.AbsentOutputs {
+		q.AbsentOutputs = append(q.AbsentOutputs, absent.Path)
+	}
 	reply, err := b.s.vmRecoveryCall(q)
 	if err != nil {
 		if !errors.Is(err, utm.ErrGuestUncertain) {
@@ -158,9 +175,16 @@ func (b vmEvidenceBackend) cleanupAttested(q runner.GuestRecoveryRequest, j mana
 		// A transport observer can lose the completed cleanup reply. Reconcile
 		// by observation under the saved deadline; never extend or resubmit it.
 		q.Operation = "health"
+		q.AbsentOutputs = nil
 		observed, e := b.s.vmRecoveryCall(q)
 		if e == nil && observed.Reusable {
 			return nil
+		}
+		if e == nil && observed.Attestation != nil && observed.Basis != nil && reflect.DeepEqual(*observed.Attestation, *q.Attestation) && reflect.DeepEqual(*observed.Basis, q.Attestation.Basis) {
+			// A successful native state read holds the same control/run locks and
+			// verifies stopped ownership. The source still exists; retain it as a
+			// known failed cleanup rather than inventing a reusable absence.
+			return managed.ErrBlocked
 		}
 		return runner.ErrUnproven
 	}
@@ -168,11 +192,36 @@ func (b vmEvidenceBackend) cleanupAttested(q runner.GuestRecoveryRequest, j mana
 		return managed.ErrBlocked
 	}
 	q.Operation = "health"
+	q.AbsentOutputs = nil
 	reply, err = b.s.vmRecoveryCall(q)
 	if err != nil || !reply.Reusable {
 		return managed.ErrBlocked
 	}
 	return nil
+}
+
+func completeGuestRecoveryInventory(q runner.GuestRecoveryRequest, files []managed.ResultArtifact) bool {
+	if q.Attestation == nil || runner.ValidateGuestAttestation(*q.Attestation, q.Guest) != nil {
+		return false
+	}
+	expected := map[string]string{"output.log": ""}
+	for name, digest := range q.Attestation.Basis.Digests {
+		if name != "haepari" {
+			expected[name] = digest
+		}
+	}
+	if len(files) != len(expected) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, file := range files {
+		digest, found := expected[file.Path]
+		if !found || seen[file.Path] || digest != "" && digest != "sha256:"+file.SHA256 {
+			return false
+		}
+		seen[file.Path] = true
+	}
+	return true
 }
 
 // Decode the recorded request before recovery execution, including after
@@ -183,4 +232,12 @@ func decodeAttestationRequest(raw json.RawMessage) (runner.GuestRecoveryRequest,
 		return q, managed.ErrBlocked
 	}
 	return q, nil
+}
+
+func attestedAbsenceBinding(q runner.GuestRecoveryRequest, j managed.EvidenceRecoveryJob) bool {
+	if j.AbsenceBinding == nil {
+		return true
+	}
+	a := q.Attestation
+	return a != nil && runner.ValidateGuestAttestation(*a, q.Guest) == nil && q.Schema == "haepari.guest-recovery-request/v2" && q.Guest.Schema == "haepari.guest-request/v2" && a.Basis.WorkspaceRoot != nil && *a.Basis.WorkspaceRoot == j.AbsenceBinding.WorkspaceRoot && managed.RecoveryDigest(a) == j.AbsenceBinding.AttestationDigest && q.Guest.BootID == j.AbsenceBinding.OriginalBoot && a.Basis.RecoveryBoot == j.AbsenceBinding.RecoveryBoot && reflect.DeepEqual(a.Evidence, j.AbsenceBinding.Cessation)
 }

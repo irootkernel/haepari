@@ -235,9 +235,11 @@ func pendingRecoveryIntentsTx(tx *sql.Tx, resourceID string) ([]PowerIntent, err
 		if err := rows.Scan(&raw, &p.State, &p.Stage); err != nil {
 			return nil, err
 		}
-		if decodeClosed(raw, &p.Identity) != nil || !p.Identity.Valid() || !oneOf(p.Stage, "stop_ready", "stop_issued", "stop_uncertain", "start_ready", "start_issued", "start_uncertain") {
+		record, err := decodePowerTransition(raw)
+		if err != nil || !oneOf(p.Stage, "stop_ready", "stop_issued", "stop_uncertain", "start_ready", "start_issued", "start_uncertain") {
 			return nil, ErrBlocked
 		}
+		p.Identity = record.PowerTransitionIdentity
 		intents = append(intents, p)
 	}
 	return intents, rows.Err()
@@ -254,6 +256,24 @@ type JobRecoveryRequest struct {
 	NoOwnedEffect  bool             `json:"no_owned_effect,omitempty"`
 	Automatic      bool             `json:"automatic,omitempty"`
 	ClientDigest   string           `json:"client_digest,omitempty"`
+}
+
+// CommittedJobRecovery reads an existing authority; it does not admit a new
+// recovery or renew an effect deadline. The caller still proves current owners.
+func (l *Ledger) CommittedJobRecovery(id LocalIdentity, key string) (JobRecoveryRequest, error) {
+	var q JobRecoveryRequest
+	if !ValidRequestKey(key) {
+		return q, ErrInvalid
+	}
+	var raw []byte
+	err := l.db.QueryRow(`SELECT payload_json FROM managed_events WHERE job_id=? AND kind='recovery_intent' AND json_extract(payload_json,'$.mutation_key')=? ORDER BY cursor DESC LIMIT 1`, id.JobID, key).Scan(&raw)
+	if err != nil {
+		return q, mapNoRows(err)
+	}
+	if decodeClosed(raw, &q) != nil || q.Identity != id || q.MutationKey != key || !q.Evidence.valid() {
+		return q, ErrBlocked
+	}
+	return q, nil
 }
 
 // ReplayJobRecovery compares the permanent public request identity before

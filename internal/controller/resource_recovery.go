@@ -134,13 +134,22 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	if q.Plan && q.Evidence != nil || q.Action != "" && (!q.Plan || q.Action != "recollect" && q.Action != "dispose" && q.Action != "attest-guest-stopped") {
+	if q.Plan && q.Evidence != nil || q.Action != "" && (!q.Plan || q.Action != "recollect" && q.Action != "dispose" && q.Action != "attest-guest-stopped" && q.Action != "attest-power-stopped") {
 		reject(w, op, managed.ErrInvalid)
 		return
 	}
 	if q.Plan {
 		if q.PlanToken != "" || q.MutationKey != "" {
 			reject(w, op, managed.ErrInvalid)
+			return
+		}
+		if q.Action == "attest-power-stopped" {
+			plan, err := s.planPowerRecovery(id)
+			if err != nil {
+				reject(w, op, err)
+				return
+			}
+			send(w, 200, op, plan, nil)
 			return
 		}
 		var plan resourceRecoveryPlan
@@ -164,6 +173,14 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	key := "resource-recovery-" + q.MutationKey
+	if prior, found, err := s.ledger.ReplayPowerRecovery("power-recovery-"+q.MutationKey, powerClientDigest(id, q)); found || err != nil {
+		if err != nil {
+			reject(w, op, err)
+		} else {
+			send(w, 200, op, prior, nil)
+		}
+		return
+	}
 	// Permanent evidence-operation replay survives token expiry and restart.
 	if prior, receipt, found, err := s.ledger.EvidenceRecovery("evidence-recovery-"+q.MutationKey, managed.RecoveryDigest(struct {
 		ResourceID string
@@ -206,6 +223,10 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 	}
 	if token.Action == "attest-guest-stopped" {
 		s.applyGuestAttestation(w, r, id, q, token)
+		return
+	}
+	if token.Action == "attest-power-stopped" {
+		s.applyPowerRecovery(w, r, id, q, token)
 		return
 	}
 	if q.Evidence != nil {

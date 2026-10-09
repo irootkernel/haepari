@@ -203,7 +203,7 @@ func (l *Ledger) PurgeEventsThrough(jobID string, through int64) error {
 	}
 	// Recovery intents and compensations bind permanent replay/provenance;
 	// they remain private below the public resynchronization floor.
-	if _, err := tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled','vm_prepared','vm_retained','vm_retire_intent')`, jobID, through); err != nil {
+	if _, err := tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled','vm_prepared','vm_retained','vm_retire_intent','power_cessation','local_workspace')`, jobID, through); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE managed_event_progress SET purged_through=? WHERE job_id=?`, through, jobID); err != nil {
@@ -1009,7 +1009,11 @@ func (l *Ledger) SettleNoEffect(q SettleNoEffectRequest) (Receipt, error) {
 		if err != nil {
 			return Receipt{}, err
 		}
-		resultJSON, _ := json.Marshal(Result{Schema: "haepari.result/v1", JobID: q.JobID, ResourceID: resourceID,
+		schema, err := resultSchemaTx(tx, q.JobID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		resultJSON, _ := json.Marshal(Result{Schema: schema, JobID: q.JobID, ResourceID: resourceID,
 			ResourceRevision: configRev, LeaseGeneration: lease, JobState: "finished", ResourceAvailability: availability,
 			WorkloadOutcome: outcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict,
 			Observations: &ResultObservations{Source: q.JobID + ":" + proof.ObservationReference}, Timings: timings})
@@ -1088,7 +1092,11 @@ func (l *Ledger) finishQueued(jobID string, expectedRevision int64, mutationKey,
 		if err != nil {
 			return Receipt{}, err
 		}
-		resultJSON, _ := json.Marshal(Result{Schema: "haepari.result/v1", JobID: jobID, ResourceID: resourceID,
+		schema, err := resultSchemaTx(tx, jobID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		resultJSON, _ := json.Marshal(Result{Schema: schema, JobID: jobID, ResourceID: resourceID,
 			ResourceRevision: configRev, JobState: "finished", ResourceAvailability: availability, WorkloadOutcome: facts.WorkloadOutcome,
 			EvidenceCompleteness: facts.EvidenceCompleteness, CleanupOutcome: facts.CleanupOutcome, FinalVerdict: verdict, Reason: reason, Timings: timings})
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, resultJSON, jobID); err != nil {

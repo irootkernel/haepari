@@ -136,7 +136,7 @@ func DecodeResult(data []byte) (Result, error) {
 	if err := decodeClosed(data, &result); err != nil {
 		return result, err
 	}
-	if result.Schema != "haepari.result/v1" {
+	if !oneOf(result.Schema, "haepari.result/v1", "haepari.result/v2") {
 		return result, ErrUnsupported
 	}
 	if !identifier.MatchString(result.JobID) || !identifier.MatchString(result.ResourceID) || result.ResourceRevision <= 0 ||
@@ -231,6 +231,9 @@ func DecodeResultForJob(data []byte, job JobSpec) (Result, error) {
 	result, err := DecodeResult(data)
 	if err != nil {
 		return result, err
+	}
+	if result.Schema != ResultSchema(job) {
+		return result, ErrInvalid
 	}
 	// No-start results omit outputs from an unentered workload. The ledger
 	// requires the matching durable native or preparation termination proof.
@@ -377,4 +380,18 @@ func DecodeEnvelope(data []byte) (Envelope, error) {
 		}
 	}
 	return result, nil
+}
+
+// AbsenceAware selects the versioned settlement and workspace policy from the
+// original admission. Unknown and legacy versions never opt into that policy.
+func AbsenceAware(job JobSpec) bool {
+	return job.Schema == "haepari.job/v2"
+}
+
+// ResultSchema preserves the admitted policy across restart and replay.
+func ResultSchema(job JobSpec) string {
+	if AbsenceAware(job) {
+		return "haepari.result/v2"
+	}
+	return "haepari.result/v1"
 }

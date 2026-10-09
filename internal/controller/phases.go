@@ -144,13 +144,28 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 				return collectionAttempt{}
 			}
 		}
-		artifacts, complete, expired := collectOutputs(workspace, filepath.Join(jobRoot, "artifacts"), required, collectDeadline)
-		return collectionAttempt{artifacts: artifacts, complete: complete, expired: expired}
+		if managed.AbsenceAware(job) && outcome.Started {
+			if _, err := s.verifyLocalWorkspace(c.identity, workspace); err != nil {
+				return collectionAttempt{rootConflict: true}
+			}
+		}
+		a := collectOutputDetails(workspace, filepath.Join(jobRoot, "artifacts"), required, collectDeadline, 1<<30, 1000, copyUntil)
+		if managed.AbsenceAware(job) && outcome.Started {
+			if _, err := s.verifyLocalWorkspace(c.identity, workspace); err != nil {
+				a.complete = false
+				a.absent = nil
+				a.rootConflict = true
+			}
+		}
+		return a
 	})
 	protected := []managed.ProtectedEvidence{}
 	logs, gaps, err := s.ledger.LocalLogManifest(c.identity.JobID)
 	if err != nil {
 		return err
+	}
+	if collected.rootConflict {
+		gaps = append(gaps, managed.EvidenceGap{Path: "workspace", Reason: "workspace_identity_conflict"})
 	}
 	if len(gaps) > 0 {
 		collected.complete = false
@@ -162,7 +177,7 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 		}
 		for _, name := range required {
 			if !present[name] {
-				gaps = append(gaps, managed.EvidenceGap{Path: name, Reason: "required_output_uncollected"})
+				gaps = append(gaps, managed.EvidenceGap{Path: name, Reason: outputGapReason(job, name, collected.absent)})
 			}
 		}
 	}
@@ -175,7 +190,8 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	} else if !collected.complete {
 		collectionOutcome = "failed"
 	}
-	if !collected.complete {
+	safeCleanup := absenceAllowsCleanup(job, gaps, collected, collectionStatus) || collected.complete && collectionStatus == phaseInTime
+	if !collected.complete && !safeCleanup {
 		retentionReason := "required_output_uncollected"
 		if collected.expired {
 			retentionReason = "collection_deadline"
@@ -205,13 +221,13 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	cleanup := managed.CleanupOutcome("verified")
 	cleanupOutcome := "complete"
 	var cleanupErr error
-	if !collected.complete {
+	if !safeCleanup {
 		cleanupErr = errors.New("required evidence retained")
 	} else {
 		var status phaseStatus
 		cleanupErr, status = boundedOwnedPhase(s, cleanupDeadline, func() error {
-			err := removeTreeUntil(workspace, cleanupDeadline)
-			if os.IsNotExist(err) {
+			err := s.cleanupLocalWorkspace(c.identity, job, outcome.Started, workspace, cleanupDeadline)
+			if os.IsNotExist(err) && (!managed.AbsenceAware(job) || !outcome.Started) {
 				return nil
 			}
 			return err
@@ -227,7 +243,7 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 			cleanupOutcome = "late"
 		}
 		if cleanupErr != nil {
-			if _, err := os.Lstat(workspace); !os.IsNotExist(err) {
+			if _, err := os.Lstat(workspace); managed.AbsenceAware(job) && outcome.Started || !os.IsNotExist(err) {
 				protected = append(protected, managed.ProtectedEvidence{Path: "workspace", Reason: "cleanup_incomplete", RecoveryReference: "job:" + c.identity.JobID})
 			}
 		}
@@ -256,6 +272,9 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	}
 	if !collected.complete {
 		result.Reason = "evidence_retained"
+		if safeCleanup {
+			result.Reason = "required_output_absent"
+		}
 	}
 	return s.verifyLocalResult(c, result, false)
 }
@@ -275,7 +294,11 @@ func (s *runtimeServer) verifyLocalResult(c *localRunControl, result managed.Res
 	if err != nil {
 		return err
 	}
-	result.Schema, result.JobID, result.ResourceID = "haepari.result/v1", c.identity.JobID, c.identity.ResourceID
+	snapshot, err := s.ledger.RecoverySnapshot(c.identity.JobID)
+	if err != nil {
+		return err
+	}
+	result.Schema, result.JobID, result.ResourceID = managed.ResultSchema(snapshot.Spec), c.identity.JobID, c.identity.ResourceID
 	result.ResourceRevision, result.LeaseGeneration = c.identity.ConfigRevision, c.identity.LeaseGeneration
 	result.JobState, result.FinalVerdict = "finished", verdict
 	if c.recoveryEvidence != nil {

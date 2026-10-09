@@ -35,7 +35,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		{"resource resume", "resource resume <id> --expected-revision <n> [--expected-config-revision <n> --expected-lease-generation <n>] [--request-key <key>] --json"},
 		{"resource update", "resource update --file <lock-or-vm-json> --expected-revision <n> [--expected-availability-revision <n> (required for VM)] --json"},
 		{"resource remove", "resource remove <id> --expected-revision <n> --json"},
-		{"resource recover", "resource recover <id> --plan [--action recollect|dispose|attest-guest-stopped] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},
+		{"resource recover", "resource recover <id> --plan [--action recollect|dispose|attest-guest-stopped|attest-power-stopped] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},
 		{"job recover", "job recover <id> --plan [--action reconcile|attest-stopped|attest-no-start] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},
 		{"resources list", "resources list [--cursor <cursor>] [--limit <1-100>] --json"},
 		{"jobs list", "jobs list [--resource <id>] [--state <state>] [--cursor <cursor>] [--limit <1-100>] --json"},
@@ -78,7 +78,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		Canonicalization string                    `json:"canonicalization"`
 	}{
 		Schema: "haepari.help/v1", Protocol: "managed-execution/v1", Commands: commands,
-		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.resource/v1", "haepari.result/v1", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1"},
+		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1"},
 		ErrorExits: errors, VerdictExits: map[managed.Verdict]int{managed.Pass: 0, managed.Fail: 1, managed.Incomplete: 3, managed.Cancelled: 4},
 		Enums: map[string][]string{
 			"job_state":             {"queued", "preparing", "ready", "running", "awaiting_manual", "cancelling", "collecting", "cleaning", "settling", "reconciling", "finished"},

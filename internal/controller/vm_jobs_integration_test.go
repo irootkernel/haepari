@@ -385,6 +385,9 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 	})
 	ginkgo.DescribeTable("recovers a stopped partial preparation without preparing or executing again", func(unbound bool) {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "false")
+		// Full race suites transfer the native runner repeatedly. Admit the
+		// complete interruption/observation budget before the first effect.
+		f.job.Deadlines.PrepareSeconds, f.job.Deadlines.CleanupSeconds = 30, 10
 		native := f.s.sshCommand
 		preparations := 0
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
@@ -444,7 +447,7 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		}
 		r, err := f.reserve(f.admit("vm-partial-prepare"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(errors.Is(f.s.executeVM(r, f.job, f.object, time.Now().Add(10*time.Second)), utm.ErrGuestUncertain)).To(gomega.BeTrue())
+		gomega.Expect(errors.Is(f.s.executeVM(r, f.job, f.object, time.Now().Add(30*time.Second)), utm.ErrGuestUncertain)).To(gomega.BeTrue())
 		gomega.Expect(f.s.ledger.MarkInterrupted()).To(gomega.Succeed())
 		fresh, err := newRuntime(f.s.root, f.s.ledger, f.s.store)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -529,6 +532,9 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 	})
 	ginkgo.It("keeps the lease occupied while a remote collector has no termination proof", func() {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf retained > ../results/output.txt")
+		// Include failed observation bursts and later native reconciliation in
+		// the admitted budget; recovery must still use this exact deadline.
+		f.job.Deadlines.CollectSeconds, f.job.Deadlines.CleanupSeconds = 30, 10
 		native := f.s.sshCommand
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
 			q := vmTransportRequest(input)
@@ -557,7 +563,7 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		f.s.workers.Wait()
 		result, err := f.s.ledger.Result(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Pass))
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Pass), "result: %+v", result)
 		phases, err := f.s.ledger.LocalPhases(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(phases["collect"].Deadline).To(gomega.Equal(snap.Phases["collect"].Deadline))

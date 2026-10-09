@@ -205,7 +205,11 @@ func (l *Ledger) Cancel(q CancelRequest) (CancelReceipt, error) {
 				if err != nil {
 					return CancelReceipt{}, err
 				}
-				result := Result{Schema: "haepari.result/v1", JobID: q.JobID, ResourceID: current.ResourceID, ResourceRevision: owner.ConfigRevision, JobState: "finished", ResourceAvailability: current.ResourceAvailability, WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict, Reason: "cancelled", Timings: timings}
+				schema, err := resultSchemaTx(tx, q.JobID)
+				if err != nil {
+					return CancelReceipt{}, err
+				}
+				result := Result{Schema: schema, JobID: q.JobID, ResourceID: current.ResourceID, ResourceRevision: owner.ConfigRevision, JobState: "finished", ResourceAvailability: current.ResourceAvailability, WorkloadOutcome: "cancelled", EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict, Reason: "cancelled", Timings: timings}
 				data, _ := json.Marshal(result)
 				if _, err = tx.Exec(`UPDATE managed_jobs SET result_json=? WHERE id=?`, data, q.JobID); err != nil {
 					return CancelReceipt{}, err

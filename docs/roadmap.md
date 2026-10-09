@@ -28,7 +28,7 @@ Lifecycle status vocabulary:
 | [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | Accepted |
 | [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Accepted |
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Accepted |
-| [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Planned |
+| [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | In progress |
 | [EPIC-005](roadmap/EPIC-005.md) | Project, skill, manual and migration integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Planned |
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Planned |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Planned |
@@ -61,7 +61,7 @@ EPIC-009 Detailed SOT: [VM operational readiness execution dossier](TODO-VM-OPER
 | [TASK-014](roadmap/EPIC-004.md#task-014) | Implement authenticated SSH and guest runner continuity | TASK-013, TASK-009 | Active | Accepted |
 | [TASK-015](roadmap/EPIC-004.md#task-015) | Integrate VM collection, job cleanup and recovery | TASK-014, TASK-010, TASK-011, TASK-012 | Active | Accepted |
 | [TASK-016](roadmap/EPIC-004.md#task-016) | Qualify the real macOS VM backend; freeze VM contract fields | TASK-015, TASK-034 | Active | Accepted |
-| [TASK-036](roadmap/EPIC-009.md#task-036) | Restore recoverable VM failure handling | TASK-012, TASK-015 | Active | Planned |
+| [TASK-036](roadmap/EPIC-009.md#task-036) | Restore recoverable VM failure handling | TASK-012, TASK-015 | Active | Accepted |
 | [TASK-037](roadmap/EPIC-009.md#task-037) | Bound VM startup, transport, and retained runner storage | TASK-036 | Active | Planned |
 | [TASK-038](roadmap/EPIC-009.md#task-038) | Publish and execute repeatable real-VM qualification | TASK-016, TASK-037 | Active | Planned |
 | [TASK-039](roadmap/EPIC-009.md#task-039) | Demonstrate one real project through the development service | TASK-038 | Active | Planned |

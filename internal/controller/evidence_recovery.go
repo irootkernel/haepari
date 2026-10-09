@@ -63,6 +63,13 @@ func (s *runtimeServer) evidenceRecoveryBasis(id, action string) (managed.Resour
 			}
 			if found {
 				job.GuestLogLimitBytes = attestation.Attestation.Basis.Request.LogLimitBytes
+				if action == "recollect" && managed.AbsenceAware(b.Spec) && attestation.Schema == "haepari.guest-recovery-request/v2" && attestation.Guest.Schema == "haepari.guest-request/v2" {
+					a := attestation.Attestation
+					if a == nil || runner.ValidateGuestAttestation(*a, attestation.Guest) != nil || a.Basis.WorkspaceRoot == nil {
+						return snap, nil, managed.ErrBlocked
+					}
+					job.AbsenceBinding = &managed.EvidenceAbsenceBinding{WorkspaceRoot: *a.Basis.WorkspaceRoot, AttestationDigest: managed.RecoveryDigest(a), OriginalBoot: attestation.Guest.BootID, RecoveryBoot: a.Basis.RecoveryBoot, Cessation: a.Evidence}
+				}
 			}
 		}
 		jobs = append(jobs, job)
@@ -85,6 +92,21 @@ func (s *runtimeServer) planEvidenceRecovery(id, action string) (resourceRecover
 		return p, err
 	}
 	p.Observation = jobs
+	backend, err := s.evidenceBackendFor(snap.Resource.Kind, id)
+	if err != nil {
+		return p, err
+	}
+	if _, native := backend.(vmEvidenceBackend); native {
+		for _, job := range jobs {
+			q, found, err := s.vmAttestation(job.JobID)
+			if err != nil {
+				return p, err
+			}
+			if found && q.Schema == "haepari.guest-recovery-request/v2" {
+				p.Schema = "haepari.recovery-plan/v2"
+			}
+		}
+	}
 	if action == "dispose" {
 		for _, j := range jobs {
 			p.EvidenceLoss = append(p.EvidenceLoss, j.Protected...)
@@ -164,6 +186,11 @@ func (s *runtimeServer) applyEvidenceRecovery(w http.ResponseWriter, r *http.Req
 		jobs[i].CleanupDeadline = jobs[i].CollectDeadline.Add(time.Duration(b.Spec.Deadlines.CleanupSeconds) * time.Second)
 	}
 	intent := managed.EvidenceRecoveryIntent{Schema: "haepari.evidence-recovery-intent/v1", ResourceID: id, ResourceConfigRevision: snap.Resource.ConfigRevision, ResourceAvailabilityRevision: snap.Resource.AvailabilityRevision, SnapshotDigest: token.SnapshotDigest, MutationKey: key, ClientDigest: digest, Action: token.Action, Owner: owner.Identity, Jobs: jobs, RecordedAt: now}
+	for _, j := range jobs {
+		if j.AbsenceBinding != nil {
+			intent.Schema = "haepari.evidence-recovery-intent/v2"
+		}
+	}
 	if token.Action == "dispose" {
 		intent.AuthorityReference = "request:" + key
 	}
@@ -236,6 +263,9 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 	}
 	if r == nil {
 		r = &managed.EvidenceRecoveryReceipt{Schema: "haepari.evidence-recovery-receipt/v1", MutationKey: q.MutationKey, Jobs: []managed.EvidenceRecoveryOutcome{}, Observation: recoveryObservation("evidence-recovery-intent", q, "resource:"+q.ResourceID)}
+		if q.Schema == "haepari.evidence-recovery-intent/v2" {
+			r.Schema = "haepari.evidence-recovery-receipt/v2"
+		}
 		for _, j := range q.Jobs {
 			r.Jobs = append(r.Jobs, managed.EvidenceRecoveryOutcome{JobID: j.JobID, ResultDigest: j.ResultDigest, Stage: "pending", Artifacts: []managed.ResultArtifact{}})
 		}
@@ -299,6 +329,7 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 			r.ActiveOwner = nil
 			o.Artifacts = collected.artifacts
 			o.GuestArtifacts = collected.guestArtifacts
+			o.AbsentOutputs = collected.absentOutputs
 			o.ArtifactRoot = destination
 			if status != phaseInTime || !collected.complete {
 				o.Stage = "failed"

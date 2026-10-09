@@ -24,6 +24,10 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 	ctx, cancel := context.WithDeadline(ctx, q.Deadline)
 	defer cancel()
 	guest := q.Guest
+	reboot := q.Schema == "haepari.guest-recovery-request/v2"
+	if !reboot && (q.Schema != "haepari.guest-recovery-request/v1" || q.RecoveryBoot != "") || reboot && q.RecoveryBoot == "" && q.Operation != "probe" {
+		return reply, ErrUnavailable
+	}
 	mac, err := normalizeMAC(spec.VM.MACAddress)
 	if err != nil || guest.VMUUID != strings.ToLower(spec.VM.UTMVMUUID) || guest.MAC != mac || guest.JobRoot != spec.VM.GuestJobRoot || guest.Request.Identity.ResourceID != spec.ID || guest.Request.Identity.ConfigRevision != spec.Revision || guest.BootID == "" || guest.Request.BootID != guest.BootID {
 		return reply, ErrUnavailable
@@ -37,8 +41,15 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		return reply, err
 	}
 	challenge := hex.EncodeToString(nonce[:])
+	var proofErr error
 	verify := func(ctx context.Context, lease Lease, uuid, nonce string) (GuestIdentity, error) {
 		probe := guest
+		if reboot {
+			// The trusted recovery executable supports classified identity proof.
+			// Do not change the original nested Guest request or its receipts.
+			probe.Schema = "haepari.guest-request/v2"
+			probe.BootID = q.RecoveryBoot
+		}
 		probe.Operation = "identity"
 		probe.Challenge = nonce
 		probe.RunnerDigest = s.RunnerDigest
@@ -46,11 +57,21 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		probe.Files = nil
 		probe.Inventory = nil
 		r, e := s.exchange(ctx, spec, lease, probe)
+		proofErr = e
 		return GuestIdentity{VMUUID: r.VMUUID, MAC: r.MAC, Address: lease.Address, HostKey: pin, BootID: r.BootID, Nonce: r.Challenge, OS: r.OS, Arch: r.Arch}, e
 	}
 	lease, identity, err := s.Control.ResolveGuest(ctx, leases, guest.VMUUID, mac, pin, challenge, time.Now, verify)
-	if err != nil || identity.BootID != guest.BootID || !lease.Expires.After(time.Now()) {
+	if err != nil {
+		if reboot && errors.Is(proofErr, ErrGuestRefused) {
+			return reply, proofErr
+		}
 		return reply, ErrUnavailable
+	}
+	if !reboot && identity.BootID != guest.BootID || reboot && (identity.BootID == "" || identity.BootID == guest.BootID || q.RecoveryBoot != "" && identity.BootID != q.RecoveryBoot) || !lease.Expires.After(time.Now()) {
+		return reply, ErrUnavailable
+	}
+	if reboot {
+		q.RecoveryBoot = identity.BootID
 	}
 	q.Guest.Challenge = challenge
 	raw, err := s.exchangeWire(ctx, spec, lease, q, true)
@@ -58,15 +79,34 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		return reply, errors.Join(ErrGuestUncertain, err)
 	}
 	envelope, err := managed.DecodeEnvelope(raw)
-	if err != nil || !envelope.OK || envelope.Operation != "runner.guest-recovery" {
+	if err != nil || envelope.Operation != "runner.guest-recovery" {
+		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
+	}
+	if !envelope.OK {
+		if reboot {
+			return reply, errors.Join(ErrGuestUncertain, guestRefusalError(envelope.Error, true))
+		}
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	reply, err = runner.DecodeGuestRecoveryReply(envelope.Data)
 	g := reply.Guest
-	if err != nil || reply.RecoveryDigest != s.RunnerDigest || reply.Schema != "haepari.guest-recovery-reply/v1" || reply.ProtocolDigest != managed.RecoveryDigest(q) || g.VMUUID != guest.VMUUID || g.MAC != guest.MAC || g.BootID != guest.BootID || g.Challenge != challenge || g.OS != "darwin" || g.Arch != "arm64" || !lease.Expires.After(time.Now()) {
+	expectedSchema, expectedBoot := "haepari.guest-recovery-reply/v1", guest.BootID
+	if reboot {
+		expectedSchema, expectedBoot = "haepari.guest-recovery-reply/v2", q.RecoveryBoot
+	}
+	if err != nil || reply.RecoveryDigest != s.RunnerDigest || reply.Schema != expectedSchema || reply.ProtocolDigest != managed.RecoveryDigest(q) || g.Schema != runner.GuestReplySchema(guest) || g.VMUUID != guest.VMUUID || g.MAC != guest.MAC || g.BootID != expectedBoot || g.Challenge != challenge || g.OS != "darwin" || g.Arch != "arm64" || !lease.Expires.After(time.Now()) {
 		return runner.GuestRecoveryReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
+	if reply.CompletedCleanup != nil {
+		if !reboot || q.Operation != "probe" || q.Basis != nil || q.Attestation != nil || reply.Basis != nil || reply.Attestation != nil || !reply.Reusable || runner.ValidateGuestCompletedCleanup(*reply.CompletedCleanup, guest, expectedBoot) != nil || g.File != nil || g.Absent || len(g.Output) != 0 || g.NextOffset != 0 || g.Request != nil || g.Root != nil || g.Control != nil || g.Observation != nil || g.SupervisorAlive != nil || g.OwnersLive != nil || g.Reusable {
+			return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
+		}
+		return reply, nil
+	}
 	if reply.Basis == nil || reply.Basis.Request.Identity != guest.Request.Identity || reply.Basis.Request.BootID != guest.BootID || guest.Root != nil && reply.Basis.Root != *guest.Root {
+		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
+	}
+	if reboot && reply.Basis.RecoveryBoot != expectedBoot || !reboot && (reply.Basis.RecoveryBoot != "" || len(reply.Basis.Missing) != 0) {
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	if reply.Attestation != nil && (runner.ValidateGuestAttestation(*reply.Attestation, guest) != nil || reply.Attestation.RecoveryDigest != s.RunnerDigest) {
@@ -80,6 +120,12 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 	}
 	if q.Operation != "probe" && reply.Attestation == nil {
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
+	}
+	if g.Absent {
+		if !reboot || q.Operation != "file" || guest.Schema != "haepari.guest-request/v2" || reply.Attestation == nil || reply.Basis.WorkspaceRoot == nil || !reflect.DeepEqual(*reply.Basis, reply.Attestation.Basis) || guest.Area != "" && guest.Area != "workspace" || !managed.ValidArtifactPath(guest.Path) || guest.Offset != 0 || guest.ExpectedFile != nil || g.File != nil || len(g.Output) != 0 || g.NextOffset != 0 {
+			return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
+		}
+		return reply, nil
 	}
 	if q.Operation == "file" && (g.File == nil || g.File.Path != guest.Path || g.File.Inode == 0 || len(g.Output) > 64<<10 || g.NextOffset != guest.Offset+int64(len(g.Output)) || g.File.Size < g.NextOffset || g.File.Size > 1<<30 || len(g.File.SHA256) != 64) {
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)

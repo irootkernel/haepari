@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -10,14 +13,16 @@ import (
 )
 
 type vmRecoveryFacts struct {
-	Request            runner.Request        `json:"request"`
-	Root               *managed.RetainedPath `json:"root"`
-	View               *runner.Observation   `json:"receipts"`
-	WorkerStopped      bool                  `json:"worker_stopped"`
-	SupervisorAlive    *bool                 `json:"supervisor_alive"`
-	OwnersLive         *bool                 `json:"owners_live"`
-	PartialPreparation bool                  `json:"partial_preparation"`
-	Reusable           bool                  `json:"reusable"`
+	CompletedCleanup   *runner.GuestCompletedCleanup `json:"completed_cleanup,omitempty"`
+	Reboot             *runner.GuestRecoveryReply    `json:"reboot,omitempty"`
+	Request            runner.Request                `json:"request"`
+	Root               *managed.RetainedPath         `json:"root"`
+	View               *runner.Observation           `json:"receipts"`
+	WorkerStopped      bool                          `json:"worker_stopped"`
+	SupervisorAlive    *bool                         `json:"supervisor_alive"`
+	OwnersLive         *bool                         `json:"owners_live"`
+	PartialPreparation bool                          `json:"partial_preparation"`
+	Reusable           bool                          `json:"reusable"`
 }
 
 func (s *runtimeServer) observeVMRecovery(snapshot managed.RecoverySnapshot) (runner.GuestRequest, vmRecoveryFacts, error) {
@@ -32,7 +37,26 @@ func (s *runtimeServer) observeVMRecovery(snapshot managed.RecoverySnapshot) (ru
 	q.Deadline = time.Now().Add(5 * time.Second)
 	state, err := s.vmCall(q)
 	if err != nil || state.Control == nil {
-		return q, vmRecoveryFacts{}, managed.ErrBlocked
+		guest, facts, e := s.observeVMRebootRecovery(q)
+		if e == nil && facts.Reboot != nil {
+			for _, name := range []string{"request", "intent", "start", "outcome", "exit"} {
+				if raw := snapshot.Runner[name]; len(raw) > 0 {
+					sum := sha256.Sum256(raw)
+					if facts.Reboot.Basis.Digests[name+".json"] != "sha256:"+hex.EncodeToString(sum[:]) {
+						return guest, facts, managed.ErrBlocked
+					}
+				}
+			}
+		}
+		if e == nil && facts.CompletedCleanup != nil && !completedCleanupMatchesSnapshot(snapshot, facts) {
+			return guest, facts, managed.ErrBlocked
+		}
+		if e == nil && facts.CompletedCleanup != nil {
+			if err := s.verifyVMStored(snapshot.Identity.JobID, snapshot.Phases["collect"], time.Now().Add(5*time.Second)); err != nil {
+				return guest, facts, managed.ErrBlocked
+			}
+		}
+		return guest, facts, e
 	}
 	facts := vmRecoveryFacts{Request: q.Request, Root: state.Root, WorkerStopped: state.Control.Stopped}
 	if !facts.WorkerStopped {
@@ -70,9 +94,25 @@ func (s *runtimeServer) observeVMRecovery(snapshot managed.RecoverySnapshot) (ru
 	return q, facts, nil
 }
 func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, error) {
+	if p.Snapshot.Identity.RunID == "" {
+		if _, err := s.ledger.VMPreflightCessation(p.Snapshot.Identity); err == nil {
+			return s.planVMPreflightRecovery(p)
+		}
+	}
 	q, facts, err := s.observeVMRecovery(p.Snapshot)
 	_ = q
 	p.Observation = facts
+	if facts.Reboot != nil || facts.CompletedCleanup != nil {
+		p.Schema = "haepari.recovery-plan/v2"
+		for _, name := range []string{"prepare", "collect", "cleanup"} {
+			if phase, exists := p.Snapshot.Phases[name]; exists && !controllerOwnerStopped(phase) {
+				p.Unknowns = append(p.Unknowns, name+" controller filesystem worker termination is unproven")
+			}
+		}
+	}
+	if (facts.Reboot != nil || facts.CompletedCleanup != nil) && p.Action != "reconcile" {
+		p.Unknowns = append(p.Unknowns, "cross-boot Job recovery requires an explicit reconcile plan")
+	}
 	if err != nil {
 		p.Unknowns = append(p.Unknowns, "exact guest worker and native ownership observation is unavailable")
 	}
@@ -95,7 +135,7 @@ func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, e
 		if p.Action == "attest-no-start" && facts.View != nil && facts.View.Start != nil {
 			return p, managed.ErrConflict
 		}
-	} else if !p.Snapshot.Stopped && !facts.PartialPreparation && !(facts.View != nil && (facts.View.Exit != nil && facts.View.Exit.TerminationProven || facts.View.State == "prepared" && facts.View.Intent == nil || facts.SupervisorAlive != nil && *facts.SupervisorAlive)) {
+	} else if !p.Snapshot.Stopped && facts.Reboot == nil && !facts.PartialPreparation && !(facts.View != nil && (facts.View.Exit != nil && facts.View.Exit.TerminationProven || facts.View.State == "prepared" && facts.View.Intent == nil || facts.SupervisorAlive != nil && *facts.SupervisorAlive)) {
 		p.Unknowns = append(p.Unknowns, "original workload termination or surviving supervisor is unproven")
 	}
 	if len(p.Unknowns) == 0 {
@@ -106,6 +146,11 @@ func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, e
 	return p, nil
 }
 func (s *runtimeServer) recoverVMInterrupted(snapshot managed.RecoverySnapshot, automatic bool, attestation *managed.RecoveryEvidence, plan *jobRecoveryPlan, key, clientDigest string) error {
+	if snapshot.Identity.RunID == "" {
+		if _, err := s.ledger.VMPreflightCessation(snapshot.Identity); err == nil {
+			return s.recoverVMPreflight(snapshot, automatic, attestation, plan, key, clientDigest)
+		}
+	}
 	if snapshot.Receipt.JobState != "reconciling" || len(snapshot.AdapterIntents) > 0 || s.jobWorkerAlive(snapshot.Identity.JobID) {
 		return managed.ErrBlocked
 	}
@@ -122,12 +167,27 @@ func (s *runtimeServer) recoverVMInterrupted(snapshot managed.RecoverySnapshot, 
 	if err != nil {
 		return err
 	}
+	if facts.Reboot != nil {
+		if automatic {
+			return s.recoverVMReboot(snapshot, q, *facts.Reboot, nil, "", "")
+		}
+		if plan == nil || plan.Action != "reconcile" || attestation != nil {
+			return managed.ErrBlocked
+		}
+		return s.recoverVMReboot(snapshot, q, *facts.Reboot, plan, key, clientDigest)
+	}
+	if facts.CompletedCleanup != nil && (attestation != nil || plan != nil && plan.Action != "reconcile") {
+		return managed.ErrBlocked
+	}
 	for _, phase := range snapshot.Phases {
 		if time.Now().Before(phase.ObservedAt) {
 			return managed.ErrBlocked
 		}
 	}
 	request := managed.JobRecoveryRequest{Identity: snapshot.Identity, SnapshotDigest: managed.RecoveryDigest(snapshot), MutationKey: "vm-restart-" + snapshot.EventsDigest[7:39], Automatic: automatic, Evidence: recoveryObservation("authenticated-guest-native-receipts", facts, "job:"+snapshot.Identity.JobID)}
+	if facts.CompletedCleanup != nil {
+		request.Evidence = recoveryObservation("guest-completed-cleanup-observed", facts, "job:"+snapshot.Identity.JobID)
+	}
 	if key != "" {
 		request.MutationKey = key
 		request.ClientDigest = clientDigest
@@ -202,7 +262,7 @@ func (s *runtimeServer) recoverVMInterrupted(snapshot managed.RecoverySnapshot, 
 	// Publishing an observed native request does not grant a new execution. Its
 	// source is the original closed guest receipt, fenced by the current lease.
 	if q.Root != nil {
-		binding := runner.GuestReply{Root: q.Root, Control: &runner.GuestControl{Schema: "haepari.guest-control/v1", Request: q}}
+		binding := runner.GuestReply{Root: q.Root}
 		if !facts.PartialPreparation {
 			binding.Request = &q.Request
 		}
@@ -269,7 +329,11 @@ func (s *runtimeServer) recoverVMInterrupted(snapshot managed.RecoverySnapshot, 
 				if e != nil {
 					err = e
 				} else {
-					err = s.settleVMPhases(c, snapshot.Spec, q, out)
+					if facts.CompletedCleanup != nil {
+						err = s.settleVMCompletedCleanup(c, snapshot.Spec, q, out)
+					} else {
+						err = s.settleVMPhases(c, snapshot.Spec, q, out)
+					}
 				}
 			}
 		}
@@ -282,4 +346,30 @@ func (s *runtimeServer) recoverVMInterrupted(snapshot managed.RecoverySnapshot, 
 		return errControllerDetached
 	}
 	return nil
+}
+
+func completedCleanupMatchesSnapshot(snapshot managed.RecoverySnapshot, facts vmRecoveryFacts) bool {
+	collect, collectExists := snapshot.Phases["collect"]
+	cleanup, cleanupExists := snapshot.Phases["cleanup"]
+	if !collectExists || !collect.Completed || !collectionAllowsCleanup(snapshot.Spec, collect) || !cleanupExists || !controllerOwnerStopped(cleanup) || facts.View == nil {
+		return false
+	}
+	for _, value := range []struct {
+		name    string
+		receipt any
+	}{{"intent", facts.View.Intent}, {"start", facts.View.Start}, {"outcome", facts.View.Outcome}, {"exit", facts.View.Exit}} {
+		if raw := snapshot.Runner[value.name]; len(raw) > 0 {
+			var compact bytes.Buffer
+			current, err := json.Marshal(value.receipt)
+			if err != nil || json.Compact(&compact, raw) != nil || !bytes.Equal(compact.Bytes(), current) {
+				return false
+			}
+		}
+	}
+	for _, name := range []string{"prepare", "collect", "cleanup"} {
+		if p, exists := snapshot.Phases[name]; exists && !controllerOwnerStopped(p) {
+			return false
+		}
+	}
+	return true
 }

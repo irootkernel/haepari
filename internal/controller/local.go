@@ -96,7 +96,17 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		if err != nil {
 			return err
 		}
-		return copyInputWithCancel(snap, workspace, prepareDeadline, c.wake)
+		if err := copyInputWithCancel(snap, workspace, prepareDeadline, c.wake); err != nil {
+			return err
+		}
+		if managed.AbsenceAware(job) {
+			root, err := localWorkspaceRoot(workspace)
+			if err != nil {
+				return err
+			}
+			return s.ledger.BindLocalWorkspace(c.identity, root)
+		}
+		return nil
 	})
 	prepareOutcome := "complete"
 	if errors.Is(prepareErr, errPrepareUnproven) {
@@ -209,8 +219,11 @@ func prepareOwnedLocal(s *runtimeServer, deadline time.Time, work func() error) 
 }
 
 type collectionAttempt struct {
+	absentOutputs  []managed.EvidenceAbsentOutput
 	guestArtifacts []managed.ResultArtifact
 	artifacts      []managed.ResultArtifact
+	absent         []string
+	rootConflict   bool
 	complete       bool
 	expired        bool
 	unproven       bool // remote filesystem owner could still be acting
@@ -303,6 +316,8 @@ func copyInputWithCancel(snap snapshot.Snapshot, destination string, deadline ti
 	return nil
 }
 
+var errOutputAbsent = errors.New("positively absent required output")
+
 func openContainedOutput(root, name string) (*os.File, os.FileInfo, error) {
 	fd, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -324,6 +339,9 @@ func openContainedOutput(root, name string) (*os.File, os.FileInfo, error) {
 		next, openErr := unix.Openat(fd, part, flags, 0)
 		unix.Close(fd)
 		if openErr != nil {
+			if errors.Is(openErr, unix.ENOENT) {
+				return nil, nil, errors.Join(errOutputAbsent, openErr)
+			}
 			return nil, nil, openErr
 		}
 		fd = next
@@ -355,21 +373,29 @@ func collectOutputsBounded(workspace, artifactRoot string, required []string, de
 }
 
 func collectOutputsWithCopy(workspace, artifactRoot string, required []string, deadline time.Time, byteLimit int64, countLimit int, copyFile func(io.Writer, io.Reader, time.Time) (int64, error)) ([]managed.ResultArtifact, bool, bool) {
+	a := collectOutputDetails(workspace, artifactRoot, required, deadline, byteLimit, countLimit, copyFile)
+	return a.artifacts, a.complete, a.expired
+}
+func collectOutputDetails(workspace, artifactRoot string, required []string, deadline time.Time, byteLimit int64, countLimit int, copyFile func(io.Writer, io.Reader, time.Time) (int64, error)) collectionAttempt {
 	if byteLimit <= 0 || countLimit <= 0 || len(required) > countLimit {
-		return nil, false, false
+		return collectionAttempt{}
 	}
 	if err := os.Mkdir(artifactRoot, 0700); err != nil {
-		return nil, false, false
+		return collectionAttempt{}
 	}
 	artifacts := make([]managed.ResultArtifact, 0, len(required))
+	absent := []string{}
 	complete := true
 	var collectedBytes int64
 	for _, name := range required {
 		if !time.Now().Before(deadline) {
-			return artifacts, false, true
+			return collectionAttempt{artifacts: artifacts, absent: absent, expired: true}
 		}
 		input, info, err := openContainedOutput(workspace, name)
 		if err != nil {
+			if errors.Is(err, errOutputAbsent) {
+				absent = append(absent, name)
+			}
 			complete = false
 			continue
 		}
@@ -401,7 +427,7 @@ func collectOutputsWithCopy(workspace, artifactRoot string, required []string, d
 			complete = false
 			_ = os.Remove(target)
 			if errors.Is(copyErr, context.DeadlineExceeded) || !time.Now().Before(deadline) {
-				return artifacts, false, true
+				return collectionAttempt{artifacts: artifacts, absent: absent, expired: true}
 			}
 			continue
 		}
@@ -409,9 +435,9 @@ func collectOutputsWithCopy(workspace, artifactRoot string, required []string, d
 		collectedBytes += size
 	}
 	if !time.Now().Before(deadline) {
-		return artifacts, false, true
+		return collectionAttempt{artifacts: artifacts, absent: absent, expired: true}
 	}
-	return artifacts, complete, false
+	return collectionAttempt{artifacts: artifacts, absent: absent, complete: complete}
 }
 
 func copyUntil(dst io.Writer, src io.Reader, deadline time.Time) (int64, error) {
@@ -444,21 +470,32 @@ func copyUntil(dst io.Writer, src io.Reader, deadline time.Time) (int64, error) 
 // removeTreeUntil never follows workload-created links. A deadline or error
 // retains the remaining workspace and keeps its resource quarantined.
 func removeTreeUntil(root string, deadline time.Time) error {
+	return removeTreeUntilBound(root, deadline, nil)
+}
+
+func removeTreeUntilBound(root string, deadline time.Time, expected *managed.RetainedPath) error {
 	parent, err := unix.Open(filepath.Dir(root), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
 	defer unix.Close(parent)
-	return removeEntryUntil(parent, filepath.Base(root), deadline)
+	return removeEntryUntilBound(parent, filepath.Base(root), deadline, expected)
 }
 
 func removeEntryUntil(parent int, name string, deadline time.Time) error {
+	return removeEntryUntilBound(parent, name, deadline, nil)
+}
+
+func removeEntryUntilBound(parent int, name string, deadline time.Time, expected *managed.RetainedPath) error {
 	if !time.Now().Before(deadline) {
 		return context.DeadlineExceeded
 	}
 	var stat unix.Stat_t
 	if err := unix.Fstatat(parent, name, &stat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
+	}
+	if expected != nil && (uint64(stat.Dev) != expected.Device || stat.Ino != expected.Inode || stat.Mode&unix.S_IFMT != unix.S_IFDIR) {
+		return managed.ErrStale
 	}
 	if stat.Mode&unix.S_IFMT != unix.S_IFDIR {
 		return unix.Unlinkat(parent, name, 0)
@@ -469,6 +506,10 @@ func removeEntryUntil(parent int, name string, deadline time.Time) error {
 	}
 	dir := os.NewFile(uintptr(fd), name)
 	defer dir.Close()
+	var opened unix.Stat_t
+	if unix.Fstat(fd, &opened) != nil || expected != nil && (uint64(opened.Dev) != expected.Device || opened.Ino != expected.Inode) {
+		return managed.ErrStale
+	}
 	for {
 		if !time.Now().Before(deadline) {
 			return context.DeadlineExceeded
@@ -488,6 +529,12 @@ func removeEntryUntil(parent int, name string, deadline time.Time) error {
 	}
 	if !time.Now().Before(deadline) {
 		return context.DeadlineExceeded
+	}
+	if expected != nil {
+		var current unix.Stat_t
+		if unix.Fstatat(parent, name, &current, unix.AT_SYMLINK_NOFOLLOW) != nil || uint64(current.Dev) != expected.Device || current.Ino != expected.Inode {
+			return managed.ErrStale
+		}
 	}
 	return unix.Unlinkat(parent, name, unix.AT_REMOVEDIR)
 }

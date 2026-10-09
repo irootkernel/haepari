@@ -53,7 +53,12 @@ func retainedNativeGuest() (GuestRecoveryRequest, string) {
 }
 
 func retainedNativeGuestWithLogLimit(limit int64) (GuestRecoveryRequest, string) {
+	return retainedNativeGuestWithProtocol(limit, "haepari.guest-request/v1")
+}
+
+func retainedNativeGuestWithProtocol(limit int64, schema string) (GuestRecoveryRequest, string) {
 	guest, parent := guestFixture("printf once > count.txt; printf native-log")
+	guest.Schema = schema
 	guest.Request.LogLimitBytes = limit
 	guest.Request.Environment = append(guest.Request.Environment, "GORACE=atexit_sleep_ms=0")
 	envelope, err := nativeGuestProtocol(guest, false, "")

@@ -245,6 +245,31 @@ type powerTransitionRecord struct {
 	HostControlled bool `json:"host_controlled,omitempty"`
 }
 
+func decodePowerTransition(raw []byte) (powerTransitionRecord, error) {
+	var record powerTransitionRecord
+	if rejectDuplicateKeys(raw) != nil {
+		return record, ErrBlocked
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return record, ErrBlocked
+	}
+	if value, ok := fields["host_controlled"]; ok {
+		if string(value) != "true" && string(value) != "false" {
+			return record, ErrBlocked
+		}
+		if json.Unmarshal(value, &record.HostControlled) != nil {
+			return record, ErrBlocked
+		}
+		delete(fields, "host_controlled")
+	}
+	identity, err := json.Marshal(fields)
+	if err != nil || decodeClosed(identity, &record.PowerTransitionIdentity) != nil || !record.PowerTransitionIdentity.Valid() {
+		return record, ErrBlocked
+	}
+	return record, nil
+}
+
 // CommandReturned reports a successful command return recorded for this exact
 // effect. It is not power-state or no-effect evidence.
 func (p PowerIntent) CommandReturned() bool      { return p.commandReturned }
@@ -261,6 +286,7 @@ const (
 	PowerStartUncertain = "start_uncertain"
 	PowerDone           = "done"
 	PowerFailedNoEffect = "failed_no_effect"
+	PowerAbandoned      = "abandoned"
 )
 
 func (p PowerIntent) ReadyEffect() (string, bool) {
@@ -298,8 +324,8 @@ func powerIntentTx(q rowQuerier, generation int64) (PowerIntent, error) {
 	if err != nil {
 		return p, mapNoRows(err)
 	}
-	var transition powerTransitionRecord
-	if err := json.Unmarshal(raw, &transition); err != nil {
+	transition, err := decodePowerTransition(raw)
+	if err != nil {
 		return p, err
 	}
 	p.Identity = transition.PowerTransitionIdentity
@@ -325,7 +351,7 @@ func powerIntentTx(q rowQuerier, generation int64) (PowerIntent, error) {
 		p.noEffectReturned = proof.NoEffectProven && proof.CommandReturned
 	} else if !((p.Stage == PowerStartReady && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain)) ||
 		(p.Stage == PowerDone && oneOf(proof.ExpectedStage, PowerStartIssued, PowerStartUncertain)) ||
-		(p.Stage == PowerFailedNoEffect && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain, PowerStartIssued, PowerStartUncertain))) {
+		(oneOf(p.Stage, PowerFailedNoEffect, PowerAbandoned) && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain, PowerStartIssued, PowerStartUncertain))) {
 		return p, ErrBlocked
 	}
 	return p, nil

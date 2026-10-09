@@ -16,28 +16,28 @@ Why: a failed read-only observation currently abandons the observer, startup rec
 
 #### Implement
 
-- [ ] Resolve dossier decisions D1–D3 with Master before changing the affected behavior. Record the F1/F2 delta, schema/version treatment and retained-history behavior in the owning contracts and freeze records.
-- [ ] Distinguish positively observed absence from existing uncollected evidence and transport/identity uncertainty. Preserve the native workload outcome and derive the verdict from the approved evidence/cleanup policy.
-- [ ] Retry safe observations with backoff inside their original deadlines; periodically reconcile eligible interrupted Jobs without another prepare/start, a new run identity or an extended budget.
-- [ ] Add a fenced way to resolve orphaned power intents and the approved same-resource reboot recovery path, including unsupported/unknown cases and stale observations.
-- [ ] Preserve bounded diagnostic causes through guest replies, controller failure handling and durable inspection; redact secrets and separate diagnostics from termination proof.
+- [x] Resolve dossier decisions D1–D3 with Master before changing the affected behavior. Record the F1/F2 delta, schema/version treatment and retained-history behavior in the owning contracts and freeze records.
+- [x] Distinguish positively observed absence from existing uncollected evidence and transport/identity uncertainty. Preserve the native workload outcome and derive the verdict from the approved evidence/cleanup policy.
+- [x] Retry safe observations with backoff inside their original deadlines; periodically reconcile eligible interrupted Jobs without another prepare/start, a new run identity or an extended budget.
+- [x] Add a fenced way to resolve orphaned power intents and the approved same-resource reboot recovery path, including unsupported/unknown cases and stale observations.
+- [x] Preserve bounded diagnostic causes through guest replies, controller failure handling and durable inspection; redact secrets and separate diagnostics from termination proof.
 
 #### Do not
 
-- [ ] Do not infer termination from a failed watch, a missing PID or an SSH error; do not return unproven occupancy or retry an uncertain effect.
-- [ ] Do not silently discard existing required evidence, replace the original runner or rewrite historical terminal results.
+- [x] Do not infer termination from a failed watch, a missing PID or an SSH error; do not return unproven occupancy or retry an uncertain effect.
+- [x] Do not silently discard existing required evidence, replace the original runner or rewrite historical terminal results.
 
 #### Verify
 
-- [ ] Cover missing versus uncollected outputs, late cancellation, transient observation loss, original-run reattachment, changed boot, orphaned power intent, conflicting identity and stale recovery.
-- [ ] Prove one capacity return after valid settlement and retained occupancy while termination is unknown. Read-only retry must never duplicate the workload.
-- [ ] Run focused and common product checks under the repository test contract. These fixtures do not complete the real-VM qualification in TASK-038.
+- [x] Cover missing versus uncollected outputs, late cancellation, transient observation loss, original-run reattachment, changed boot, orphaned power intent, conflicting identity and stale recovery.
+- [x] Prove one capacity return after valid settlement and retained occupancy while termination is unknown. Read-only retry must never duplicate the workload.
+- [x] Run focused and common product checks under the repository test contract. These fixtures do not complete the real-VM qualification in TASK-038.
 
 #### Done when
 
-- [ ] Decisions D1–D3 and their contract/version implications are resolved, implemented and reviewed, with unsupported cases stated.
-- [ ] Recoverable failures have bounded observation/recovery paths; uncertainty preserves the required ownership and evidence.
-- [ ] Changed contracts, diagnostics and operating guidance agree with the exact tested candidate.
+- [x] Decisions D1–D3 and their contract/version implications are resolved, implemented and reviewed, with unsupported cases stated.
+- [x] Recoverable failures have bounded observation/recovery paths; uncertainty preserves the required ownership and evidence.
+- [x] Changed contracts, diagnostics and operating guidance agree with the exact tested candidate.
 
 ## TASK-037
 

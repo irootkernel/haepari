@@ -25,6 +25,7 @@ type GuestControl struct {
 	Request       GuestRequest             `json:"request"`
 	NativeRequest *Request                 `json:"native_request,omitempty"`
 	Root          *managed.RetainedPath    `json:"root,omitempty"`
+	WorkspaceRoot *managed.RetainedPath    `json:"workspace_root,omitempty"`
 	Owner         platform.ProcessIdentity `json:"owner"`
 	Phase         string                   `json:"phase"`
 	Retired       bool                     `json:"retired"`
@@ -67,6 +68,49 @@ func (c *guestControlFile) bindRoot(d *directory) error {
 	}
 	c.value.Root = &managed.RetainedPath{Path: "", Device: uint64(st.Dev), Inode: uint64(st.Ino), Directory: true}
 	return c.save()
+}
+
+func (c *guestControlFile) bindWorkspace(d *directory) error {
+	if c.value.Schema != "haepari.guest-control/v2" {
+		return nil
+	}
+	var st unix.Stat_t
+	if err := unix.Fstat(int(d.file.Fd()), &st); err != nil {
+		return err
+	}
+	c.value.WorkspaceRoot = &managed.RetainedPath{Path: "workspace", Device: uint64(st.Dev), Inode: uint64(st.Ino), Directory: true}
+	return c.save()
+}
+
+func validGuestControlSchema(c GuestControl, q GuestRequest) bool {
+	if c.Request.Schema != q.Schema {
+		return false
+	}
+	if q.Schema == "haepari.guest-request/v2" {
+		return c.Schema == "haepari.guest-control/v2" && (c.WorkspaceRoot == nil && c.NativeRequest == nil || validGuestWorkspaceRoot(c.WorkspaceRoot))
+	}
+	return c.Schema == "haepari.guest-control/v1" && c.WorkspaceRoot == nil
+}
+
+func validGuestWorkspaceRoot(root *managed.RetainedPath) bool {
+	return root != nil && root.Path == "workspace" && root.Directory && root.Inode != 0
+}
+
+// The outer Job inode does not prove that its prepared workspace is still
+// present. Never adopt a recreated directory or turn its absence into evidence.
+func validateGuestWorkspace(d *directory, c GuestControl) error {
+	if c.Schema != "haepari.guest-control/v2" {
+		return nil
+	}
+	var st unix.Stat_t
+	err := unix.Fstatat(int(d.file.Fd()), "workspace", &st, unix.AT_SYMLINK_NOFOLLOW)
+	if c.WorkspaceRoot == nil && c.NativeRequest == nil && errors.Is(err, unix.ENOENT) {
+		return nil
+	}
+	if err != nil || !validGuestWorkspaceRoot(c.WorkspaceRoot) || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR || uint64(st.Dev) != c.WorkspaceRoot.Device || uint64(st.Ino) != c.WorkspaceRoot.Inode {
+		return ErrConflict
+	}
+	return nil
 }
 func sameGuestOwner(a, b GuestRequest) bool {
 	x, y := a.Request, b.Request
@@ -151,6 +195,9 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		owner.Challenge = ""
 		owner.Root = nil
 		c.value = GuestControl{Schema: "haepari.guest-control/v1", Request: owner}
+		if q.Schema == "haepari.guest-request/v2" {
+			c.value.Schema = "haepari.guest-control/v2"
+		}
 		if err = parent.file.Sync(); err != nil {
 			return reply, err
 		}
@@ -158,7 +205,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		d := json.NewDecoder(bytes.NewReader(data))
 		d.DisallowUnknownFields()
 		if managed.ValidateUniqueJSONKeys(data) != nil || d.Decode(&c.value) != nil || d.Decode(new(any)) != io.EOF ||
-			c.value.Schema != "haepari.guest-control/v1" || !sameGuestOwner(c.value.Request, q) {
+			!validGuestControlSchema(c.value, q) || !sameGuestOwner(c.value.Request, q) {
 			return reply, ErrConflict
 		}
 		if q.Root != nil && c.value.Root != nil && !reflect.DeepEqual(q.Root, c.value.Root) {
@@ -197,7 +244,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		stopped := c.value.Complete || guestOwnerStopped(c.value.Owner)
 		nativeStopped := c.value.Observation != nil && (c.value.Observation.Exit != nil && c.value.Observation.Exit.TerminationProven || c.value.Retired && c.value.Observation.State == "prepared" && c.value.Observation.Intent == nil) || c.value.Retired && c.value.NativeRequest == nil
 		c.value.Stopped = stopped
-		if !absent || !stopped || c.value.Root == nil || !nativeStopped {
+		if !absent || !stopped || c.value.Root == nil || !nativeStopped || c.value.Schema == "haepari.guest-control/v2" && (c.value.Phase != "cleanup" || c.value.Error != "") {
 			return reply, nil
 		}
 
@@ -225,6 +272,17 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		return reply, ErrAmbiguous
 	}
 	partialCleanup := q.Operation == "cleanup" && c.value.NativeRequest == nil && c.value.Retired
+	if q.Operation == "start" || q.Operation == "cleanup" {
+		d, e := openDirectory(filepath.Join(q.JobRoot, q.Request.Identity.JobID))
+		if e != nil {
+			return reply, e
+		}
+		e = validateGuestWorkspace(d, c.value)
+		d.close()
+		if e != nil {
+			return reply, e
+		}
+	}
 	c.value.Owner = owner.Identity
 	c.value.Phase = q.Operation
 	c.value.Complete = false
@@ -239,14 +297,14 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		if !c.value.Retired {
 			return reply, ErrUnproven
 		}
-		err = cleanupGuestPreparation(parent, q, c.value.Root)
+		err = cleanupGuestPreparation(parent, q, c.value.Root, c.value.WorkspaceRoot)
 	} else {
 		reply, err = guestEffect(q, &c)
 	}
 	c.value.Complete = true
 	c.value.Stopped = true
 	if err != nil {
-		c.value.Error = err.Error()
+		c.value.Error = DiagnosticCause(err)
 	} else {
 		if reply.Request != nil {
 			c.value.NativeRequest = reply.Request
@@ -300,6 +358,9 @@ func guestFiles(parent, d *directory, q GuestRequest, reply GuestReply, c *guest
 		c.value.Root.Device != uint64(st.Dev) || c.value.Root.Inode != uint64(st.Ino) {
 		return reply, ErrConflict
 	}
+	if err := validateGuestWorkspace(d, c.value); err != nil {
+		return reply, err
+	}
 	reply.Root = c.value.Root
 	if q.Operation == "root" {
 		return reply, nil
@@ -316,17 +377,33 @@ func guestFiles(parent, d *directory, q GuestRequest, reply GuestReply, c *guest
 			return reply, err
 		}
 		boundary("guest_cleanup_bound_root")
-		if err := guestRemoveBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, c.value.Root); err != nil {
+		if err := validateGuestWorkspace(d, c.value); err != nil {
+			return reply, err
+		}
+		if err := guestRemoveJobBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, c.value.Root, c.value.WorkspaceRoot); err != nil {
 			return reply, err
 		}
 		return reply, nil
 	}
-	f, err := guestOutputFile(d, q.Path, q.Area)
+	f, err := guestOutputFile(d, q.Path, q.Area, c.value.WorkspaceRoot)
 	if err != nil {
+		// ENOENT is meaningful only beneath this already validated root,
+		// after native workload termination. It never masks permission or SSH loss.
+		if q.Schema == "haepari.guest-request/v2" && (q.Area == "workspace" || q.Area == "") && q.Offset == 0 && q.ExpectedFile == nil && errors.Is(err, unix.ENOENT) {
+			if err := validateGuestWorkspace(d, c.value); err != nil {
+				return reply, err
+			}
+			reply.Absent = true
+			return reply, nil
+		}
 		return reply, err
 	}
 	defer f.Close()
-	return readGuestFile(f, q, reply)
+	reply, err = readGuestFile(f, q, reply)
+	if err == nil {
+		err = validateGuestWorkspace(d, c.value)
+	}
+	return reply, err
 }
 
 func readGuestFile(f *os.File, q GuestRequest, reply GuestReply) (GuestReply, error) {
@@ -362,7 +439,7 @@ func readGuestFile(f *os.File, q GuestRequest, reply GuestReply) (GuestReply, er
 	reply.NextOffset = q.Offset + int64(n)
 	return reply, nil
 }
-func guestOutputFile(d *directory, name, area string) (*os.File, error) {
+func guestOutputFile(d *directory, name, area string, workspace *managed.RetainedPath) (*os.File, error) {
 	if area == "log" {
 		if name != "output.log" {
 			return nil, ErrInvalid
@@ -380,6 +457,12 @@ func guestOutputFile(d *directory, name, area string) (*os.File, error) {
 		return nil, err
 	}
 	defer func() { unix.Close(fd) }()
+	if workspace != nil {
+		var st unix.Stat_t
+		if unix.Fstat(fd, &st) != nil || uint64(st.Dev) != workspace.Device || uint64(st.Ino) != workspace.Inode {
+			return nil, ErrConflict
+		}
+	}
 	parts := strings.Split(name, "/")
 	for _, p := range parts[:len(parts)-1] {
 		next, e := unix.Openat(fd, p, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
@@ -429,6 +512,10 @@ func guestRemove(parent int, name string, deadline time.Time) error {
 }
 
 func guestRemoveBound(parent int, name string, deadline time.Time, expected *managed.RetainedPath) error {
+	return guestRemoveJobBound(parent, name, deadline, expected, nil)
+}
+
+func guestRemoveJobBound(parent int, name string, deadline time.Time, expected, workspace *managed.RetainedPath) error {
 	if !time.Now().Before(deadline) {
 		return ErrUnproven
 	}
@@ -456,13 +543,23 @@ func guestRemoveBound(parent int, name string, deadline time.Time, expected *man
 	if unix.Fstat(fd, &opened) != nil || opened.Dev != st.Dev || opened.Ino != st.Ino {
 		return ErrConflict
 	}
+	if workspace != nil {
+		var current unix.Stat_t
+		if unix.Fstatat(fd, "workspace", &current, unix.AT_SYMLINK_NOFOLLOW) != nil || uint32(current.Mode)&unix.S_IFMT != unix.S_IFDIR || uint64(current.Dev) != workspace.Device || uint64(current.Ino) != workspace.Inode {
+			return ErrConflict
+		}
+	}
 	for {
 		entries, e := f.ReadDir(128)
 		if e != nil && e != io.EOF {
 			return e
 		}
 		for _, entry := range entries {
-			if err = guestRemove(fd, entry.Name(), deadline); err != nil {
+			var child *managed.RetainedPath
+			if workspace != nil && entry.Name() == "workspace" {
+				child = workspace
+			}
+			if err = guestRemoveBound(fd, entry.Name(), deadline, child); err != nil {
 				return err
 			}
 		}
@@ -490,7 +587,7 @@ func guestRemoveBound(parent int, name string, deadline time.Time, expected *man
 // ValidateGuestControl binds filesystem-worker observations to the original
 // prepared identity, independently of workload process evidence.
 func ValidateGuestControl(c GuestControl, q GuestRequest) error {
-	if c.Schema != "haepari.guest-control/v1" || !sameGuestOwner(c.Request, q) ||
+	if !validGuestControlSchema(c, q) || !sameGuestOwner(c.Request, q) ||
 		c.Owner.PID <= 0 || c.Owner.BootID != q.BootID || c.Owner.StartedSeconds <= 0 ||
 		!strings.Contains("|prepare|start|inspect|watch|cancel|output|root|file|cleanup|retire|", "|"+c.Phase+"|") {
 		return ErrConflict
@@ -503,7 +600,7 @@ func ValidateGuestControl(c GuestControl, q GuestRequest) error {
 	}
 	return nil
 }
-func cleanupGuestPreparation(parent *directory, q GuestRequest, root *managed.RetainedPath) error {
+func cleanupGuestPreparation(parent *directory, q GuestRequest, root, workspace *managed.RetainedPath) error {
 	if root == nil {
 		return ErrUnproven
 	}
@@ -515,7 +612,7 @@ func cleanupGuestPreparation(parent *directory, q GuestRequest, root *managed.Re
 		return ErrConflict
 	}
 	boundary("guest_cleanup_bound_preparation")
-	return guestRemoveBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, root)
+	return guestRemoveJobBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, root, workspace)
 }
 
 // Retirement serializes with launch through the same durable worker inode. A

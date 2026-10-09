@@ -247,7 +247,11 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	if err != nil {
 		return s.vmNoEffect(c, "prepare_failure", true, "", err)
 	}
-	probe := runner.GuestRequest{Schema: "haepari.guest-request/v1", Operation: "identity", VMUUID: strings.ToLower(spec.VM.UTMVMUUID), MAC: strings.ToLower(spec.VM.MACAddress), JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: prepareDeadline, Request: runner.Request{Identity: c.identity}}
+	guestSchema := "haepari.guest-request/v1"
+	if managed.AbsenceAware(job) {
+		guestSchema = "haepari.guest-request/v2"
+	}
+	probe := runner.GuestRequest{Schema: guestSchema, Operation: "identity", VMUUID: strings.ToLower(spec.VM.UTMVMUUID), MAC: strings.ToLower(spec.VM.MACAddress), JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: prepareDeadline, Request: runner.Request{Identity: c.identity}}
 	sshAt := time.Now()
 	identity, err := s.vmCall(probe)
 	if err != nil {
@@ -456,7 +460,7 @@ func (s *runtimeServer) watchVM(c *localRunControl, job managed.JobSpec, q runne
 			}
 		}
 		q.Deadline = until
-		reply, err := s.vmCall(q)
+		reply, err := s.observeVMWithRetry(q)
 		if err != nil {
 			return err
 		}

@@ -66,3 +66,15 @@ The retention correction preserves these existing F1 promises without a wire or 
 | Local native ownership and service seam | Platform, runner and exclusive controller | macOS supervision gate, TASK-009/010 native failures, TASK-011 foreground/installed controller TERM/KILL reattachment without rerun; exact candidate refresh remains separately authorized runtime evidence. |
 
 The common Make gate and explicit macOS/service checks bind the final candidate through Task acceptance evidence. This record contains no private service label/root, ephemeral run identity, credential or provider output. Tests, verification case owners and the committed evidence handoff remain independently reviewable; no release-wide case is marked executed here. TASK-015 consumes protected-evidence semantics and TASK-017 builds on F1. Remaining independent improvements stay in [TODO](../TODO.md).
+
+## EPIC-009 approved F1 delta
+
+TASK-036 records Master's D1–D3 approval before implementation: job/result v2 opt into absence-aware settlement, while v1 admissions and terminal history retain their original semantics. Phase receipts and native runner formats remain v1 because their original facts and shapes are preserved; partial evidence with verified cleanup is selected only by v2 policy. Separate recovery authority receives a v2 schema when its semantics change. This decision is permission to implement and test, not TASK-036 acceptance or real-VM qualification.
+
+The same TASK-036 delta adds the new immutable local-workspace/v1 binding before v2 workload delivery. Original phase/native records retain v1 shapes; the new binding preserves the prepared inode through recovery and pruning.
+
+V2 live reconciliation adds separate reconciliation-required/v2 and availability-restoration/v2 events. Only verified terminal settlement may restore the exact availability revision owned by that Job's observation failure. Original operator restrictions, changed revisions and legacy failures retain their prior authority.
+
+Failed recovery/v2 observations may add bounded, deduplicated diagnostic events to an available retained finished Job without changing its revision, original result, capacity, resource availability or recovery authority. Purged admissions receive no new diagnostics. Ordinary diagnostic recording retains its terminal guard; successful exchanges emit no failure event.
+
+TASK-036 supplementary absence uses separate evidence-recovery-intent/v2 and evidence-recovery-receipt/v2 private payloads. Original workspace/attestation authority and observation times bind absent required paths; verified files and absent paths are unique and disjoint. V1 payloads reject the new absence fields and retain their original policy. Public supplementary v1 projections stay frozen. Exact native completed-cleanup recovery authority is retained through pruning; late host completion keeps failed cleanup timing and INCOMPLETE while permitting separate evidence resolution and resource health after every original file is verified or covered by approved v2 positive absence. Native workload facts and historical terminal results remain immutable.

@@ -82,7 +82,14 @@ var _ = ginkgo.Describe("Task011Restart", ginkgo.Label("integration"), func() {
 		// Exercise the full public apply fence as well as direct startup recovery.
 		token := fresh.signRecoveryToken(recoveryToken{fresh.installationID(), r.JobID, lost.Action, managed.RecoveryDigest(lost.Snapshot), managed.RecoveryDigest(lost.Observation), time.Now().Add(time.Minute)})
 		w := recoveryHTTP(fresh, "/v1/jobs/"+r.JobID+"/recover", managed.RecoveryRequest{PlanToken: token, MutationKey: "lost-live-owner", Evidence: &evidence})
-		gomega.Expect(w.Body.String()).To(gomega.ContainSubstring("RECOVERY_BLOCKED"))
+		// Apply re-observes the exact native state before the liveness fence.
+		// A changed observation can reject this synthetic token as stale first.
+		var refused response
+		gomega.Expect(json.Unmarshal(w.Body.Bytes(), &refused)).To(gomega.Succeed())
+		gomega.Expect(w.Code).To(gomega.Equal(409), w.Body.String())
+		gomega.Expect(refused.OK).To(gomega.BeFalse())
+		gomega.Expect(refused.Error).NotTo(gomega.BeNil())
+		gomega.Expect(refused.Error.Code).To(gomega.BeElementOf("RECOVERY_BLOCKED", "STALE_REVISION"))
 		unchanged, err := fresh.ledger.RecoverySnapshot(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(unchanged).To(gomega.Equal(imported))

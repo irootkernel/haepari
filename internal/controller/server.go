@@ -137,11 +137,14 @@ func reject(w http.ResponseWriter, op string, err error) {
 	if code == "RECOVERY_BLOCKED" {
 		var availability *managed.AvailabilityRefusal
 		var readiness *localReadinessRefusal
+		var power *managed.PowerRecoverySelectionRefusal
 		switch {
 		case errors.As(err, &availability):
 			message = availability.Error()
 		case errors.As(err, &readiness):
 			message = readiness.Error()
+		case errors.As(err, &power):
+			message = power.Error()
 		}
 	}
 	send(w, status, op, nil, &responseError{Code: code, Message: message, Retry: retry})
@@ -593,7 +596,7 @@ func (s *runtimeServer) schedule(ctx context.Context) {
 	}
 }
 
-func (s *runtimeServer) failed(id string, _ error) {
+func (s *runtimeServer) failed(id string, cause error) {
 	select {
 	case <-s.detached:
 		return
@@ -601,7 +604,9 @@ func (s *runtimeServer) failed(id string, _ error) {
 	}
 	// Completed preparation failures use the common bounded phase path.
 	// Unexpected errors cannot prove an owned worker stopped or cleanup safe.
+	s.recordDiagnosticFailure(id, cause)
 	_ = s.ledger.ReconcileLocalFailure(id)
+	s.notifyScheduler()
 }
 
 func (s *runtimeServer) installationID() string {

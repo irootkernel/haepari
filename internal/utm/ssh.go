@@ -33,6 +33,8 @@ type SSHMapping struct {
 
 type SSHRunner func(context.Context, string, []string, []byte) (CommandResult, error)
 
+var ErrGuestRefused = errors.New("guest completed the operation with a structured refusal")
+
 var ErrGuestUncertain = errors.New("guest operation may have taken effect; preserve the exact run and reconcile")
 
 // SSH transfers a pinned artifact into a transient bootstrap and then into
@@ -183,8 +185,20 @@ func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease 
 		run = runSSH
 	}
 	r, err := run(ctx, s.Executable, args, archive.Bytes())
-	if err != nil || r.ExitCode != 0 || len(r.Stdout) > commandLimit || len(r.Stderr) > commandLimit {
+	if len(r.Stdout) > commandLimit || len(r.Stderr) > commandLimit {
 		return reply, ErrUnavailable
+	}
+	if err != nil || r.ExitCode != 0 {
+		// A structured guest refusal is a completed observation even when SSH
+		// reports the guest's nonzero exit. Transport stderr is never evidence.
+		envelope, decodeErr := managed.DecodeEnvelope([]byte(r.Stdout))
+		operation := "runner.guest"
+		if recovery {
+			operation = "runner.guest-recovery"
+		}
+		if decodeErr != nil || envelope.OK || envelope.Operation != operation {
+			return reply, ErrUnavailable
+		}
 	}
 	return []byte(r.Stdout), nil
 }
@@ -198,14 +212,38 @@ func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Leas
 		return reply, err
 	}
 	envelope, err := managed.DecodeEnvelope(raw)
-	if err != nil || !envelope.OK || envelope.Operation != "runner.guest" {
+	if err != nil || envelope.Operation != "runner.guest" {
 		return reply, ErrUnavailable
 	}
+	if !envelope.OK {
+		return reply, guestRefusalError(envelope.Error, q.Schema == "haepari.guest-request/v2")
+	}
 	reply, err = runner.DecodeGuestReply(envelope.Data)
-	if err != nil || reply.ProtocolDigest != runner.GuestProtocolDigest(q) || reply.Schema != "haepari.guest-reply/v1" || reply.VMUUID != q.VMUUID || reply.MAC != q.MAC || reply.Challenge != q.Challenge || !uuidPattern.MatchString(reply.BootID) || reply.OS != "darwin" || reply.Arch != "arm64" || q.BootID != "" && reply.BootID != q.BootID {
+	if err != nil || reply.ProtocolDigest != runner.GuestProtocolDigest(q) || reply.Schema != runner.GuestReplySchema(q) || reply.VMUUID != q.VMUUID || reply.MAC != q.MAC || reply.Challenge != q.Challenge || !uuidPattern.MatchString(reply.BootID) || reply.OS != "darwin" || reply.Arch != "arm64" || q.BootID != "" && reply.BootID != q.BootID {
 		return runner.GuestReply{}, ErrUnavailable
 	}
 	return reply, nil
+}
+
+// guestRefusalError accepts only the error from a decoded, operation-matched
+// negative envelope. A classification never establishes effect cessation.
+func guestRefusalError(failure *managed.MachineError, classified bool) error {
+	if failure != nil {
+		if classified {
+			if cause := runner.DiagnosticError(failure.Message); cause != nil {
+				return errors.Join(ErrGuestRefused, cause)
+			}
+		}
+		switch failure.Code {
+		case managed.InvalidRequest:
+			return errors.Join(ErrGuestRefused, runner.ErrInvalid)
+		case managed.Conflict:
+			return errors.Join(ErrGuestRefused, runner.ErrConflict)
+		case managed.RecoveryBlocked:
+			return errors.Join(ErrGuestRefused, runner.ErrUnproven)
+		}
+	}
+	return errors.Join(ErrGuestRefused, ErrUnavailable)
 }
 
 // Call first proves the current started VM and individual lease over pinned
@@ -238,6 +276,7 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 		return runner.GuestReply{}, err
 	}
 	proofNonce := hex.EncodeToString(challenge[:])
+	var proofErr error
 	verify := func(ctx context.Context, lease Lease, uuid, nonce string) (GuestIdentity, error) {
 		probe := q
 		probe.Operation = "identity"
@@ -245,10 +284,16 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 		probe.Files = nil
 		probe.Inventory = nil
 		r, e := s.exchange(ctx, spec, lease, probe)
+		proofErr = e
 		return GuestIdentity{VMUUID: r.VMUUID, MAC: r.MAC, Address: lease.Address, HostKey: pin, BootID: r.BootID, Nonce: r.Challenge, OS: r.OS, Arch: r.Arch}, e
 	}
 	lease, identity, err := s.Control.ResolveGuest(ctx, leases, q.VMUUID, mac, pin, proofNonce, time.Now, verify)
 	if err != nil {
+		// ResolveGuest intentionally collapses invalid identity observations.
+		// Preserve only a complete native v2 refusal from its proof exchange.
+		if q.Schema == "haepari.guest-request/v2" && errors.Is(proofErr, ErrGuestRefused) {
+			return runner.GuestReply{}, proofErr
+		}
 		return runner.GuestReply{}, err
 	}
 	if q.BootID != "" && q.BootID != identity.BootID {
@@ -305,6 +350,12 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	}
 	if (q.Operation == "output" || q.Operation == "file") && (len(reply.Output) > 64<<10 || reply.NextOffset != q.Offset+int64(len(reply.Output))) {
 		return runner.GuestReply{}, ErrUnavailable
+	}
+	if reply.Absent {
+		if q.Schema != "haepari.guest-request/v2" || q.Operation != "file" || (q.Area != "workspace" && q.Area != "") || q.Offset != 0 || q.ExpectedFile != nil || reply.File != nil || len(reply.Output) != 0 || reply.NextOffset != 0 || reply.Root == nil || reply.Observation == nil || reply.Observation.Exit == nil || !reply.Observation.Exit.TerminationProven {
+			return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
+		}
+		return reply, nil
 	}
 	if q.Operation == "file" && (reply.File == nil || reply.File.Path != q.Path || reply.File.Inode == 0 || reply.File.Size < reply.NextOffset || reply.File.Size > 1<<30 || len(reply.File.SHA256) != 64) {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)

@@ -248,6 +248,7 @@ func (s *runtimeServer) jobRecovery(w http.ResponseWriter, r *http.Request) {
 		reject(w, op, managed.ErrStale)
 		return
 	}
+	current.ExpiresAt = token.ExpiresAt
 	if err = s.applyPlannedJobRecovery(current, q.Evidence, key, clientDigest); err != nil {
 		reject(w, op, err)
 		return

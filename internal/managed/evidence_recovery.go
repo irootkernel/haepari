@@ -10,17 +10,35 @@ import (
 	"github.com/irootkernel/haepari/internal/platform"
 )
 
+// EvidenceAbsenceBinding is supplied only after the controller verifies the
+// original native reboot attestation and exact prepared workspace. The ledger
+// validates the admitted policy and preserves the proof binding; it does not
+// substitute these fields for a fresh native no-follow observation.
+type EvidenceAbsenceBinding struct {
+	WorkspaceRoot     RetainedPath     `json:"workspace_root"`
+	AttestationDigest string           `json:"attestation_digest"`
+	OriginalBoot      string           `json:"original_boot"`
+	RecoveryBoot      string           `json:"recovery_boot"`
+	Cessation         RecoveryEvidence `json:"cessation"`
+}
+
+type EvidenceAbsentOutput struct {
+	Path       string    `json:"path"`
+	ObservedAt time.Time `json:"observed_at"`
+}
+
 type EvidenceRecoveryJob struct {
-	GuestLogLimitBytes int64               `json:"guest_log_limit_bytes,omitempty"`
-	GuestAttestation   json.RawMessage     `json:"guest_attestation,omitempty"`
-	JobID              string              `json:"job_id"`
-	ResultDigest       string              `json:"result_digest"`
-	Identity           LocalIdentity       `json:"identity"`
-	Root               RetainedPath        `json:"root"`
-	Protected          []ProtectedEvidence `json:"protected_evidence"`
-	Outputs            []string            `json:"required_outputs"`
-	CollectDeadline    time.Time           `json:"collect_deadline"`
-	CleanupDeadline    time.Time           `json:"cleanup_deadline"`
+	AbsenceBinding     *EvidenceAbsenceBinding `json:"absence_binding,omitempty"`
+	GuestLogLimitBytes int64                   `json:"guest_log_limit_bytes,omitempty"`
+	GuestAttestation   json.RawMessage         `json:"guest_attestation,omitempty"`
+	JobID              string                  `json:"job_id"`
+	ResultDigest       string                  `json:"result_digest"`
+	Identity           LocalIdentity           `json:"identity"`
+	Root               RetainedPath            `json:"root"`
+	Protected          []ProtectedEvidence     `json:"protected_evidence"`
+	Outputs            []string                `json:"required_outputs"`
+	CollectDeadline    time.Time               `json:"collect_deadline"`
+	CleanupDeadline    time.Time               `json:"cleanup_deadline"`
 }
 
 type EvidenceRecoveryIntent struct {
@@ -39,14 +57,15 @@ type EvidenceRecoveryIntent struct {
 }
 
 type EvidenceRecoveryOutcome struct {
-	Attestation    json.RawMessage  `json:"attestation,omitempty"`
-	GuestArtifacts []ResultArtifact `json:"guest_artifacts,omitempty"`
-	JobID          string           `json:"job_id"`
-	ResultDigest   string           `json:"result_digest"`
-	Stage          string           `json:"stage"`
-	ArtifactRoot   string           `json:"artifact_root,omitempty"`
-	Artifacts      []ResultArtifact `json:"artifacts"`
-	Gap            string           `json:"gap,omitempty"`
+	AbsentOutputs  []EvidenceAbsentOutput `json:"absent_outputs,omitempty"`
+	Attestation    json.RawMessage        `json:"attestation,omitempty"`
+	GuestArtifacts []ResultArtifact       `json:"guest_artifacts,omitempty"`
+	JobID          string                 `json:"job_id"`
+	ResultDigest   string                 `json:"result_digest"`
+	Stage          string                 `json:"stage"`
+	ArtifactRoot   string                 `json:"artifact_root,omitempty"`
+	Artifacts      []ResultArtifact       `json:"artifacts"`
+	Gap            string                 `json:"gap,omitempty"`
 }
 type EvidenceRecoveryReceipt struct {
 	Schema      string                    `json:"schema"`
@@ -60,6 +79,54 @@ type EvidenceRecoveryReceipt struct {
 func evidenceResolvedTx(tx *sql.Tx, result Result) (bool, error) {
 	if len(result.ProtectedEvidence) == 0 && oneOf(string(result.CleanupOutcome), "verified", "not_needed") {
 		return true, nil
+	}
+	// A late host completion observation preserves INCOMPLETE and failed cleanup
+	// timing. Exact native completed-cleanup authority may nevertheless resolve
+	// the evidence hold when the original complete host inventory is preserved.
+	if len(result.ProtectedEvidence) == 0 && result.CleanupOutcome == "failed" && result.Reason == "cleanup_deadline" {
+		complete := result.EvidenceCompleteness == "complete"
+		if !complete && result.EvidenceCompleteness == "partial" && len(result.EvidenceGaps) > 0 {
+			var raw []byte
+			if err := tx.QueryRow(`SELECT spec_json FROM managed_admissions WHERE job_id=?`, result.JobID).Scan(&raw); err != nil {
+				return false, err
+			}
+			job, err := DecodeJob(raw)
+			if err != nil {
+				return false, err
+			}
+			complete = AbsenceAware(job)
+			for _, gap := range result.EvidenceGaps {
+				complete = complete && gap.Reason == "required_output_absent" && oneOf(gap.Path, job.Workload.RequiredOutputs...)
+			}
+		}
+		rows, err := tx.Query(`SELECT payload_json FROM managed_events WHERE job_id=? AND kind='recovery_intent' ORDER BY cursor`, result.JobID)
+		if err != nil {
+			return false, err
+		}
+		resolved := false
+		for rows.Next() {
+			var raw []byte
+			var q JobRecoveryRequest
+			if err = rows.Scan(&raw); err != nil {
+				rows.Close()
+				return false, err
+			}
+			if decodeClosed(raw, &q) != nil {
+				rows.Close()
+				return false, ErrBlocked
+			}
+			if complete && q.Identity.JobID == result.JobID && q.Identity.ResourceID == result.ResourceID && q.Identity.ConfigRevision == result.ResourceRevision && q.Identity.LeaseGeneration == result.LeaseGeneration && q.Evidence.valid() && q.Evidence.Source == "machine-observed" && q.Evidence.Mechanism == "guest-completed-cleanup-observed" && q.Evidence.Reference == "job:"+result.JobID {
+				resolved = true
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return false, err
+		}
+		if resolved {
+			return true, nil
+		}
 	}
 	rows, err := tx.Query(`SELECT request_json,receipt_json FROM managed_evidence_recovery WHERE resource_id=? AND receipt_json IS NOT NULL`, result.ResourceID)
 	if err != nil {
@@ -91,13 +158,14 @@ func evidenceResolvedTx(tx *sql.Tx, result Result) (bool, error) {
 }
 
 func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
-	if q.Schema != "haepari.evidence-recovery-intent/v1" || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose", "attest-guest-stopped") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
+	if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v1", "haepari.evidence-recovery-intent/v2") || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose", "attest-guest-stopped") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
 		return false
 	}
 	if q.RecordedAt.IsZero() || q.Action == "dispose" && q.AuthorityReference != "request:"+q.MutationKey {
 		return false
 	}
 	seen := map[string]bool{}
+	hasAbsenceBinding := false
 	for _, j := range q.Jobs {
 		if !ValidRequestKey(j.JobID) || seen[j.JobID] || j.Identity.JobID != j.JobID || j.Identity.LeaseGeneration <= 0 || j.Identity.Nonce == "" || !validRecoveryDigest(j.ResultDigest) || j.Root.Path != "" || j.Root.Inode == 0 || !j.Root.Directory || j.CollectDeadline.Before(q.RecordedAt) || !j.CleanupDeadline.After(j.CollectDeadline) {
 			return false
@@ -105,16 +173,30 @@ func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
 		if j.GuestLogLimitBytes < 0 || j.GuestLogLimitBytes > GuestRecoveryLogBytes || (q.Action == "attest-guest-stopped") != (len(j.GuestAttestation) > 0) || len(j.GuestAttestation) > 2<<20 {
 			return false
 		}
+		if b := j.AbsenceBinding; b != nil {
+			hasAbsenceBinding = true
+			if q.Schema != "haepari.evidence-recovery-intent/v2" || q.Action != "recollect" || j.Identity.RunID == "" ||
+				b.WorkspaceRoot.Path != "workspace" || !b.WorkspaceRoot.Directory || b.WorkspaceRoot.Inode == 0 ||
+				!validRecoveryDigest(b.AttestationDigest) || b.OriginalBoot == "" || b.RecoveryBoot == "" || b.OriginalBoot == b.RecoveryBoot ||
+				!b.Cessation.valid() || !(b.Cessation.Source == "machine-observed" && b.Cessation.Mechanism == "guest-reboot-observed" || b.Cessation.Source == "operator-attested" && b.Cessation.Mechanism == "guest-workload-and-descendants-stopped") ||
+				b.Cessation.Reference != "job:"+j.JobID || b.Cessation.ObservedAt.After(q.RecordedAt) {
+				return false
+			}
+		}
 		seen[j.JobID] = true
 	}
-	return true
+	return (q.Schema == "haepari.evidence-recovery-intent/v2") == hasAbsenceBinding
 }
 
 func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) bool {
 	if r.ActiveOwner != nil && (r.Complete || r.ActiveOwner.PID <= 0 || r.ActiveOwner.BootID == "" || r.ActiveOwner.StartedSeconds <= 0) {
 		return false
 	}
-	if r.Schema != "haepari.evidence-recovery-receipt/v1" || r.MutationKey != q.MutationKey || !r.Observation.valid() || r.Observation.Source != "machine-observed" || len(r.Jobs) != len(q.Jobs) {
+	expectedSchema := "haepari.evidence-recovery-receipt/v1"
+	if q.Schema == "haepari.evidence-recovery-intent/v2" {
+		expectedSchema = "haepari.evidence-recovery-receipt/v2"
+	}
+	if r.Schema != expectedSchema || r.MutationKey != q.MutationKey || !r.Observation.valid() || r.Observation.Source != "machine-observed" || len(r.Jobs) != len(q.Jobs) {
 		return false
 	}
 	for i, o := range r.Jobs {
@@ -159,6 +241,19 @@ func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) b
 				return false
 			}
 		}
+		if len(paths) > 0 && !uniquePaths(paths) {
+			return false
+		}
+		if len(o.AbsentOutputs) > 0 && (q.Schema != "haepari.evidence-recovery-intent/v2" || j.AbsenceBinding == nil || q.Action != "recollect" || o.Stage == "pending" || o.ArtifactRoot == "") {
+			return false
+		}
+		for _, absent := range o.AbsentOutputs {
+			if !ValidArtifactPath(absent.Path) || !oneOf(absent.Path, j.Outputs...) || absent.ObservedAt.IsZero() || absent.ObservedAt.Before(q.RecordedAt) || absent.ObservedAt.After(j.CollectDeadline) || absent.ObservedAt.After(r.Observation.ObservedAt) {
+				return false
+			}
+			paths = append(paths, absent.Path)
+		}
+		// Verified files and positively absent paths form one disjoint inventory.
 		if len(paths) > 0 && !uniquePaths(paths) {
 			return false
 		}
@@ -222,6 +317,9 @@ func (l *Ledger) BeginEvidenceRecovery(q EvidenceRecoveryIntent) error {
 		if b.Receipt.ResultStatus == "unavailable" || b.Result.ResourceID != q.ResourceID || b.Identity == nil || *b.Identity != j.Identity || RecoveryDigest(b.Result) != j.ResultDigest || !reflect.DeepEqual(b.Result.ProtectedEvidence, j.Protected) || !reflect.DeepEqual(b.Spec.Workload.RequiredOutputs, j.Outputs) || !j.CollectDeadline.Equal(q.RecordedAt.Add(time.Duration(b.Spec.Deadlines.CollectSeconds)*time.Second)) || !j.CleanupDeadline.Equal(j.CollectDeadline.Add(time.Duration(b.Spec.Deadlines.CleanupSeconds)*time.Second)) {
 			return ErrStale
 		}
+		if j.AbsenceBinding != nil && (s.Resource.Kind != "utm-macos" || !AbsenceAware(b.Spec)) {
+			return ErrInvalid
+		}
 		if _, err = retentionEvent(tx, j.JobID, "evidence_recovery_intent", map[string]any{"mutation_key": q.MutationKey, "action": q.Action, "result_digest": j.ResultDigest, "authority_reference": q.AuthorityReference}); err != nil {
 			return err
 		}
@@ -259,7 +357,7 @@ func (l *Ledger) RecordEvidenceRecovery(q EvidenceRecoveryIntent, r EvidenceReco
 	if receipt != nil {
 		for i, o := range receipt.Jobs {
 			n := r.Jobs[i]
-			if oneOf(o.Stage, "resolved", "failed", "attested") && !reflect.DeepEqual(o, n) || o.Stage == "collected" && (n.Stage == "pending" || !reflect.DeepEqual(o.Artifacts, n.Artifacts) || !reflect.DeepEqual(o.GuestArtifacts, n.GuestArtifacts) || o.ArtifactRoot != n.ArtifactRoot) {
+			if oneOf(o.Stage, "resolved", "failed", "attested") && !reflect.DeepEqual(o, n) || o.Stage == "collected" && (n.Stage == "pending" || !reflect.DeepEqual(o.Artifacts, n.Artifacts) || !reflect.DeepEqual(o.AbsentOutputs, n.AbsentOutputs) || !reflect.DeepEqual(o.GuestArtifacts, n.GuestArtifacts) || o.ArtifactRoot != n.ArtifactRoot) {
 				return ErrConflict
 			}
 		}
@@ -385,4 +483,19 @@ func (l *Ledger) supplementaryEvidence(id string, public bool) ([]EvidenceRecove
 		}
 	}
 	return out, rows.Err()
+}
+
+func rejectLegacyEvidenceField(raw []byte, field string) error {
+	var value struct {
+		Jobs []map[string]json.RawMessage `json:"jobs"`
+	}
+	if json.Unmarshal(raw, &value) != nil {
+		return ErrInvalid
+	}
+	for _, job := range value.Jobs {
+		if _, present := job[field]; present {
+			return ErrInvalid
+		}
+	}
+	return nil
 }

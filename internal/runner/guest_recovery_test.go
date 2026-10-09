@@ -9,6 +9,18 @@ import (
 )
 
 var _ = ginkgo.Describe("GuestRecoveryWire", ginkgo.Label("unit"), func() {
+	ginkgo.It("keeps the v1 recovery shape closed to v2 boot fields", func() {
+		q := GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", RecoveryBoot: "new-boot"}
+		raw, err := json.Marshal(q)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = DecodeGuestRecoveryRequest(raw)
+		gomega.Expect(err).To(gomega.MatchError(ErrInvalid))
+		q.Schema = "haepari.guest-recovery-request/v2"
+		raw, err = json.Marshal(q)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = DecodeGuestRecoveryRequest(raw)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	})
 	ginkgo.It("rejects missing, unknown, null, duplicate, case-aliased and oversized recovery fields", func() {
 		raw, err := json.Marshal(GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "probe"})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

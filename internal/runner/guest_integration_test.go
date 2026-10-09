@@ -214,7 +214,7 @@ var _ = ginkgo.Describe("Task015GuestCleanup", ginkgo.Label("integration"), func
 			replaced = true
 		}
 		if partial {
-			err = cleanupGuestPreparation(p, q, bound)
+			err = cleanupGuestPreparation(p, q, bound, nil)
 		} else {
 			q.Operation = "cleanup"
 			_, err = Guest(q)

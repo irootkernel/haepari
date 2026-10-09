@@ -157,7 +157,7 @@ func DecodeJob(data []byte) (JobSpec, error) {
 	if err := decodeClosed(data, &job); err != nil {
 		return job, err
 	}
-	if job.Schema != "haepari.job/v1" || job.ExecutionMode != "managed" {
+	if !oneOf(job.Schema, "haepari.job/v1", "haepari.job/v2") || job.ExecutionMode != "managed" {
 		return job, fmt.Errorf("%w: job schema or execution mode", ErrUnsupported)
 	}
 	if !identifier.MatchString(job.ResourceID) || !identifier.MatchString(job.Suite) ||
@@ -297,6 +297,16 @@ func decodeClosed(data []byte, target any) error {
 	}
 	if hasPlaceholder(data) {
 		return ErrInvalid
+	}
+	switch value := target.(type) {
+	case *EvidenceRecoveryIntent:
+		if value.Schema == "haepari.evidence-recovery-intent/v1" {
+			return rejectLegacyEvidenceField(data, "absence_binding")
+		}
+	case *EvidenceRecoveryReceipt:
+		if value.Schema == "haepari.evidence-recovery-receipt/v1" {
+			return rejectLegacyEvidenceField(data, "absent_outputs")
+		}
 	}
 	return nil
 }

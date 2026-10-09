@@ -31,7 +31,7 @@ func (s *runtimeServer) vmWorkerStopped(q runner.GuestRequest) bool {
 	return err == nil && reply.Control != nil && reply.Control.Stopped
 }
 func (s *runtimeServer) collectVMFile(q runner.GuestRequest, name, target string, deadline time.Time, remaining int64) (managed.ResultArtifact, error) {
-	return s.collectVMFileUsing(q, name, target, deadline, remaining, s.vmCall)
+	return s.collectVMFileUsing(q, name, target, deadline, remaining, s.observeVMWithRetry)
 }
 func (s *runtimeServer) collectVMFileUsing(q runner.GuestRequest, name, target string, deadline time.Time, remaining int64, call func(runner.GuestRequest) (runner.GuestReply, error)) (managed.ResultArtifact, error) {
 	result := managed.ResultArtifact{Path: name}
@@ -43,6 +43,9 @@ func (s *runtimeServer) collectVMFileUsing(q runner.GuestRequest, name, target s
 	first, err := call(q)
 	if err != nil {
 		return result, err
+	}
+	if first.Absent {
+		return result, errOutputAbsent
 	}
 	if first.File == nil || first.File.Size > remaining {
 		return result, managed.ErrInvalid
@@ -212,6 +215,9 @@ func (s *runtimeServer) collectVM(q runner.GuestRequest, required []string, dest
 		result, err := s.collectVMFile(q, name, filepath.Join(destination, filepath.FromSlash(name)), deadline, (1<<30)-total)
 		if err != nil {
 			a.complete = false
+			if errors.Is(err, errOutputAbsent) {
+				a.absent = append(a.absent, name)
+			}
 			if errors.Is(err, utm.ErrGuestUncertain) && !s.vmWorkerStopped(q) {
 				a.unproven = true
 				return a
@@ -310,7 +316,7 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 		}
 		for _, name := range required {
 			if !present[name] {
-				gaps = append(gaps, managed.EvidenceGap{Path: name, Reason: "required_output_uncollected"})
+				gaps = append(gaps, managed.EvidenceGap{Path: name, Reason: outputGapReason(job, name, collected.absent)})
 			}
 		}
 		evidence := managed.EvidenceCompleteness("complete")
@@ -319,7 +325,9 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 		if !collected.complete {
 			evidence = "partial"
 			phaseOutcome = "failed"
-			protected = append(protected, managed.ProtectedEvidence{Path: "workspace", Reason: "guest_evidence_retained", RecoveryReference: "job:" + c.identity.JobID})
+			if !absenceAllowsCleanup(job, gaps, collected, status) {
+				protected = append(protected, managed.ProtectedEvidence{Path: "workspace", Reason: "guest_evidence_retained", RecoveryReference: "job:" + c.identity.JobID})
+			}
 		}
 		if status == phaseLate || collected.expired {
 			phaseOutcome = "late"
@@ -352,7 +360,7 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 	if !cleanup.Completed || cleanup.Outcome == "unproven" {
 		outcome := "complete"
 		protected := collect.ProtectedEvidence
-		if collect.EvidenceCompleteness != "complete" {
+		if !collectionAllowsCleanup(job, collect) {
 			outcome = "failed"
 		} else {
 			err, status := boundedPhaseWithWorker(cleanup.Deadline, s.detached, func(work func()) bool { return s.startJobWorker(c.identity.JobID, work) }, func() error {

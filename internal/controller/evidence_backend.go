@@ -41,10 +41,48 @@ func (s *runtimeServer) evidenceBackendFor(kind, id string) (evidenceBackend, er
 
 type localEvidenceBackend struct{ s *runtimeServer }
 
+// Supplementary recovery keeps the original v2 preparation identity. Legacy
+// and never-started outcomes retain their original cleanup policy.
+func (b localEvidenceBackend) workspaceBinding(id managed.LocalIdentity) (*managed.RetainedPath, error) {
+	snapshot, err := b.s.ledger.BulkSnapshot(id.JobID)
+	if errors.Is(err, managed.ErrBusy) {
+		// Legacy callers may observe their owned root before terminal settlement.
+		// Preserve that v1 path without bypassing the v2 workspace fence.
+		active, readErr := b.s.ledger.RecoverySnapshot(id.JobID)
+		if readErr == nil && active.Identity == id && !managed.AbsenceAware(active.Spec) {
+			return nil, nil
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if snapshot.Identity == nil || *snapshot.Identity != id {
+		return nil, managed.ErrBlocked
+	}
+	if !managed.AbsenceAware(snapshot.Spec) {
+		return nil, nil
+	}
+	outcome, err := b.s.ledger.LocalOutcome(id.JobID)
+	if err != nil {
+		return nil, err
+	}
+	if !outcome.Started {
+		return nil, nil
+	}
+	root, err := b.s.verifyLocalWorkspace(id, filepath.Join(b.s.root.Path, "jobs", id.JobID, "workspace"))
+	if err != nil {
+		return nil, err
+	}
+	return &root, nil
+}
+
 func (b localEvidenceBackend) Observe(id managed.LocalIdentity, _ string) (managed.RetainedPath, error) {
 	owned, err := b.s.inspectRecoveryRoot(id)
 	if err != nil || !owned {
 		return managed.RetainedPath{}, managed.ErrBlocked
+	}
+	if _, err := b.workspaceBinding(id); err != nil {
+		return managed.RetainedPath{}, err
 	}
 	fd, err := openPrivateJob(b.s.root.Path, id.JobID)
 	if err != nil {
@@ -60,6 +98,10 @@ func (b localEvidenceBackend) Collect(j managed.EvidenceRecoveryJob, destination
 		return collectionAttempt{}
 	}
 	a, complete, expired := collectOutputs(filepath.Join(b.s.root.Path, "jobs", j.JobID, "workspace"), destination, j.Outputs, j.CollectDeadline)
+	root, err = b.Observe(j.Identity, "recollect")
+	if err != nil || root != j.Root {
+		return collectionAttempt{artifacts: a, expired: expired, rootConflict: true}
+	}
 	return collectionAttempt{artifacts: a, complete: complete, expired: expired}
 }
 
@@ -73,8 +115,16 @@ func (b localEvidenceBackend) Cleanup(j managed.EvidenceRecoveryJob) error {
 		return err
 	}
 	defer unix.Close(fd)
-	err = removeEntryUntil(fd, "workspace", j.CleanupDeadline)
-	if errors.Is(err, unix.ENOENT) {
+	opened, err := retainedPath(fd, "", true)
+	if err != nil || opened != j.Root {
+		return managed.ErrStale
+	}
+	binding, err := b.workspaceBinding(j.Identity)
+	if err != nil {
+		return err
+	}
+	err = removeEntryUntilBound(fd, "workspace", j.CleanupDeadline, binding)
+	if errors.Is(err, unix.ENOENT) && binding == nil {
 		return nil
 	}
 	return err
@@ -220,6 +270,10 @@ func (b vmEvidenceBackend) Health(snap managed.ResourceRecoverySnapshot) (any, b
 		q.Deadline = time.Now().Add(5 * time.Second)
 		reply, err := b.s.vmCall(q)
 		ok := err == nil && reply.Reusable
+		if !ok {
+			_, recovered, e := b.s.observeVMRebootRecovery(q)
+			ok = e == nil && recovered.CompletedCleanup != nil && recovered.Reusable && j.EvidenceResolved
+		}
 		facts[j.JobID] = ok
 		healthy = healthy && ok
 	}

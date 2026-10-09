@@ -17,6 +17,7 @@ import (
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/runner"
+	"github.com/irootkernel/haepari/internal/utm"
 	"golang.org/x/sys/unix"
 )
 
@@ -65,7 +66,16 @@ func (s *runtimeServer) vmRecoveryCall(q runner.GuestRecoveryRequest) (runner.Gu
 		return runner.GuestRecoveryReply{}, err
 	}
 	defer leases.Close()
-	return transport.CallRecovery(context.Background(), spec, leases, q)
+	reply, err := transport.CallRecovery(context.Background(), spec, leases, q)
+	if err != nil && q.Schema == "haepari.guest-recovery-request/v2" && q.Guest.Request.Identity.JobID != "" {
+		// Preserve failed exchanges before callers consume their error. A
+		// successful probe stays read-only and cannot invalidate a plan.
+		_ = s.ledger.RecordRecoveryDiagnosticCause(q.Guest.Request.Identity.JobID, diagnosticCause(err))
+		if errors.Is(err, utm.ErrGuestUncertain) {
+			_ = s.ledger.RecordRecoveryDiagnosticCause(q.Guest.Request.Identity.JobID, managed.DiagnosticGuestEffectUncertain)
+		}
+	}
+	return reply, err
 }
 func (s *runtimeServer) guestAttestationBasis(id string) (managed.ResourceRecoverySnapshot, []runner.GuestRecoveryReply, error) {
 	snap, err := s.ledger.ResourceRecoverySnapshot(id)
@@ -104,6 +114,10 @@ func (s *runtimeServer) guestAttestationBasis(id string) (managed.ResourceRecove
 		q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: time.Now().Add(5 * time.Second)}
 		reply, e := s.vmRecoveryCall(q)
 		if e != nil {
+			q.Schema = "haepari.guest-recovery-request/v2"
+			reply, e = s.vmRecoveryCall(q)
+		}
+		if e != nil {
 			return snap, nil, e
 		}
 		if reply.Basis == nil {
@@ -126,6 +140,11 @@ func (s *runtimeServer) planGuestAttestation(id string) (resourceRecoveryPlan, e
 	snap, basis, err := s.guestAttestationBasis(id)
 	p.Snapshot = snap
 	p.Observation = basis
+	for _, reply := range basis {
+		if reply.Basis != nil && reply.Basis.RecoveryBoot != "" {
+			p.Schema = "haepari.recovery-plan/v2"
+		}
+	}
 	if err != nil {
 		p.Unknowns = append(p.Unknowns, "original guest evidence, stopped native owners and recovery capability must be observable")
 		return p, nil
@@ -174,6 +193,9 @@ func (s *runtimeServer) applyGuestAttestation(w http.ResponseWriter, r *http.Req
 			return
 		}
 		q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "attest", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: token.ExpiresAt, Basis: reply.Basis, MutationKey: key, Evidence: request.Evidence}
+		if reply.Basis.RecoveryBoot != "" {
+			q.Schema, q.RecoveryBoot = "haepari.guest-recovery-request/v2", reply.Basis.RecoveryBoot
+		}
 		if request.Evidence.Source != "operator-attested" || request.Evidence.Mechanism != "guest-workload-and-descendants-stopped" || request.Evidence.Reference != "job:"+jobID || request.Evidence.Digest != managed.RecoveryDigest(*reply.Basis) || request.Evidence.ObservedAt.After(now) || request.Evidence.ObservedAt.Before(token.ExpiresAt.Add(-2*time.Minute)) {
 			reject(w, op, managed.ErrInvalid)
 			return
@@ -305,6 +327,9 @@ func (s *runtimeServer) executeGuestAttestation(intent managed.EvidenceRecoveryI
 			return e
 		}
 		expected := runner.GuestAttestation{Schema: "haepari.guest-attestation/v1", Guest: guestRecoveryOwner(q.Guest), Basis: *q.Basis, RecoveryDigest: q.RecoveryDigest, MutationKey: q.MutationKey, Deadline: q.Deadline, Evidence: *q.Evidence}
+		if q.Schema == "haepari.guest-recovery-request/v2" {
+			expected.Schema = "haepari.guest-attestation/v2"
+		}
 		if reply.Attestation == nil || !reflect.DeepEqual(*reply.Attestation, expected) {
 			return managed.ErrBlocked
 		}
@@ -338,6 +363,9 @@ func (s *runtimeServer) vmAttestation(jobID string) (runner.GuestRecoveryRequest
 	if err != nil {
 		return q, false, err
 	}
+	if q, found, e := s.vmRebootAttestation(guest); found || e != nil {
+		return q, found, e
+	}
 	outcomes, err := s.ledger.SupplementaryEvidence(jobID)
 	if err != nil {
 		return q, false, err
@@ -367,6 +395,9 @@ func (s *runtimeServer) vmAttestation(jobID string) (runner.GuestRecoveryRequest
 			return q, false, managed.ErrBlocked
 		}
 		q = runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Guest: guest, RecoveryDigest: a.RecoveryDigest, Attestation: &a, Basis: &a.Basis}
+		if a.Schema == "haepari.guest-attestation/v2" {
+			q.Schema, q.RecoveryBoot = "haepari.guest-recovery-request/v2", a.Basis.RecoveryBoot
+		}
 		return q, true, nil
 	}
 	return q, false, nil

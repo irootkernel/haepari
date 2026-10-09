@@ -71,12 +71,13 @@ type GuestReply struct {
 	Control         *GuestControl         `json:"control,omitempty"`
 	SupervisorAlive *bool                 `json:"supervisor_alive,omitempty"`
 	OwnersLive      *bool                 `json:"owners_live,omitempty"`
+	Absent          bool                  `json:"absent,omitempty"`
 	Reusable        bool                  `json:"reusable"`
 }
 
 func guestIdentity(q GuestRequest) (GuestReply, error) {
 	mac, err := net.ParseMAC(q.MAC)
-	if err != nil || len(mac) != 6 || !guestUUID.MatchString(q.VMUUID) || q.Challenge == "" || len(q.Challenge) > 256 || q.Schema != "haepari.guest-request/v1" {
+	if err != nil || len(mac) != 6 || !guestUUID.MatchString(q.VMUUID) || q.Challenge == "" || len(q.Challenge) > 256 || (q.Schema != "haepari.guest-request/v1" && q.Schema != "haepari.guest-request/v2") {
 		return GuestReply{}, ErrInvalid
 	}
 	// UUID is the host's registered alias. The pinned SSH key plus this actual
@@ -98,7 +99,21 @@ func guestIdentity(q GuestRequest) (GuestReply, error) {
 	if q.BootID != "" && q.BootID != boot {
 		return GuestReply{}, ErrConflict
 	}
-	return GuestReply{Schema: "haepari.guest-reply/v1", ProtocolDigest: GuestProtocolDigest(q), VMUUID: q.VMUUID, MAC: mac.String(), Challenge: q.Challenge, BootID: boot, OS: runtime.GOOS, Arch: runtime.GOARCH}, nil
+	schema := GuestReplySchema(q)
+	return GuestReply{Schema: schema, ProtocolDigest: GuestProtocolDigest(q), VMUUID: q.VMUUID, MAC: mac.String(), Challenge: q.Challenge, BootID: boot, OS: runtime.GOOS, Arch: runtime.GOARCH}, nil
+}
+
+// GuestReplySchema owns the admitted request/reply version pairing. Unsupported
+// request versions have no reply schema and remain fail-closed at the transport.
+func GuestReplySchema(q GuestRequest) string {
+	switch q.Schema {
+	case "haepari.guest-request/v1":
+		return "haepari.guest-reply/v1"
+	case "haepari.guest-request/v2":
+		return "haepari.guest-reply/v2"
+	default:
+		return ""
+	}
 }
 
 func GuestProtocolDigest(q GuestRequest) string {
@@ -144,7 +159,10 @@ func GuestCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 	response := managed.Envelope{Schema: "haepari.envelope/v1", Operation: "runner.guest", OK: err == nil}
 	if err != nil {
 		response.Error = runnerError(err)
-		_, _ = io.WriteString(stderr, err.Error()+"\n")
+		if q.Schema == "haepari.guest-request/v2" {
+			response.Error.Message = DiagnosticCause(err)
+		}
+		_, _ = io.WriteString(stderr, DiagnosticCause(err)+"\n")
 	} else {
 		response.Data, _ = json.Marshal(reply)
 	}
@@ -343,6 +361,9 @@ func prepareGuest(parent *directory, root string, q GuestRequest, control *guest
 		}
 		// A complete durable preparation may be observed again. Never fill in
 		// partial files or replace an existing request after transport loss.
+		if err := validateGuestWorkspace(d, control.value); err != nil {
+			return Request{}, err
+		}
 		return request, nil
 	}
 	if err := parent.file.Sync(); err != nil {
@@ -367,6 +388,12 @@ func prepareGuest(parent *directory, root string, q GuestRequest, control *guest
 		return Request{}, err
 	}
 	defer workspace.close()
+	if err := d.file.Sync(); err != nil {
+		return Request{}, err
+	}
+	if err := control.bindWorkspace(workspace); err != nil {
+		return Request{}, err
+	}
 	for i, entry := range manifest.Entries {
 		if err := guestPayload(workspace, entry.Path, q.Files[i], entry.Executable); err != nil {
 			return Request{}, err

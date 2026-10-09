@@ -51,7 +51,8 @@ var _ = ginkgo.Describe("Task015VMNativeEvidencePlan", ginkgo.Label("integration
 		original := f.run("vm-cleanup-health-loss")
 		q, err := f.s.vmBinding(original.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(f.s.cleanupVM(q, time.Now().Add(5*time.Second))).To(gomega.Succeed())
+		// Select this fixture effect budget before issuing cleanup; never renew it.
+		gomega.Expect(f.s.cleanupVM(q, time.Now().Add(30*time.Second))).To(gomega.Succeed())
 		control := filepath.Join(f.guest, ".haepari-control-"+original.JobID+".json")
 		before, err := os.ReadFile(control)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -84,7 +85,8 @@ var _ = ginkgo.Describe("Task015VMNativeEvidencePlan", ginkgo.Label("integration
 		original := f.run("vm-cleanup-reply-recovery")
 		q, err := f.s.vmBinding(original.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(f.s.cleanupVM(q, time.Now().Add(5*time.Second))).To(gomega.Succeed())
+		// Select this fixture effect budget before issuing cleanup; never renew it.
+		gomega.Expect(f.s.cleanupVM(q, time.Now().Add(30*time.Second))).To(gomega.Succeed())
 		b := vmEvidenceBackend{f.s, f.spec.ID}
 		root, err := b.Observe(q.Request.Identity, "dispose")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

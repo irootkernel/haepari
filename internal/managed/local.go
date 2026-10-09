@@ -208,6 +208,14 @@ func (l *Ledger) ReconcileLocalFailure(jobID string) error {
 	if state == "finished" || state == "queued" {
 		return nil
 	}
+	var resourceID string
+	if err := tx.QueryRow(`SELECT resource_id FROM managed_jobs WHERE id=?`, jobID).Scan(&resourceID); err != nil {
+		return err
+	}
+	prior, err := resourceStatusTx(tx, resourceID)
+	if err != nil {
+		return err
+	}
 	if state != "reconciling" {
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='reconciling',revision=revision+1 WHERE id=?`, jobID); err != nil {
 			return err
@@ -216,12 +224,42 @@ func (l *Ledger) ReconcileLocalFailure(jobID string) error {
 			return err
 		}
 	}
-	var resourceID string
-	if err := tx.QueryRow(`SELECT resource_id FROM managed_jobs WHERE id=?`, jobID).Scan(&resourceID); err != nil {
-		return err
-	}
 	if err := quarantineResourceTx(tx, resourceID, "local_effect_uncertain"); err != nil {
 		return err
+	}
+	if state != "reconciling" {
+		var specRaw []byte
+		if err = tx.QueryRow(`SELECT spec_json FROM managed_jobs WHERE id=?`, jobID).Scan(&specRaw); err != nil {
+			return err
+		}
+		job, err := DecodeJob(specRaw)
+		if err != nil {
+			return err
+		}
+		if AbsenceAware(job) {
+			var recorded bool
+			if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM managed_events WHERE job_id=? AND kind='live_reconciliation')`, jobID).Scan(&recorded); err != nil {
+				return err
+			}
+			if recorded {
+				return l.commit(tx)
+			}
+			idRaw, err := localIdentityTx(tx, jobID)
+			if err != nil {
+				return err
+			}
+			var id LocalIdentity
+			if err = decodeClosed(idRaw, &id); err != nil {
+				return err
+			}
+			current, err := resourceStatusTx(tx, resourceID)
+			if err != nil {
+				return err
+			}
+			if _, err = addEvent(tx, jobID, "live_reconciliation", LiveReconciliation{Schema: "haepari.reconciliation-required/v2", Reason: "local_effect_uncertain", From: state, Identity: id, PriorResource: prior, QuarantineRevision: current.AvailabilityRevision}); err != nil {
+				return err
+			}
+		}
 	}
 	return l.commit(tx)
 }
@@ -280,6 +318,11 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 		}
 		if err := validatePhaseResultTx(tx, jobID, result); err != nil {
 			return Receipt{}, err
+		}
+		if restored, err := l.restoreLiveAvailabilityTx(tx, jobID, result); err != nil {
+			return Receipt{}, err
+		} else if restored != "" {
+			result.ResourceAvailability = restored
 		}
 		result.Timings, err = resultTimingsTx(tx, jobID)
 		if err != nil {
@@ -411,4 +454,16 @@ func (l *Ledger) MarkInterrupted() error {
 		}
 	}
 	return l.commit(tx)
+}
+
+func resultSchemaTx(tx *sql.Tx, jobID string) (string, error) {
+	var raw []byte
+	if err := tx.QueryRow(`SELECT spec_json FROM managed_jobs WHERE id=?`, jobID).Scan(&raw); err != nil {
+		return "", mapNoRows(err)
+	}
+	var job JobSpec
+	if err := json.Unmarshal(raw, &job); err != nil {
+		return "", err
+	}
+	return ResultSchema(job), nil
 }
