@@ -225,3 +225,17 @@ Control records use SQLite WAL with `synchronous=FULL` on a qualified local file
 TASK-012 serializes seal-to-admission, export observation, purge and evidence recovery through the controller evidence fence; filesystem effects have tracked worker lifetime. Private descriptor-based reads and incarnation checks guard owned retained paths. Schema 9 journals purge and supplementary recovery separately from immutable terminal results. Recovery choreography supplies durable stages/deadlines while the backend supplies source ownership, collection, cleanup and readiness; TASK-015 adds the production authenticated VM backend. Its filesystem-worker receipt is separate from native workload termination. The separate TASK-012 fake guest backend remains test-only and invokes neither UTM nor SSH. [Artifact semantics](contracts/artifact-and-profile.md#implemented-delivery-and-retention-task-012) and the [F1 record](records/TASK-012-managed-core-freeze.md) define downstream boundaries.
 
 TASK-015 keeps the frozen common ledger schema at 9. A VM future-run claim precedes guest preparation; immutable internal guest bindings and retirement intents survive event-prefix retention. The guest serializes each Job's filesystem and launch operations on an owned control inode. Before classifying an unobserved start as no-start, retirement permanently refuses further prepare/start delivery for that Job; an absent native intent alone is insufficient. A surviving supervisor uses the original run and phase deadlines. Complete, verified host evidence precedes guest deletion; unproven worker lifetime retains occupancy. Minimal control metadata remains outside the deleted Job directory to preserve recovery and delayed-request fences. See the [implemented VM boundary](records/TASK-015-vm-job-recovery.md).
+
+## TASK-037 bounded transport and startup
+
+The controller supplies an explicitly validated global startup limit to the
+existing ledger and retains a separate host macOS guest limit. Readiness polling
+precedes the guest run claim and consumes the admitted preparation deadline.
+Prepared Jobs use the immutable owned-runner capability in
+[ADR-0019](architecture-decision-records/0019-owned-runner-transport.md); frozen
+native requests/receipts and the scheduler remain unchanged. Additive admission,
+binding and bounded exchange-measurement events preserve compatibility and
+candidate observability. Finished payload purge retains permanent replay facts;
+a separately pinned read-only verifier supports completed-cleanup health after
+payload removal or controller build changes. These mechanisms add no permanent
+guest service, mutable shared binary or implicit installation.

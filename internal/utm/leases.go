@@ -25,6 +25,33 @@ func normalizeMAC(value string) (string, error) {
 	return mac.String(), nil
 }
 
+// Apple's bootp identifierToString writes Ethernet octets with %x, so lease
+// hardware values may omit leading zeroes. This applies only to lease data;
+// registered resource and authenticated guest identity validators stay strict.
+func normalizeLeaseMAC(value string) (string, error) {
+	parts := strings.Split(value, ":")
+	if len(parts) != 6 {
+		return "", ErrUnavailable
+	}
+	mac := make(net.HardwareAddr, 6)
+	for i, part := range parts {
+		if len(part) < 1 || len(part) > 2 {
+			return "", ErrUnavailable
+		}
+		for _, c := range part {
+			if !strings.ContainsRune("0123456789abcdefABCDEF", c) {
+				return "", ErrUnavailable
+			}
+		}
+		b, err := strconv.ParseUint(part, 16, 8)
+		if err != nil {
+			return "", ErrUnavailable
+		}
+		mac[i] = byte(b)
+	}
+	return mac.String(), nil
+}
+
 // ReadLease uses the individual expiry, never file modification time. Even an
 // expired duplicate makes the MAC lookup ambiguous and therefore unusable.
 func ReadLease(reader io.Reader, mac string, now time.Time) (Lease, error) {
@@ -57,7 +84,7 @@ func ReadLease(reader io.Reader, mac string, now time.Time) (Lease, error) {
 			}
 			hardware := strings.SplitN(fields["hw_address"], ",", 2)
 			if len(hardware) == 2 && hardware[0] == "1" {
-				entryMAC, e := normalizeMAC(hardware[1])
+				entryMAC, e := normalizeLeaseMAC(hardware[1])
 				if e == nil && entryMAC == mac {
 					matches++
 					address, e := netip.ParseAddr(fields["ip_address"])

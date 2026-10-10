@@ -207,3 +207,14 @@ D3 adds no break-glass path. Prefer verified recollection; existing exact tokeni
 Supplementary recovery/v2 records positively absent required paths separately from real artifacts, bound to the original prepared workspace and validated reboot authority. It preserves the original result and all fixed collection/cleanup deadlines. A completed ordinary native cleanup may be consumed after a different boot only with its exact outside control proof, the original host collection inventory and stopped filesystem owners. The separate `guest-completed-cleanup-observed` recovery evidence is retained through event-prefix pruning. A late completion observation records failed cleanup timing and INCOMPLETE rather than inventing a timely completion. When all original evidence is verified or covered by approved v2 positive absence, that native authority resolves the evidence hold; resource health and availability recovery remain separate operations. Existing uncollected evidence and false or unknown native proof cannot use this exception.
 
 V2 local preparation journals `haepari.local-workspace/v1` with the admitted lease identity and the directory device/inode before workload delivery. V2 guest preparation stores `haepari.guest-control/v2` with `workspace_root` in addition to the outer Job root. Collection and cleanup reject missing, moved or replaced prepared workspaces; a replacement directory cannot convert retained output into positive absence. These bindings survive required replay/event pruning. v1 preparation is not retroactively rebound.
+
+## TASK-037 cancelled VM preflight
+
+The VM pre-claim no-effect path may consume `collecting` only when the durable
+cancel edge came from preparing/ready with the same lease/slot identity, no run
+claim, native runner receipt or local outcome, and cancellation ordered before
+outcome. All no-effect observation, current configuration, availability and
+pending-power fences still apply. Host denial may coexist with this cancellation:
+the classification atomically pauses available VM resources before settlement
+returns one capacity, while the Job remains CANCELLED. It does not pause local
+resources, replace operator pause reasons or clear quarantine.

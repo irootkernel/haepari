@@ -132,7 +132,8 @@ func validPurgeIntent(q PurgeIntent) bool {
 	seen = map[string]bool{}
 	for _, p := range q.Paths {
 		first := strings.Split(p.Path, "/")[0]
-		if !ValidArtifactPath(p.Path) || p.Inode == 0 || seen[p.Path] || first != "artifacts" && first != "output.log" && !strings.HasPrefix(first, "recovery-") || first == "output.log" && (p.Directory || p.Path != first) {
+		runner := first == "guest-runner" || strings.HasPrefix(first, "guest-recovery-runner-") && validRecoveryDigest("sha256:"+strings.TrimPrefix(first, "guest-recovery-runner-"))
+		if !ValidArtifactPath(p.Path) || p.Inode == 0 || seen[p.Path] || first != "artifacts" && first != "output.log" && !strings.HasPrefix(first, "recovery-") && !runner || (first == "output.log" || runner) && (p.Directory || p.Path != first) {
 			return false
 		}
 		seen[p.Path] = true
@@ -244,7 +245,7 @@ func (l *Ledger) CompletePurge(q PurgeIntent) (PurgeReceipt, error) {
 		if err = tx.QueryRow(`SELECT COALESCE(MAX(cursor),0) FROM managed_event_owners WHERE job_id=?`, q.JobID).Scan(&through); err != nil {
 			return PurgeReceipt{}, err
 		}
-		if _, err = tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled','vm_prepared','vm_retained','vm_retire_intent','power_cessation','local_workspace')`, q.JobID, through); err != nil {
+		if _, err = tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled','vm_prepared','vm_retained','vm_transport_binding','vm_transport_admission','vm_retire_intent','power_cessation','local_workspace')`, q.JobID, through); err != nil {
 			return PurgeReceipt{}, err
 		}
 		if _, err = tx.Exec(`UPDATE managed_event_progress SET purged_through=MAX(purged_through,?) WHERE job_id=?`, through, q.JobID); err != nil {

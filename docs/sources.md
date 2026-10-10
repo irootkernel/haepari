@@ -20,6 +20,8 @@ The R2 references were recorded as checked on 2026-09-27. Selected primary pages
 | S14 | https://go.dev/dl/ | Go 1.27.1 has an official macOS arm64 distribution. |
 | S15 | https://pkg.go.dev/modernc.org/sqlite@v1.59.0 | The pinned SQLite driver is pure Go, supports darwin/arm64, and lists BSD-3-Clause licensing. The [TASK-004 record](records/TASK-004-macos-supervision.md) bounds its observed host behavior. |
 
+| S16 | https://raw.githubusercontent.com/apple-oss-distributions/bootp/main/bootplib/host_identifier.c | Checked 2026-10-10 for TASK-037: Ethernet host identifiers use type 1 and six hexadecimal octets; the writer uses `%x`, so leading zero padding is absent. This source does not prove the installed DHCP table or real lease currency. |
+
 ## User decisions
 
 The user selected the name Haepari, independent tool ownership, project-owned VM tests, the Aquarium-first adoption order, stable installation combinations, full skill/configuration coverage, migration/regression verification, and Sorage-based producer delegation. Go and the bounded v0.1.0 scope carry forward the agreed recommendation. The initial package invented no license, public repository URL, installed baseline version, or provider account; the owner selected MIT in Design Revision 3.2.

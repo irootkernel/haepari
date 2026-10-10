@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -46,7 +47,7 @@ func (s *runtimeServer) vmSSH(spec managed.ResourceSpec) (utm.SSH, error) {
 		return utm.SSH{}, managed.ErrBlocked
 	}
 	sum := sha256.Sum256(binary)
-	return utm.SSH{Executable: "/usr/bin/ssh", Control: s.vmControl(spec), Run: s.sshCommand, Runner: binary, RunnerDigest: "sha256:" + hex.EncodeToString(sum[:])}, nil
+	return utm.SSH{Executable: "/usr/bin/ssh", Control: s.vmControl(spec), Run: s.sshCommand, Runner: binary, RunnerDigest: "sha256:" + hex.EncodeToString(sum[:]), Transport: s.vmTransport, Measure: s.vmSSHMeasurement}, nil
 }
 func (s *runtimeServer) vmCall(q runner.GuestRequest) (runner.GuestReply, error) {
 	spec, err := s.vmSpec(q.Request.Identity.ResourceID)
@@ -86,7 +87,45 @@ func (s *runtimeServer) vmCall(q runner.GuestRequest) (runner.GuestReply, error)
 			return runner.GuestReply{}, err
 		}
 	}
-	if transport.RunnerDigest != q.RunnerDigest {
+	if s.vmTransport {
+		admission, e := s.ledger.VMTransportAdmission(q.Request.Identity.JobID)
+		if e != nil {
+			return runner.GuestReply{}, e
+		}
+		transport.Transport = len(admission) != 0
+		if transport.Transport && !validVMTransportAdmission(admission, q) {
+			return runner.GuestReply{}, managed.ErrBlocked
+		}
+		transport.Measure = s.vmSSHMeasurement
+		if q.Operation == "health" {
+			transport, err = s.vmSSH(spec)
+			if err != nil {
+				return runner.GuestReply{}, err
+			}
+		} else {
+			raw, e := s.ledger.VMTransportBinding(q.Request.Identity.JobID)
+			if e != nil {
+				return runner.GuestReply{}, e
+			}
+			if len(raw) != 0 && q.Root != nil {
+				var b runner.GuestTransportBinding
+				if json.Unmarshal(raw, &b) != nil || runner.ValidateGuestTransportBinding(b, q) != nil {
+					return runner.GuestReply{}, managed.ErrBlocked
+				}
+				transport.Binding = &b
+			}
+		}
+		if transport.Transport {
+			transport.RecordPrepared = func(b runner.GuestTransportBinding) error {
+				raw, e := json.Marshal(b)
+				if e != nil {
+					return e
+				}
+				return s.ledger.RecordVMTransportBinding(q.Request.Identity, raw)
+			}
+		}
+	}
+	if transport.RunnerDigest != q.RunnerDigest && !(s.vmTransport && q.Operation == "health") {
 		return runner.GuestReply{}, managed.ErrBlocked
 	}
 	var leases io.ReadCloser
@@ -100,6 +139,30 @@ func (s *runtimeServer) vmCall(q runner.GuestRequest) (runner.GuestReply, error)
 	}
 	defer leases.Close()
 	return transport.Call(context.Background(), spec, leases, q)
+}
+
+type vmTransportAdmission struct {
+	Schema       string                `json:"schema"`
+	Identity     managed.LocalIdentity `json:"identity"`
+	RunnerDigest string                `json:"runner_digest"`
+}
+
+func validVMTransportAdmission(raw []byte, q runner.GuestRequest) bool {
+	var admission vmTransportAdmission
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	return managed.ValidateUniqueJSONKeys(raw) == nil && d.Decode(&admission) == nil && d.Decode(new(any)) == io.EOF && admission.Schema == "haepari.vm-transport-admission/v1" && admission.Identity == q.Request.Identity && admission.RunnerDigest == q.RunnerDigest
+}
+
+func (s *runtimeServer) vmSSHMeasurement(observation utm.SSHExchange) error {
+	if !s.vmTransport || observation.Identity.JobID == "" {
+		return nil
+	}
+	raw, err := json.Marshal(observation)
+	if err != nil {
+		return err
+	}
+	return s.ledger.RecordVMSSHMeasurement(observation.Identity, raw, observation.Complete)
 }
 func (s *runtimeServer) vmBinding(jobID string) (runner.GuestRequest, error) {
 	plan, prepared, err := s.ledger.VMJobBinding(jobID)
@@ -218,19 +281,36 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	// A power effect already has its durable claim. Advance only its next effect;
 	// uncertainty never permits resubmission, even before any guest Job exists.
 	steps := []managed.ResultStep{}
+	powerContext, cancelPower := context.WithDeadline(context.Background(), prepareDeadline)
+	defer cancelPower()
 	for _, p := range snapshot.AdapterIntents {
 		var startAt time.Time
 		for p.State != "reconciled" && time.Now().Before(prepareDeadline) {
+			if e := s.vmPreflightState(c); e != nil {
+				// Cancellation may still observe an already returned command,
+				// but cannot issue another power effect or guess a lost return.
+				if !errors.Is(e, errVMReadinessCancelled) || !p.CommandReturned() {
+					return e
+				}
+				if _, ready := p.ReadyEffect(); ready {
+					return managed.ErrBlocked
+				}
+			}
 			if p.Stage == managed.PowerStartReady && startAt.IsZero() {
 				startAt = time.Now()
 			}
 			prior := managed.RecoveryDigest(p)
-			p, err = s.advanceVMPower(context.Background(), p.Identity)
+			p, err = s.advanceVMPower(powerContext, p.Identity)
 			if err != nil {
 				return err
 			}
 			if managed.RecoveryDigest(p) == prior {
-				return managed.ErrBlocked
+				if !p.CommandReturned() {
+					return managed.ErrBlocked
+				}
+				if err = s.waitVMPreparation(c, prepareDeadline, 100*time.Millisecond); err != nil {
+					return err
+				}
 			}
 		}
 		if p.State != "reconciled" {
@@ -253,8 +333,14 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	}
 	probe := runner.GuestRequest{Schema: guestSchema, Operation: "identity", VMUUID: strings.ToLower(spec.VM.UTMVMUUID), MAC: strings.ToLower(spec.VM.MACAddress), JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: prepareDeadline, Request: runner.Request{Identity: c.identity}}
 	sshAt := time.Now()
-	identity, err := s.vmCall(probe)
+	identity, err := s.waitVMReadiness(c, probe)
 	if err != nil {
+		if errors.Is(err, errVMReadinessCancelled) {
+			return s.vmNoEffect(c, "cancel", false, "", err)
+		}
+		if errors.Is(err, errControllerDetached) || errors.Is(err, managed.ErrStale) {
+			return err
+		}
 		var failure *utm.CommandFailure
 		if errors.As(err, &failure) && failure.HostPermissionDenied {
 			return s.vmNoEffect(c, "prepare_failure", false, "host_permission_unavailable", err)
@@ -335,6 +421,12 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	c.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	if s.vmTransport {
+		raw, _ := json.Marshal(vmTransportAdmission{Schema: "haepari.vm-transport-admission/v1", Identity: id, RunnerDigest: q.RunnerDigest})
+		if err = s.ledger.RecordVMTransportAdmission(id, raw); err != nil {
+			return err
+		}
 	}
 	if err = s.beginPhase(c, "prepare", job.Deadlines.PrepareSeconds, prepareDeadline); err != nil {
 		return err
@@ -517,6 +609,20 @@ func (s *runtimeServer) vmPreparationStopped(c *localRunControl, job managed.Job
 func (s *runtimeServer) vmNoEffect(c *localRunControl, failure string, unavailable bool, hostReason string, cause error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.identity.RunID == "" && !c.effects {
+		current, e := s.ledger.Snapshot(c.identity.JobID)
+		if e != nil {
+			return e
+		}
+		c.receipt = current
+		status, e := s.ledger.Cancellation(c.identity.JobID)
+		if e != nil {
+			return e
+		}
+		if status.Requested {
+			failure, unavailable = "cancel", false
+		}
+	}
 	proof := managed.NoEffectProof{ObservationReference: "vm-preflight:" + c.identity.JobID, NoOwnedJobEffect: true, NoUnprovenProcess: true, NoProtectedPath: true, PowerReconciled: true}
 	r, err := s.ledger.RecordNoEffectObservation(managed.NoEffectObservationRequest{JobID: c.identity.JobID, ExpectedJobRevision: c.receipt.JobRevision, ResourceID: c.identity.ResourceID, ExpectedConfigRevision: c.identity.ConfigRevision, Slot: c.identity.Slot, LeaseGeneration: c.identity.LeaseGeneration, Source: "machine", Mechanism: "authenticated-vm-preflight-before-guest-claim", EvidenceDigest: vmEvidence(struct {
 		Identity managed.LocalIdentity

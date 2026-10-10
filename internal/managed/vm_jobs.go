@@ -103,6 +103,109 @@ func (l *Ledger) VMJobBinding(jobID string) (json.RawMessage, json.RawMessage, e
 	}
 	return plan, prepared, nil
 }
+
+// The transport observation is additive private data, separate from frozen
+// guest preparation and native runner receipts.
+func (l *Ledger) VMTransportBinding(jobID string) (json.RawMessage, error) {
+	var raw []byte
+	err := l.db.QueryRow(`SELECT payload_json FROM managed_events WHERE job_id=? AND kind='vm_transport_binding' ORDER BY cursor LIMIT 1`, jobID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return raw, err
+}
+func (l *Ledger) RecordVMTransportBinding(id LocalIdentity, raw json.RawMessage) error {
+	return l.recordVMTransportFact(id, raw, "vm_transport_binding")
+}
+func (l *Ledger) VMTransportAdmission(jobID string) (json.RawMessage, error) {
+	var raw []byte
+	err := l.db.QueryRow(`SELECT payload_json FROM managed_events WHERE job_id=? AND kind='vm_transport_admission' ORDER BY cursor LIMIT 1`, jobID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return raw, err
+}
+func (l *Ledger) RecordVMTransportAdmission(id LocalIdentity, raw json.RawMessage) error {
+	return l.recordVMTransportFact(id, raw, "vm_transport_admission")
+}
+func (l *Ledger) recordVMTransportFact(id LocalIdentity, raw json.RawMessage, kind string) error {
+	if len(raw) == 0 || len(raw) > 2<<20 || ValidateUniqueJSONKeys(raw) != nil {
+		return ErrInvalid
+	}
+	tx, err := l.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = matchLocalIdentityTx(tx, id); err != nil {
+		return err
+	}
+	var prior []byte
+	err = tx.QueryRow(`SELECT payload_json FROM managed_events WHERE job_id=? AND kind=? ORDER BY cursor LIMIT 1`, id.JobID, kind).Scan(&prior)
+	if err == nil {
+		if string(prior) != string(raw) {
+			return ErrConflict
+		}
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if _, err = addEvent(tx, id.JobID, kind, raw); err != nil {
+		return err
+	}
+	return l.commit(tx)
+}
+
+// Keep at most 4096 measured exchange pairs per Job. Overflow records a durable
+// gap once; consumers must reject incomplete coverage instead of extrapolating.
+func (l *Ledger) RecordVMSSHMeasurement(id LocalIdentity, raw json.RawMessage, complete bool) error {
+	if len(raw) == 0 || len(raw) > 4096 || ValidateUniqueJSONKeys(raw) != nil {
+		return ErrInvalid
+	}
+	tx, err := l.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = matchLocalIdentityTx(tx, id); err != nil {
+		return err
+	}
+	var count int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM managed_events WHERE job_id=? AND kind='vm_ssh_exchange_start'`, id.JobID).Scan(&count); err != nil {
+		return err
+	}
+	if count >= 4096 && !complete || count > 4096 {
+		var gap bool
+		if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM managed_events WHERE job_id=? AND kind='vm_ssh_measurement_gap')`, id.JobID).Scan(&gap); err != nil {
+			return err
+		}
+		if !gap {
+			if _, err = addEvent(tx, id.JobID, "vm_ssh_measurement_gap", map[string]any{"schema": "haepari.ssh-measurement-gap/v1", "reason": "exchange_detail_limit"}); err != nil {
+				return err
+			}
+		}
+		return l.commit(tx)
+	}
+	// Once overflow begins, no more details are admitted, including completion
+	// of an unrecorded start. A pending last admitted pair can still complete.
+	var gap bool
+	if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM managed_events WHERE job_id=? AND kind='vm_ssh_measurement_gap')`, id.JobID).Scan(&gap); err != nil {
+		return err
+	}
+	if gap {
+		return nil
+	}
+	kind := "vm_ssh_exchange_start"
+	if complete {
+		kind = "vm_ssh_exchange_complete"
+	}
+	if _, err = addEvent(tx, id.JobID, kind, raw); err != nil {
+		return err
+	}
+	return l.commit(tx)
+}
+
 func (l *Ledger) StartVM(id LocalIdentity, revision int64) (Receipt, error) {
 	q := struct {
 		Identity LocalIdentity

@@ -59,19 +59,19 @@
       "deferred": 4
     },
     "adrs": {
-      "total": 18,
+      "total": 19,
       "deferred": 2,
-      "active": 16
+      "active": 17
     },
     "verification_cases": {
       "total": 85,
       "active_managed": 65,
       "deferred_external": 20
     },
-    "markdown_documents": 73,
+    "markdown_documents": 74,
     "json_templates": 11,
     "producer_request_drafts": 9,
-    "relative_links_checked": 587
+    "relative_links_checked": 597
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",

@@ -28,9 +28,11 @@ var hostPermissionPattern = regexp.MustCompile(`(?:\(OSStatus error -1743\.\)|Er
 const commandLimit = 1 << 20
 
 type CommandResult struct {
-	Stdout   string
-	Stderr   string
-	ExitCode int
+	StdoutBytes int64
+	StderrBytes int64
+	Stdout      string
+	Stderr      string
+	ExitCode    int
 }
 
 type CommandRunner func(context.Context, string, ...string) (CommandResult, error)
@@ -169,10 +171,12 @@ func (c Control) Power(ctx context.Context, uuid, operation string) error {
 type boundedOutput struct {
 	bytes    []byte
 	overflow bool
+	total    int64
 }
 
 func (b *boundedOutput) Write(p []byte) (int, error) {
 	n := len(p)
+	b.total += int64(n)
 	remaining := commandLimit - len(b.bytes)
 	if len(p) > remaining {
 		b.overflow = true

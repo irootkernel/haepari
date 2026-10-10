@@ -190,3 +190,67 @@ Recovery/v2 may report positive absence only for the original guest/v2 workspace
 Recovery/v2 also has a separate `completed_cleanup` read-only reply variant for an already completed ordinary cleanup. It opens the current private single-link control file without following symlinks, locks it and checks that its FD and current pathname refer to the same inode. It also requires the exact original request/root, stopped error-free completed cleanup, its valid native termination observation and fresh no-follow absence of the original Job pathname. The host has no historical control-inode pin. It contains no attestation or retained-root basis. Current registered identity, pin, lease and a different native boot still apply. The host requires the original collection and cleanup intents, stopped controller workers and reverified host files/logs before consuming this proof. It performs no workload or deletion. A late host completion observation retains the original cleanup deadline and INCOMPLETE classification; its separately recorded native authority can resolve the evidence hold and support a fresh resource-health plan without rewriting that result. Unknown or replaced roots, incomplete control, false native proof and uncollected or changed host evidence remain blocked.
 
 TASK-036 preserves closed native refusal classifications through ordinary guest/v2 and recovery/v2 exchanges, including their preliminary pinned identity proof. Recovery/v2 probes identity with its trusted executable and supported guest/v2 request; the original nested guest request, runner and native receipts remain unchanged. A negative envelope after recovery issuance retains uncertain-effects classification and the native cause. Recovery/v1 retains static error messages. Arbitrary error text, stderr and payloads never become diagnostic codes; no classification authorizes cessation, cleanup or another effect.
+
+## TASK-037 readiness and owned transport capability
+
+A cold preparation waits for a successfully returned original start command to
+be observed as started, a unique current registered-MAC lease, and pinned guest
+identity, inside the original prepare deadline. Polling uses bounded backoff and
+rechecks cancellation, configuration, lease/slot and controller ownership before
+claiming a guest run. An uncertain or failed power command is never reissued or
+resolved by this polling. Permission denial retains the host-wide pause path;
+VM-local pre-claim failure retains its no-effect pause. A pre-claim cancellation
+can settle only with no run, native receipt, effect or unresolved power intent.
+If cancellation and host denial coincide, cancellation preserves the verdict
+while the same fenced classification still pauses available host VM resources.
+
+Apple bootpd's Ethernet host-identifier writer uses hexadecimal octets without
+zero padding ([S16](../sources.md)). DHCP Ethernet entries therefore accept six
+one- or two-digit hex octets and normalize them to the registered strict MAC.
+Registration and guest identity syntax are unchanged. Multiple matching entries,
+including padded/unpadded aliases, non-Ethernet identifiers, malformed octets
+and individually expired leases refuse; there is no alternative address search.
+
+[ADR-0019](../architecture-decision-records/0019-owned-runner-transport.md) selects
+a distinct closed `guest-transport-request/reply/binding/v1` capability around
+unchanged guest v1/v2. New controller admissions save a separate immutable
+`haepari.vm-transport-admission/v1` event before preparation. Prepared native
+control returns an exact root and private single-link runner incarnation; that
+binding is retained outside event-prefix pruning. Compact exchanges carry three
+fixed files (request, digest and encoded owned identity), copy the original
+no-follow runner into private scratch, check SHA-256 and repeat native root/file
+identity checks. Equal bytes at a replacement inode refuse. An interrupted
+compact call never falls back to a second issued effect. The preliminary pinned
+identity exchange remains separate; log/file pages remain at most 64 KiB with
+original file metadata and offsets.
+
+Historical Jobs without the admission marker continue the original full
+bootstrap against their original executable, even when the current controller
+supports the capability. A capable admission with interrupted preparation uses
+the full new bootstrap until its binding is proven. No historical native request,
+control, result, token or schema identifier is rewritten. A separately pinned
+current verifier may perform only completed-cleanup read-only health, including
+original attested recovery health, preserving the original runner/recovery
+identity, native termination and outside control/attestation. It cannot perform
+replacement-byte workload, collection or cleanup. Root presence blocks this
+post-cleanup verifier path.
+
+SSHRunner measurements record versioned start/completion pairs with exact
+Job/run/VM identity, request/executor digest, original deadline, UTC start,
+application archive/executable bytes, drained stdout/stderr bytes, elapsed call
+time, exit and transport failure. Start is durable before issuance; failed
+completion publication leaves a measurement gap and never reissues the call.
+At 4096 admitted exchanges, one explicit detail-limit gap stops new details;
+missing pairs and gaps cannot establish totals. These are application bytes at
+the SSH subprocess boundary, excluding SSH packet overhead and throughput.
+
+Explicit finished-Job purge inventories known host `guest-runner` and exact
+attested `guest-recovery-runner-<digest>` payloads. Before an intent it requires
+private regular single-link no-follow bytes matching the saved digest; the intent
+then pins their current device/inode and replay refuses replacement. Unknown
+final runner leaves refuse. Unpublished `.guest-recovery-runner-*` temporaries
+have no final-path authority and remain outside the deletion inventory, with
+their bytes retained even when known final payload purge succeeds. Active, occupied, quarantined, recovering or unresolved
+Jobs retain payloads. Old admission/mutation keys, native bindings, required
+receipts and frozen results remain retained; no automatic expiry is added.
+The host does not claim a historical payload-inode pin before purge intent.

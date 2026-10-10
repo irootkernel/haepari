@@ -111,3 +111,34 @@ These checks are enrolled in the common integration gate and operate isolated na
 EPIC-009 is defined in [the roadmap](docs/roadmap.md); its [execution dossier](docs/TODO-VM-OPERATIONAL-READINESS.md#campaign-and-acceptance-matrix) owns the required corrected-candidate and real-project observations. TASK-036–037 use focused checks and the existing common gate. TASK-038 will replace the real-UTM stub with a tracked, public-CLI campaign under separately bounded live authority; the current Makefile still returns an explicit prerequisite failure. TASK-039 will add minimal submission helpers and one real-project cycle, while TASK-017 retains the full project Make contract.
 
 The future campaign requires exact candidate/resource inputs, finite budgets, cold start, failure/cancel/disconnect/restart/reboot recovery, large output, a 30-Job soak and the two-VM/global-three profile. Missing prerequisites must fail that selected gate, without a successful skip, private-helper dependency or host fallback. This plan changes neither executable Make targets nor the enrollment of the ordinary local gate.
+
+## TASK-037 fixture coverage and live boundary
+
+`Task037TransportCost` compares the same three inspect calls at the actual
+SSHRunner archive seam. `Task037SSHMeasurements` verifies interrupted transport,
+start/completion storage failure without retry and full drained-byte accounting.
+`Task037MixedExecutionLimits` covers mixed VM/local reservation limits one/two/
+three, VM capacity one, one return and bounded measurement detail gaps.
+`Task037ControllerStartupLimits` runs actual independent native workers through
+the Unix controller, including default-one dispatch, selected two/three limits
+and progress after a slot return. Invalid startup limits create no state.
+
+`Task037VMOperationalBounds` uses fake UTM and the native guest endpoint to cover
+cold status/lease/proof delays, original deadline/no early staging, cancellation
+and host-denial ordering, protected active/unresolved runners, exact known runner
+purge, unknown-file refusal, interrupted purge/replaced-inode refusal, old keys
+and post-purge health, plus historical full-wire compatibility. The owned member
+of `Task014NativeSSHProtocol` builds the actual signed product binary and runs
+its constant compact bootstrap through a non-POSIX `/bin/csh` remote-command
+fixture and an explicitly quoted `/bin/sh` interpreter, using local subprocesses. It verifies no full
+runner retransmission, reaped interrupted transport, complete 64 KiB file pages
+and oversized/replacement root/runner/file refusal. Existing attested-recovery
+coverage proves that interrupted-publication temporary bytes remain unchanged
+when known final runner payloads and artifacts are purged. `Task037TransportVerifier` checks normal
+and attested completed-cleanup health with different executable bytes while
+preserving native control/attestation and refusing effects.
+
+These tests are included in the existing common `make test` gate. They operate
+no real SSH server, UTM VM or installed service and establish no real throughput,
+reboot, 50 MiB campaign or two-VM concurrency observation. TASK-038 owns the exact
+installed-candidate campaign and those measurements.

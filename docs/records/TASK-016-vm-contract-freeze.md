@@ -87,3 +87,14 @@ V2 preparation also versions the filesystem-worker control as guest-control/v2 a
 Ordinary guest/v2 and separate recovery/v2 negative envelopes preserve closed native diagnostic causes, including a failed preliminary pinned identity proof. Recovery/v2 uses its trusted binary and supported guest/v2 identity proof while retaining the original nested request and receipts. Recovery/v1 retains static error envelopes. A refused recovery effect retains uncertainty as well as its cause; neither is termination or retry authority.
 
 Recovery/v2 positive absence is confined to the original guest/v2 workspace and validated retired reboot authority; logs, receipts, nonzero offsets, expected-file requests and contradictory file/bytes remain fenced. A separate guest-attested-cleanup/v2 intent binds absent paths to the saved collection digest, key and deadline and rechecks them before deletion. Original v1 payloads and native termination flags do not change. A completed ordinary cleanup has a distinct read-only recovery/v2 reply carrying exact original control/native proof and current no-follow root absence; it supplies no attestation, workload or deletion effect. Host inventory and original deadline checks precede settlement, and resource health remains separate. This changes the development candidate contract; it does not qualify a real reboot or revise the historical TASK-016 campaign.
+
+
+TASK-037's selected [ADR-0019](../architecture-decision-records/0019-owned-runner-transport.md)
+adds a separately versioned owned-runner transport capability and admission
+marker around frozen guest/native contracts, a completed-cleanup read-only
+current-verifier path, additive bounded application-byte measurements and
+explicit finished runner disposal. Startup limits use the separately versioned
+explicit-limit development-service plan. Historical Jobs keep their original
+full wire and executable; no native receipt, original key or terminal result is
+rewritten. The before-protocol fixture measurement and selected decision do not
+revise historical TASK-016 acceptance or supply TASK-038 qualification.

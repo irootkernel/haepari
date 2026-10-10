@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -157,6 +158,20 @@ var _ = ginkgo.Describe("GuestAttestedRecovery", ginkgo.Label("integration"), fu
 		basis := p.Observation.([]runner.GuestRecoveryReply)[0]
 		savedRunner := filepath.Join(f.s.root.Path, "jobs", original.JobID, "guest-recovery-runner-"+basis.RecoveryDigest[7:])
 		recoveryPublicationChild(savedRunner, "guest-recovery-runner-created")
+		// The killed publication has no durable final-path authority. Finished
+		// purge must preserve its unknown temporary bytes, not guess ownership.
+		temporaries := map[string][]byte{}
+		entries, err := os.ReadDir(filepath.Dir(savedRunner))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".guest-recovery-runner-") {
+				path := filepath.Join(filepath.Dir(savedRunner), entry.Name())
+				data, e := os.ReadFile(path)
+				gomega.Expect(e).NotTo(gomega.HaveOccurred())
+				temporaries[path] = data
+			}
+		}
+		gomega.Expect(temporaries).To(gomega.HaveLen(1))
 		_, err = os.Stat(savedRunner)
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 		_, err = os.Stat(filepath.Join(f.guest, ".haepari-attestation-"+original.JobID+".json"))
@@ -261,6 +276,9 @@ var _ = ginkgo.Describe("GuestAttestedRecovery", ginkgo.Label("integration"), fu
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		_, err = f.s.purgeJob(original.JobID, snap.JobRevision)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		for path, data := range temporaries {
+			gomega.Expect(os.ReadFile(path)).To(gomega.Equal(data))
+		}
 		_, err = os.Stat(local + "-native")
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 		_, err = os.Stat(filepath.Join(f.guest, ".haepari-attestation-"+original.JobID+".json"))

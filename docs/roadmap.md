@@ -62,7 +62,7 @@ EPIC-009 Detailed SOT: [VM operational readiness execution dossier](TODO-VM-OPER
 | [TASK-015](roadmap/EPIC-004.md#task-015) | Integrate VM collection, job cleanup and recovery | TASK-014, TASK-010, TASK-011, TASK-012 | Active | Accepted |
 | [TASK-016](roadmap/EPIC-004.md#task-016) | Qualify the real macOS VM backend; freeze VM contract fields | TASK-015, TASK-034 | Active | Accepted |
 | [TASK-036](roadmap/EPIC-009.md#task-036) | Restore recoverable VM failure handling | TASK-012, TASK-015 | Active | Accepted |
-| [TASK-037](roadmap/EPIC-009.md#task-037) | Bound VM startup, transport, and retained runner storage | TASK-036 | Active | Planned |
+| [TASK-037](roadmap/EPIC-009.md#task-037) | Bound VM startup, transport, and retained runner storage | TASK-036 | Active | Accepted |
 | [TASK-038](roadmap/EPIC-009.md#task-038) | Publish and execute repeatable real-VM qualification | TASK-016, TASK-037 | Active | Planned |
 | [TASK-039](roadmap/EPIC-009.md#task-039) | Demonstrate one real project through the development service | TASK-038 | Active | Planned |
 | [TASK-017](roadmap/EPIC-005.md#task-017) | Publish the project Make and guest integration contract | TASK-008, TASK-012, TASK-015, TASK-039 | Active | Planned |

@@ -46,7 +46,8 @@ type runtimeServer struct {
 	vmWrite         func(*os.File, []byte) (int, error) // nil is the ordinary durable collector; tests inject ENOSPC
 	vmSyncParents   func(string, string) error          // nil syncs the publication chain; tests inject sync failure
 	vmHostLimit     int                                 // zero defaults to one; bounded at two
-	utmCommand      utm.CommandRunner                   // nil in production; the argv boundary is injectable for fake UTM
+	vmTransport     bool
+	utmCommand      utm.CommandRunner // nil in production; the argv boundary is injectable for fake UTM
 	// Test barrier after a replay miss, before observing readiness. Nil in production.
 	beforeAvailabilityObservation func()
 	beforeWaitRead                func() // nil in production; subscribe/read race barrier

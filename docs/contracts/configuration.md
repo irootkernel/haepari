@@ -89,3 +89,19 @@ The current local controller uses the default 256 MiB combined stdout/stderr log
 ## TASK-015 implementation boundary
 
 The foreground controller accepts `daemon run --host-macos-guest-limit 1|2`, default 1, before opening its state or issuing effects. Scheduling counts observed running VMs and pending/uncertain start claims, uses only eligible operator-authorized registered victims, and preserves blocked queue deadlines. This explicit option implements the host limit without claiming the TASK-023 general configuration loader or TASK-016 real limit qualification. Automatic development VM input is bounded to 48 MiB payload and 96 MiB encoded guest request before preparation; output and log defaults retain the TASK-012 bounds above.
+
+## TASK-037 startup limits
+
+`daemon run --global-limit <positive-int>` selects the ledger's controller-wide
+limit, default 1. Zero, negative, malformed and overflowing values refuse before
+opening state or issuing effects. `--host-macos-guest-limit 1|2` remains separate
+and defaults to 1. Every VM registration still has capacity one. Startup applies
+the selected global limit to local and VM reservations, including unresolved
+occupancy; restarting with a lower limit never erases existing reservations.
+
+`service plan` accepts the same optional flags. An explicitly selected limit
+produces `haepari.development-service-plan/v2`, binding both positive global and
+bounded host limits into the exact plist argv. A v1 plan keeps its original argv
+and refuses new fields, including null values. Install/uninstall reverify the
+saved plan; neither replaces a running service or changes limits by implication.
+The general configuration loader, doctor and operator policy remain TASK-023.

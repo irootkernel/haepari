@@ -148,3 +148,18 @@ TASK-039 hands TASK-017 the real recipe, declared inputs/outputs, helper invocat
 At final Epic assessment, repeat affected integration scenarios on the final candidate, reconcile the task checklists with this matrix, and state every environmental limit. Promote behavior to contracts, measurements/qualification to the VM record, operating procedures to operations, developer commands to TESTING/implementation guidance, and consumer alignment to external requests.
 
 After explicit Epic acceptance, replace this Epic's Detailed SOT links with Canonical Outcomes and inspect all dossier references. Delete the temporary dossier and its index entry only under approved closeout authority after no active consumer needs it. This adoption neither deletes the dossier nor pre-authorizes its later removal.
+
+
+## TASK-037 candidate handoff
+
+The before-protocol cost observation and selected capability are promoted to
+[ADR-0019](architecture-decision-records/0019-owned-runner-transport.md). The
+[runner contract](contracts/resource-and-runner.md#task-037-readiness-and-owned-transport-capability)
+owns readiness, immutable admission/binding, historical wire, completed-cleanup
+verifier and explicit payload purge semantics. The
+[configuration contract](contracts/configuration.md#task-037-startup-limits)
+owns global/host startup limits and explicit v2 development-service plans.
+[Operating controls](operations.md#task-037-operating-controls-and-task-038-handoff)
+define the measurable TASK-038 candidate and separate live approval boundary.
+The source-backed MAC representation change leaves registration and guest
+identity strict; actual installed DHCP observation remains TASK-038.

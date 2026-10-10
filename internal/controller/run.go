@@ -24,13 +24,16 @@ import (
 
 var ErrSocketExists = errors.New("control socket already exists; refusing to replace it")
 
-type Options struct{ HostMACOSGuestLimit int }
+type Options struct {
+	HostMACOSGuestLimit int
+	GlobalLimit         int
+}
 
 func Run(ctx context.Context, root state.Root) error {
-	return RunWithOptions(ctx, root, Options{HostMACOSGuestLimit: 1})
+	return RunWithOptions(ctx, root, Options{HostMACOSGuestLimit: 1, GlobalLimit: 1})
 }
 func RunWithOptions(ctx context.Context, root state.Root, options Options) error {
-	if options.HostMACOSGuestLimit < 1 || options.HostMACOSGuestLimit > 2 {
+	if options.GlobalLimit < 1 || options.HostMACOSGuestLimit < 1 || options.HostMACOSGuestLimit > 2 {
 		return managed.ErrInvalid
 	}
 	if err := root.Prepare(); err != nil {
@@ -58,7 +61,7 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 			_ = db.Close()
 		}
 	}()
-	ledger, err := managed.NewLedger(db, 1)
+	ledger, err := managed.NewLedger(db, options.GlobalLimit)
 	if err != nil {
 		return fmt.Errorf("initialize managed state: %w", err)
 	}
@@ -88,6 +91,7 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 		return fmt.Errorf("bind installation identity: %w", err)
 	}
 	runtime.vmHostLimit = options.HostMACOSGuestLimit
+	runtime.vmTransport = true
 	// A graceful listener exit detaches observers, not the independent runner.
 	// Retain the kernel ownership lock and database until in-process workers
 	// actually stop, including a filesystem worker that outlived its observer.

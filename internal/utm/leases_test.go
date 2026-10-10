@@ -16,6 +16,26 @@ func leaseFixture(expiry int64) string {
 }
 
 var _ = ginkgo.Describe("IndividualDHCPLease", ginkgo.Label("unit"), func() {
+	ginkgo.It("Task037 accepts Apple's padded or unpadded Ethernet lease octets without weakening identity or expiry", func() {
+		now := time.Unix(2000000000, 0)
+		mac := "00:05:02:3e:04:30"
+		valid := strings.ReplaceAll(leaseFixture(now.Add(time.Hour).Unix()), vmMAC, "0:5:2:3e:4:30")
+		for _, spelling := range []string{"0:5:2:3e:4:30", "00:05:02:3E:04:30"} {
+			lease, err := ReadLease(strings.NewReader(strings.ReplaceAll(valid, "0:5:2:3e:4:30", spelling)), mac, now)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(lease.MAC).To(gomega.Equal(mac))
+		}
+		for _, spelling := range []string{"0:5:2:3e:4", "0:5:2:3e:4:030", "0:5:2:3e:4:+3", "0:5:2:3e:4:gg", "0:5:2:3e:4: 30", "0:5:2:3e:4:30:1"} {
+			_, err := ReadLease(strings.NewReader(strings.ReplaceAll(valid, "0:5:2:3e:4:30", spelling)), mac, now)
+			gomega.Expect(err).To(gomega.HaveOccurred())
+		}
+		for _, text := range []string{valid + strings.ReplaceAll(valid, "0:5:2:3e:4:30", mac), strings.ReplaceAll(valid, "hw_address=1,", "hw_address=0,"), strings.ReplaceAll(valid, fmt.Sprintf("0x%x", now.Add(time.Hour).Unix()), fmt.Sprintf("0x%x", now.Unix()))} {
+			_, err := ReadLease(strings.NewReader(text), mac, now)
+			gomega.Expect(err).To(gomega.HaveOccurred())
+		}
+		_, err := normalizeMAC("0:5:2:3e:4:30")
+		gomega.Expect(err).To(gomega.HaveOccurred())
+	})
 	ginkgo.It("preserves host denial before and after guest identity proof", func() {
 		for _, deniedAt := range []int{1, 2} {
 			statuses, proofs := 0, 0

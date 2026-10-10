@@ -18,7 +18,8 @@ import (
 // Its digest is independent of the immutable legacy per-Job runner digest.
 func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases io.Reader, q runner.GuestRecoveryRequest) (runner.GuestRecoveryReply, error) {
 	var reply runner.GuestRecoveryReply
-	if q.Deadline.IsZero() || !time.Now().Before(q.Deadline) || q.RecoveryDigest != s.RunnerDigest || spec.Kind != "utm-macos" || spec.VM == nil || spec.Guest == nil {
+	verifierHealth := s.Transport && q.Operation == "health"
+	if q.Deadline.IsZero() || !time.Now().Before(q.Deadline) || q.RecoveryDigest != s.RunnerDigest && !verifierHealth || spec.Kind != "utm-macos" || spec.VM == nil || spec.Guest == nil {
 		return reply, ErrUnavailable
 	}
 	ctx, cancel := context.WithDeadline(ctx, q.Deadline)
@@ -74,12 +75,20 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		q.RecoveryBoot = identity.BootID
 	}
 	q.Guest.Challenge = challenge
-	raw, err := s.exchangeWire(ctx, spec, lease, q, true)
+	var wire any = q
+	var capability runner.GuestTransportRequest
+	operation := "runner.guest-recovery"
+	if verifierHealth {
+		capability = runner.GuestTransportRequest{Schema: "haepari.guest-transport-request/v1", Guest: q.Guest, ExecutorDigest: s.RunnerDigest, Recovery: &q}
+		wire = capability
+		operation = "runner.guest-transport"
+	}
+	raw, err := s.exchangeWire(ctx, spec, lease, wire, !verifierHealth)
 	if err != nil {
 		return reply, errors.Join(ErrGuestUncertain, err)
 	}
 	envelope, err := managed.DecodeEnvelope(raw)
-	if err != nil || envelope.Operation != "runner.guest-recovery" {
+	if err != nil || envelope.Operation != operation {
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	if !envelope.OK {
@@ -88,13 +97,22 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		}
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
-	reply, err = runner.DecodeGuestRecoveryReply(envelope.Data)
+	if verifierHealth {
+		var r runner.GuestTransportReply
+		r, err = runner.DecodeGuestTransportReply(envelope.Data)
+		if err != nil || r.ProtocolDigest != runner.GuestTransportDigest(capability) || r.Recovery == nil || r.Binding != nil {
+			return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
+		}
+		reply = *r.Recovery
+	} else {
+		reply, err = runner.DecodeGuestRecoveryReply(envelope.Data)
+	}
 	g := reply.Guest
 	expectedSchema, expectedBoot := "haepari.guest-recovery-reply/v1", guest.BootID
 	if reboot {
 		expectedSchema, expectedBoot = "haepari.guest-recovery-reply/v2", q.RecoveryBoot
 	}
-	if err != nil || reply.RecoveryDigest != s.RunnerDigest || reply.Schema != expectedSchema || reply.ProtocolDigest != managed.RecoveryDigest(q) || g.Schema != runner.GuestReplySchema(guest) || g.VMUUID != guest.VMUUID || g.MAC != guest.MAC || g.BootID != expectedBoot || g.Challenge != challenge || g.OS != "darwin" || g.Arch != "arm64" || !lease.Expires.After(time.Now()) {
+	if err != nil || reply.RecoveryDigest != q.RecoveryDigest || reply.Schema != expectedSchema || reply.ProtocolDigest != managed.RecoveryDigest(q) || g.Schema != runner.GuestReplySchema(guest) || g.VMUUID != guest.VMUUID || g.MAC != guest.MAC || g.BootID != expectedBoot || g.Challenge != challenge || g.OS != "darwin" || g.Arch != "arm64" || !lease.Expires.After(time.Now()) {
 		return runner.GuestRecoveryReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	if reply.CompletedCleanup != nil {
@@ -109,7 +127,7 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 	if reboot && reply.Basis.RecoveryBoot != expectedBoot || !reboot && (reply.Basis.RecoveryBoot != "" || len(reply.Basis.Missing) != 0) {
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
-	if reply.Attestation != nil && (runner.ValidateGuestAttestation(*reply.Attestation, guest) != nil || reply.Attestation.RecoveryDigest != s.RunnerDigest) {
+	if reply.Attestation != nil && (runner.ValidateGuestAttestation(*reply.Attestation, guest) != nil || reply.Attestation.RecoveryDigest != q.RecoveryDigest) {
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	if q.Basis != nil && !reflect.DeepEqual(*q.Basis, *reply.Basis) {

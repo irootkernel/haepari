@@ -21,8 +21,8 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 	}
 	commands := []commandHelp{
 		{"help", "help --json"}, {"version", "version --json"}, {"capabilities", "capabilities --json"},
-		{"daemon run", "daemon run [--backend local] [--host-macos-guest-limit 1|2]"},
-		{"service plan", "service plan --instance <id> --binary <absolute-path> --root <private-root> --json"},
+		{"daemon run", "daemon run [--backend local] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]"},
+		{"service plan", "service plan --instance <id> --binary <absolute-path> --root <private-root> [--global-limit <positive-integer>] [--host-macos-guest-limit 1|2] --json"},
 		{"service install", "service install --plan-file <json> --json"},
 		{"service uninstall", "service uninstall --plan-file <json> --json"},
 		{"runner start", "runner start --request <absolute-request.json> [--json]"},

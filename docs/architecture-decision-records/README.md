@@ -22,5 +22,6 @@ ADR-0001 through ADR-0013 apply to the active managed design. ADR-0014/0015 pres
 | ADR-0016 | [Managed-first v0.1.0 scope](0016-managed-first-scope.md) | Accepted for v0.1.0 design (Design Revision 3; alternatives added in 3.1; amended by ADR-0017 in 3.2) |
 | ADR-0017 | [Advisory named locks for cooperating tools](0017-advisory-named-locks.md) | Accepted for v0.1.0 design (Design Revision 3.2) |
 | ADR-0018 | [One persistent VM per resource, without per-job reset](0018-persistent-vm-no-reset.md) | Accepted for v0.1.0 design (Design Revision 3.3); amends ADR-0006 |
+| ADR-0019 | [Reuse an immutable per-Job runner for bounded SSH exchanges](0019-owned-runner-transport.md) | Selected for TASK-037 implementation; qualification pending |
 
 ADR-0014 and ADR-0015 record the Design Revision 2 external-lease and linked-segment decisions. ADR-0016 (Design Revision 3) defers their application; re-entry requires B1/B2 closure in the [deferred contract](../contracts/external-leases.md) and a separate accepted consumer need. Existing decision IDs are preserved.

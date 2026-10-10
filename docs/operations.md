@@ -42,7 +42,7 @@ Register the VM in Haepari as a `utm-macos` resource with its UTM UUID, MAC addr
 
 ## Planned operational-readiness changes
 
-[EPIC-009](roadmap/EPIC-009.md) has a separate [execution dossier](TODO-VM-OPERATIONAL-READINESS.md). TASK-036 owns safe observation/reconciliation and explicit missing-output, cross-boot and evidence-loss decisions; TASK-037 owns cold readiness, bounded transport/runner storage and minimum global-limit selection. None is available merely because the plan is registered. The current same-boot recovery rules below remain authoritative until their contract decisions and implementation are delivered.
+[EPIC-009](roadmap/EPIC-009.md) has a separate [execution dossier](TODO-VM-OPERATIONAL-READINESS.md). TASK-036 implements the approved safe observation/reconciliation, missing-output and cross-boot decisions. TASK-037 implements bounded cold readiness, owned runner transport, explicit runner purge and startup limit selection. The following candidate controls do not qualify a live VM or replace TASK-038 observations.
 
 TASK-038–039 require approved exact candidate/service/resource scope and finite live budgets. Service registration or a running LaunchAgent is not a health result: require the control socket and a successful public read-only observation before workload. Do not bypass permissions, relocate binaries or manually delete guest files to unblock a campaign. The dossier states restoration, evidence and escalation requirements; DF-001–003 remain separate release obligations.
 
@@ -195,3 +195,34 @@ An interruption after completed ordinary guest cleanup followed by a reboot has 
 A published reboot-recovery intent retains its original mutation key, evidence and expiry. After a lost guest reply, a fresh read-only observation may consume the exact completed guest attestation only when the original control retirement barrier is also durable. It grants no extra time to an incomplete or expired guest effect. A matching attestation without retirement remains blocked after expiry. Before the host recovery transaction commits, request a fresh reconcile plan and apply with the saved mutation key; the new plan does not replace or extend the original guest intent. After the host transaction commits, controller reconciliation may resume that exact explicit authority under the original phase deadlines. It issues no new guest attestation or workload. Retained native outcomes project their original workload outcome, exit code and signal; unavailable native outcomes remain inconclusive. Neither case upgrades missing evidence to PASS or rewrites a false native termination receipt.
 
 After an unsuccessful recovery/v2 plan or apply, inspect the retained Job's bounded diagnostic events for its native classification and any uncertain-effects code. They provide context only; use fresh identity-bound plans and retained proof before an effect. Later diagnostics supplement a finished outcome without rewriting it, and successful observations add no failure event.
+
+## TASK-037 operating controls and TASK-038 handoff
+
+For an isolated foreground instance, select `daemon run --global-limit 3
+--host-macos-guest-limit 2` to admit two distinct capacity-one VM resources and
+independent local work. The defaults remain one for each limit. For a development
+service, prepare a fresh private `service plan --instance <id> --binary
+<absolute-candidate> --root <private-root> --global-limit 3
+--host-macos-guest-limit 2 --json`; save the complete v2 plan before requesting
+installation authority. Existing plans and running services do not change.
+
+Set finite queue/prepare/run/collect/cleanup budgets in each Job before admission.
+Cold readiness consumes prepare time; safe observation and compact collection
+retain original deadlines. Save original spec bytes and request keys and inspect
+original Jobs after interruption. A failed pinned/lease/readiness check never
+permits early guest staging. A failed or unreturned power effect retains its
+intent for explicit recovery. After verified terminal cleanup, request explicit
+revision-bound `job purge`; active/unresolved or unknown runner payloads refuse.
+Purge preserves permanent keys and required receipts. Do not remove payloads
+manually to cure an uncertain Job.
+
+TASK-038 must bind exact source/executable/guest-runner identities, the approved
+service plan and two registered UUID/MAC/pin mappings before live execution.
+Record public phase timings and versioned SSH exchange start/completion facts
+before any event-prefix purge. Keep incomplete pairs and the detail-limit gap
+visible. Measure actual network/protocol overhead separately from application
+archive bytes. Record log/output sizes and hashes, occupancy and runner storage
+before/after explicit purge and successor reuse. Readiness, 50 MiB collection,
+30-Job soak, reboot and fault injection need their separately approved finite
+campaign and restoration plan. The fixture measurements in ADR-0019 establish
+transport behavior only; TASK-016 history and DF-001–003 remain unchanged.

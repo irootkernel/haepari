@@ -53,7 +53,18 @@ var _ = ginkgo.Describe("Task011Restart", ginkgo.Label("integration"), func() {
 		gomega.Expect(fresh.applyPlannedJobRecovery(noStart, &evidence, "live-no-start", managed.RecoveryDigest(noStart))).To(gomega.MatchError(managed.ErrBlocked))
 		gomega.Expect(os.WriteFile(startPath, start, 0600)).To(gomega.Succeed())
 		gomega.Expect(fresh.tryRecoverInterrupted(r.JobID, false, &evidence)).To(gomega.MatchError(managed.ErrBlocked))
-		gomega.Expect(fresh.applyPlannedJobRecovery(plan, &evidence, "live-attestation", managed.RecoveryDigest(plan))).To(gomega.MatchError(managed.ErrBlocked))
+		applied := fresh.applyPlannedJobRecovery(plan, &evidence, "live-attestation", managed.RecoveryDigest(plan))
+		if errors.Is(applied, managed.ErrStale) {
+			// Native receipts can change after this saved plan. Prove that the
+			// observation fence rejected it before the live-owner fence, with
+			// no ledger change; direct recovery above must still block the owner.
+			current, err := fresh.planJobRecovery(r.JobID, plan.Action)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(managed.RecoveryDigest(current.Snapshot)).To(gomega.Equal(managed.RecoveryDigest(plan.Snapshot)))
+			gomega.Expect(managed.RecoveryDigest(current.Observation)).NotTo(gomega.Equal(managed.RecoveryDigest(plan.Observation)))
+		} else {
+			gomega.Expect(applied).To(gomega.MatchError(managed.ErrBlocked))
+		}
 		after, err := fresh.ledger.RecoverySnapshot(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(after).To(gomega.Equal(before))

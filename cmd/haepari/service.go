@@ -27,16 +27,18 @@ import (
 )
 
 type developmentServicePlan struct {
-	Schema       string `json:"schema"`
-	Instance     string `json:"instance"`
-	Label        string `json:"label"`
-	Domain       string `json:"domain"`
-	OwnerUID     int    `json:"owner_uid"`
-	Binary       string `json:"binary"`
-	BinarySHA256 string `json:"binary_sha256"`
-	Root         string `json:"root"`
-	PlistPath    string `json:"plist_path"`
-	Plist        string `json:"plist"`
+	GlobalLimit         int    `json:"global_limit,omitempty"`
+	HostMACOSGuestLimit int    `json:"host_macos_guest_limit,omitempty"`
+	Schema              string `json:"schema"`
+	Instance            string `json:"instance"`
+	Label               string `json:"label"`
+	Domain              string `json:"domain"`
+	OwnerUID            int    `json:"owner_uid"`
+	Binary              string `json:"binary"`
+	BinarySHA256        string `json:"binary_sha256"`
+	Root                string `json:"root"`
+	PlistPath           string `json:"plist_path"`
+	Plist               string `json:"plist"`
 }
 
 var developmentInstanceID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
@@ -99,7 +101,13 @@ func plistString(s string) string {
 }
 
 func planDevelopmentService(instance, binary, rootPath string) (developmentServicePlan, error) {
+	return planDevelopmentServiceLimits(instance, binary, rootPath, 1, 1, false)
+}
+func planDevelopmentServiceLimits(instance, binary, rootPath string, globalLimit, hostLimit int, explicit bool) (developmentServicePlan, error) {
 	p := developmentServicePlan{}
+	if globalLimit < 1 || hostLimit < 1 || hostLimit > 2 {
+		return p, managed.ErrInvalid
+	}
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" || !developmentInstanceID.MatchString(instance) || !filepath.IsAbs(binary) || filepath.Clean(binary) != binary || !filepath.IsAbs(rootPath) || filepath.Clean(rootPath) != rootPath {
 		return p, managed.ErrInvalid
 	}
@@ -145,11 +153,17 @@ func planDevelopmentService(instance, binary, rootPath string) (developmentServi
 	}
 	p = developmentServicePlan{Schema: "haepari.development-service-plan/v1", Instance: instance, Label: "io.rootkernel.haepari.dev." + instance, Domain: "gui/" + strconv.Itoa(os.Geteuid()), OwnerUID: os.Geteuid(), Binary: binary, BinarySHA256: "sha256:" + hex.EncodeToString(h.Sum(nil)), Root: root.Path}
 	p.PlistPath = filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist")
+	limitArguments := ""
+	if explicit {
+		p.Schema = "haepari.development-service-plan/v2"
+		p.GlobalLimit, p.HostMACOSGuestLimit = globalLimit, hostLimit
+		limitArguments = plistString("--global-limit") + plistString(strconv.Itoa(globalLimit)) + plistString("--host-macos-guest-limit") + plistString(strconv.Itoa(hostLimit))
+	}
 	p.Plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key>` + plistString(p.Label) + `
-<key>ProgramArguments</key><array>` + plistString(p.Binary) + plistString("daemon") + plistString("run") + plistString("--backend") + plistString("local") + `</array>
+<key>ProgramArguments</key><array>` + plistString(p.Binary) + plistString("daemon") + plistString("run") + plistString("--backend") + plistString("local") + limitArguments + `</array>
 <key>EnvironmentVariables</key><dict><key>HAEPARI_HOME</key>` + plistString(p.Root) + `<key>PATH</key><string>/usr/bin:/bin</string></dict>
 <key>LimitLoadToSessionType</key><string>Aqua</string>
 <key>AbandonProcessGroup</key><true/>
@@ -178,8 +192,22 @@ func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServ
 	if d.Decode(&tail) != io.EOF {
 		return p, managed.ErrInvalid
 	}
+	var shape map[string]json.RawMessage
+	if json.Unmarshal(raw, &shape) != nil {
+		return p, managed.ErrInvalid
+	}
+	if p.Schema == "haepari.development-service-plan/v1" {
+		if _, ok := shape["global_limit"]; ok {
+			return p, managed.ErrInvalid
+		}
+		if _, ok := shape["host_macos_guest_limit"]; ok {
+			return p, managed.ErrInvalid
+		}
+	} else if p.Schema != "haepari.development-service-plan/v2" || p.GlobalLimit < 1 || p.HostMACOSGuestLimit < 1 || p.HostMACOSGuestLimit > 2 {
+		return p, managed.ErrInvalid
+	}
 	if verifyBinary {
-		current, err := planDevelopmentService(p.Instance, p.Binary, p.Root)
+		current, err := recreateDevelopmentServicePlan(p)
 		if err != nil {
 			return p, err
 		}
@@ -191,11 +219,21 @@ func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServ
 		if err != nil {
 			return p, err
 		}
-		if p.Schema != "haepari.development-service-plan/v1" || !developmentInstanceID.MatchString(p.Instance) || p.OwnerUID != os.Geteuid() || p.Domain != "gui/"+strconv.Itoa(os.Geteuid()) || p.Label != "io.rootkernel.haepari.dev."+p.Instance || p.PlistPath != filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist") {
+		if (p.Schema != "haepari.development-service-plan/v1" && p.Schema != "haepari.development-service-plan/v2") || !developmentInstanceID.MatchString(p.Instance) || p.OwnerUID != os.Geteuid() || p.Domain != "gui/"+strconv.Itoa(os.Geteuid()) || p.Label != "io.rootkernel.haepari.dev."+p.Instance || p.PlistPath != filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist") {
 			return p, managed.ErrInvalid
 		}
 	}
 	return p, nil
+}
+
+func recreateDevelopmentServicePlan(p developmentServicePlan) (developmentServicePlan, error) {
+	if p.Schema == "haepari.development-service-plan/v1" {
+		return planDevelopmentService(p.Instance, p.Binary, p.Root)
+	}
+	if p.Schema != "haepari.development-service-plan/v2" {
+		return developmentServicePlan{}, managed.ErrInvalid
+	}
+	return planDevelopmentServiceLimits(p.Instance, p.Binary, p.Root, p.GlobalLimit, p.HostMACOSGuestLimit, true)
 }
 
 func launchctlService(args ...string) error {
@@ -213,7 +251,7 @@ func launchctlService(args ...string) error {
 }
 
 func installDevelopmentService(p developmentServicePlan) error {
-	current, err := planDevelopmentService(p.Instance, p.Binary, p.Root)
+	current, err := recreateDevelopmentServicePlan(p)
 	if err != nil {
 		return err
 	}
@@ -313,9 +351,17 @@ func serviceCommand(args []string, stdout, stderr io.Writer) int {
 	root := flags.String("root", "", "isolated private state root")
 	file := flags.String("plan-file", "", "exact saved plan")
 	outputJSON := flags.Bool("json", false, "machine-readable response")
+	globalLimit := flags.Int("global-limit", 1, "positive global execution limit")
+	hostLimit := flags.Int("host-macos-guest-limit", 1, "host macOS guest capacity")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || !*outputJSON {
 		return 2
 	}
+	explicitLimits := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "global-limit" || f.Name == "host-macos-guest-limit" {
+			explicitLimits = true
+		}
+	})
 	var p developmentServicePlan
 	var err error
 	switch args[0] {
@@ -323,9 +369,9 @@ func serviceCommand(args []string, stdout, stderr io.Writer) int {
 		if *file != "" {
 			return 2
 		}
-		p, err = planDevelopmentService(*instance, *binary, *root)
+		p, err = planDevelopmentServiceLimits(*instance, *binary, *root, *globalLimit, *hostLimit, explicitLimits)
 	case "install", "uninstall":
-		if *file == "" || *instance != "" || *binary != "" || *root != "" {
+		if explicitLimits || *file == "" || *instance != "" || *binary != "" || *root != "" {
 			return 2
 		}
 		p, err = readDevelopmentServicePlan(*file, args[0] == "install")

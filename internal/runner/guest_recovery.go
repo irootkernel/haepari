@@ -265,7 +265,16 @@ func recoveryBasis(d *directory, c *guestControlFile, guest GuestRequest, deadli
 }
 
 func GuestRecovery(q GuestRecoveryRequest) (GuestRecoveryReply, error) {
+	return guestRecoveryWithExecutor(q, q.RecoveryDigest, false)
+}
+
+// Used only by the explicitly versioned transport capability. Historical
+// GuestRecovery keeps its original executor/recovery digest equality.
+func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, healthOnly bool) (GuestRecoveryReply, error) {
 	r := GuestRecoveryReply{RecoveryDigest: q.RecoveryDigest, Schema: "haepari.guest-recovery-reply/v1", ProtocolDigest: managed.RecoveryDigest(q)}
+	if healthOnly && q.Operation != "health" {
+		return r, ErrInvalid
+	}
 	reboot := q.Schema == "haepari.guest-recovery-request/v2"
 	if reboot {
 		r.Schema = "haepari.guest-recovery-reply/v2"
@@ -309,7 +318,7 @@ func GuestRecovery(q GuestRecoveryRequest) (GuestRecoveryReply, error) {
 	if hashErr != nil || n > 64<<20 {
 		return r, ErrUnproven
 	}
-	if "sha256:"+hex.EncodeToString(h.Sum(nil)) != q.RecoveryDigest {
+	if "sha256:"+hex.EncodeToString(h.Sum(nil)) != executorDigest {
 		return r, ErrConflict
 	}
 	parent, err := openDirectory(guest.JobRoot)
@@ -391,6 +400,12 @@ func GuestRecovery(q GuestRecoveryRequest) (GuestRecoveryReply, error) {
 		r.Basis = &a.Basis
 		r.Reusable = true
 		return r, nil
+	}
+	if healthOnly {
+		if d != nil {
+			d.close()
+		}
+		return r, ErrUnproven
 	}
 	if err != nil {
 		return r, err

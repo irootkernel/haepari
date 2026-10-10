@@ -72,22 +72,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, managed.Capabilities()})
 	case "daemon":
 		if len(args) < 2 || args[1] != "run" {
-			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local] [--host-macos-guest-limit 1|2]")
+			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]")
 			return 2
 		}
 		flags := flag.NewFlagSet("daemon run", flag.ContinueOnError)
 		flags.SetOutput(stderr)
 		backend := flags.String("backend", platform.DefaultBackend, "bootstrap backend")
 		hostLimit := flags.Int("host-macos-guest-limit", 1, "host macOS guest capacity, including operator VMs")
+		globalLimit := flags.Int("global-limit", 1, "positive global execution limit")
 		if err := flags.Parse(args[2:]); err != nil {
 			return 2
 		}
 		if flags.NArg() != 0 {
-			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local] [--host-macos-guest-limit 1|2]")
+			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]")
 			return 2
 		}
-		if *hostLimit < 1 || *hostLimit > 2 {
-			fmt.Fprintln(stderr, "host macOS guest limit must be 1 or 2")
+		if *globalLimit < 1 || *hostLimit < 1 || *hostLimit > 2 {
+			fmt.Fprintln(stderr, "global execution limit must be positive; host macOS guest limit must be 1 or 2")
 			return 2
 		}
 		if err := platform.Validate(runtime.GOOS, runtime.GOARCH, *backend); err != nil {
@@ -104,7 +105,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		if err := controller.RunWithOptions(ctx, root, controller.Options{HostMACOSGuestLimit: *hostLimit}); err != nil {
+		if err := controller.RunWithOptions(ctx, root, controller.Options{HostMACOSGuestLimit: *hostLimit, GlobalLimit: *globalLimit}); err != nil {
 			fmt.Fprintln(stderr, err)
 			if errors.Is(err, state.ErrControllerOwned) || errors.Is(err, state.ErrInvalidRoot) || errors.Is(err, controller.ErrSocketExists) || errors.Is(err, sqlite.ErrInvalidStore) {
 				return 2

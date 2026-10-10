@@ -203,7 +203,7 @@ func (l *Ledger) PurgeEventsThrough(jobID string, through int64) error {
 	}
 	// Recovery intents and compensations bind permanent replay/provenance;
 	// they remain private below the public resynchronization floor.
-	if _, err := tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled','vm_prepared','vm_retained','vm_retire_intent','power_cessation','local_workspace')`, jobID, through); err != nil {
+	if _, err := tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled','vm_prepared','vm_retained','vm_transport_binding','vm_transport_admission','vm_retire_intent','power_cessation','local_workspace')`, jobID, through); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE managed_event_progress SET purged_through=? WHERE job_id=?`, through, jobID); err != nil {
@@ -819,7 +819,7 @@ func (l *Ledger) RecordNoEffectObservation(q NoEffectObservationRequest) (Receip
 		if resourceID != q.ResourceID || revision != q.ExpectedJobRevision || pinned != q.ExpectedConfigRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration {
 			return Receipt{}, ErrStale
 		}
-		if state != "preparing" && state != "ready" {
+		if state != "preparing" && state != "ready" && !(state == "collecting" && q.Mechanism == "authenticated-vm-preflight-before-guest-claim" && cancelledVMPreflightTx(tx, q.JobID)) {
 			return Receipt{}, ErrConflict
 		}
 		if pending, err := pendingPowerTx(tx, resourceID); err != nil {
@@ -885,7 +885,7 @@ func (l *Ledger) ClassifyNoEffect(q ClassifyNoEffectRequest) (Receipt, error) {
 		if resourceID != q.ResourceID || pinned != q.ExpectedConfigRevision || revision != q.ExpectedJobRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration {
 			return Receipt{}, ErrStale
 		}
-		if state != "preparing" && state != "ready" {
+		if state != "preparing" && state != "ready" && !(state == "collecting" && q.FailureKind == "cancel" && cancelledVMPreflightTx(tx, q.JobID)) {
 			return Receipt{}, ErrConflict
 		}
 		var kind, availability string
@@ -916,7 +916,7 @@ func (l *Ledger) ClassifyNoEffect(q ClassifyNoEffectRequest) (Receipt, error) {
 			availabilityRev++
 		}
 		if q.HostPauseReason != "" {
-			if q.VMUnavailable || kind != "utm-macos" || q.FailureKind != "prepare_failure" || !oneOf(q.HostPauseReason, "host_vm_limit", "host_session_unavailable", "host_permission_unavailable") {
+			if q.VMUnavailable || kind != "utm-macos" || !oneOf(q.FailureKind, "prepare_failure", "cancel") || !oneOf(q.HostPauseReason, "host_vm_limit", "host_session_unavailable", "host_permission_unavailable") {
 				return Receipt{}, ErrInvalid
 			}
 			if _, err := tx.Exec(`UPDATE managed_resources SET availability='paused',availability_reason=?,availability_revision=availability_revision+1 WHERE kind='utm-macos' AND availability='available'`, q.HostPauseReason); err != nil {

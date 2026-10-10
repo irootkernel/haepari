@@ -496,6 +496,9 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		f.s.vmWrite = func(*os.File, []byte) (int, error) { return 0, unix.ENOSPC }
 		response = recoveryHTTP(f.s, "/v1/resources/"+f.spec.ID+"/recover", managed.RecoveryRequest{PlanToken: failedPlan.PlanToken, MutationKey: "absence-uncollected"})
+		// A bounded request may return while its collector still owns effects.
+		// Keep injected hooks stable until those workers actually stop.
+		f.s.workers.Wait()
 		f.s.vmWrite = nil
 		gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())
 		_, failedReceipt, _, err := f.s.ledger.EvidenceRecovery("evidence-recovery-absence-uncollected", "")
@@ -506,13 +509,17 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		p, err := f.s.planEvidenceRecovery(f.spec.ID, "recollect")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		prior := retentionBoundary
-		ginkgo.DeferCleanup(func() { retentionBoundary = prior })
+		ginkgo.DeferCleanup(func() {
+			f.s.workers.Wait()
+			retentionBoundary = prior
+		})
 		retentionBoundary = func(point string) {
 			if point == "collection-recorded" {
 				gomega.Expect(os.WriteFile(filepath.Join(root, "workspace/results/output.txt"), []byte("new evidence"), 0600)).To(gomega.Succeed())
 			}
 		}
 		response = recoveryHTTP(f.s, "/v1/resources/"+f.spec.ID+"/recover", managed.RecoveryRequest{PlanToken: p.PlanToken, MutationKey: "absence-new-file"})
+		f.s.workers.Wait()
 		retentionBoundary = prior
 		gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())
 		intent, receipt, _, err := f.s.ledger.EvidenceRecovery("evidence-recovery-absence-new-file", "")

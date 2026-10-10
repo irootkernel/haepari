@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -243,6 +244,17 @@ func (s *runtimeServer) purgeJobContext(ctx context.Context, id string, revision
 				allowed["artifacts/"+a.Path] = true
 			}
 			names := []string{"artifacts", "output.log"}
+			runners, err := s.planVMRunnerRetention(ctx, fd, b)
+			if err != nil {
+				return managed.PurgeReceipt{}, err
+			}
+			runnerNames := []string{}
+			for name := range runners {
+				allowed[name] = true
+				runnerNames = append(runnerNames, name)
+			}
+			sort.Strings(runnerNames)
+			names = append(names, runnerNames...)
 			records, err := s.ledger.SupplementaryEvidence(id)
 			if err != nil {
 				return managed.PurgeReceipt{}, err

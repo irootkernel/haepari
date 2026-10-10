@@ -36,7 +36,10 @@ func (s *runtimeServer) vmRecoveryCall(q runner.GuestRecoveryRequest) (runner.Gu
 	if err != nil {
 		return runner.GuestRecoveryReply{}, err
 	}
-	if q.RecoveryDigest != transport.RunnerDigest {
+	// Historical recovery executables know only their frozen guest protocol.
+	// Only completed-cleanup health selects the new current verifier capability.
+	transport.Transport = s.vmTransport && q.Operation == "health"
+	if q.RecoveryDigest != transport.RunnerDigest && !(s.vmTransport && q.Operation == "health") {
 		path := filepath.Join(s.root.Path, "jobs", q.Guest.Request.Identity.JobID, "guest-recovery-runner-"+q.RecoveryDigest[7:])
 		f, e := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW, 0)
 		if e != nil {

@@ -40,11 +40,16 @@ var ErrGuestUncertain = errors.New("guest operation may have taken effect; prese
 // SSH transfers a pinned artifact into a transient bootstrap and then into
 // each owned Job. It never installs a service or enables public VM dispatch.
 type SSH struct {
-	Executable   string
-	Control      Control
-	Run          SSHRunner
-	Runner       []byte
-	RunnerDigest string
+	Executable     string
+	Control        Control
+	Run            SSHRunner
+	Runner         []byte
+	RunnerDigest   string
+	Transport      bool
+	Binding        *runner.GuestTransportBinding
+	RecordPrepared func(runner.GuestTransportBinding) error
+	Measure        func(SSHExchange) error
+	prepared       func(runner.GuestTransportBinding)
 }
 
 var userPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.-]{0,63}$`)
@@ -154,6 +159,18 @@ func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease 
 		return reply, err
 	}
 	bootstrap := guestBootstrap
+	transportRequest, transport := q.(runner.GuestTransportRequest)
+	var owned []byte
+	if transport {
+		bootstrap = guestTransportBootstrap
+		if transportRequest.Binding != nil {
+			owned, err = ownedManifest(transportRequest)
+			if err != nil {
+				return reply, err
+			}
+			bootstrap = guestOwnedBootstrap
+		}
+	}
 	if recovery {
 		bootstrap = guestRecoveryBootstrap
 	}
@@ -164,10 +181,18 @@ func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease 
 	}
 	var archive bytes.Buffer
 	w := tar.NewWriter(&archive)
-	for _, item := range []struct {
+	items := []struct {
 		name string
 		data []byte
-	}{{"haepari", s.Runner}, {"request.json", data}, {"digest", []byte(hex.EncodeToString(sum[:]))}} {
+	}{{"haepari", s.Runner}, {"request.json", data}, {"digest", []byte(hex.EncodeToString(sum[:]))}}
+	if owned != nil {
+		items = items[1:]
+		items = append(items, struct {
+			name string
+			data []byte
+		}{"owned", owned})
+	}
+	for _, item := range items {
 		if err := w.WriteHeader(&tar.Header{Name: item.name, Mode: 0600, Size: int64(len(item.data)), Typeflag: tar.TypeReg, Format: tar.FormatUSTAR}); err != nil {
 			return reply, err
 		}
@@ -184,7 +209,47 @@ func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease 
 	if run == nil {
 		run = runSSH
 	}
+	var observation SSHExchange
+	started := time.Now()
+	if s.Measure != nil {
+		var guest runner.GuestRequest
+		switch request := q.(type) {
+		case runner.GuestRequest:
+			guest = request
+		case runner.GuestTransportRequest:
+			guest = request.Guest
+			if request.Recovery != nil {
+				guest.Operation, guest.Deadline = request.Recovery.Operation, request.Recovery.Deadline
+			}
+		case runner.GuestRecoveryRequest:
+			guest = request.Guest
+			guest.Operation, guest.Deadline = request.Operation, request.Deadline
+		default:
+			return reply, ErrUnavailable
+		}
+		var identity [16]byte
+		if _, err := rand.Read(identity[:]); err != nil {
+			return reply, err
+		}
+		observation = SSHExchange{Schema: "haepari.ssh-exchange/v1", ID: hex.EncodeToString(identity[:]), Identity: guest.Request.Identity, VMUUID: guest.VMUUID, Operation: guest.Operation, RequestDigest: managed.RecoveryDigest(q), RunnerDigest: s.RunnerDigest, Deadline: guest.Deadline, StartedAt: started.UTC(), ArchiveBytes: archive.Len(), ExitCode: -1}
+		if owned == nil {
+			observation.RunnerBytes = len(s.Runner)
+		}
+		if err := s.Measure(observation); err != nil {
+			return reply, err
+		}
+	}
+	issuedAt := time.Now()
 	r, err := run(ctx, s.Executable, args, archive.Bytes())
+	if s.Measure != nil {
+		observation.Complete = true
+		observation.StdoutBytes, observation.StderrBytes = max(int64(len(r.Stdout)), r.StdoutBytes), max(int64(len(r.Stderr)), r.StderrBytes)
+		observation.DurationMillis, observation.ExitCode = time.Since(issuedAt).Milliseconds(), r.ExitCode
+		observation.TransportFailed = err != nil
+		if measurementErr := s.Measure(observation); measurementErr != nil {
+			return reply, errors.Join(ErrUnavailable, measurementErr)
+		}
+	}
 	if len(r.Stdout) > commandLimit || len(r.Stderr) > commandLimit {
 		return reply, ErrUnavailable
 	}
@@ -193,6 +258,9 @@ func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease 
 		// reports the guest's nonzero exit. Transport stderr is never evidence.
 		envelope, decodeErr := managed.DecodeEnvelope([]byte(r.Stdout))
 		operation := "runner.guest"
+		if transport {
+			operation = "runner.guest-transport"
+		}
 		if recovery {
 			operation = "runner.guest-recovery"
 		}
@@ -207,18 +275,56 @@ var guestRecoveryBootstrap = strings.Replace(guestBootstrap, "runner guest --std
 
 func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Lease, q runner.GuestRequest) (runner.GuestReply, error) {
 	var reply runner.GuestReply
-	raw, err := s.exchangeWire(ctx, spec, lease, q, false)
+	var wire any = q
+	var capability runner.GuestTransportRequest
+	if s.Transport {
+		capability = runner.GuestTransportRequest{Schema: "haepari.guest-transport-request/v1", Guest: q, ExecutorDigest: s.RunnerDigest}
+		if s.Binding != nil && compactOperation(q.Operation) {
+			capability.Binding = s.Binding
+		}
+		wire = capability
+	}
+	raw, err := s.exchangeWire(ctx, spec, lease, wire, false)
 	if err != nil {
 		return reply, err
 	}
 	envelope, err := managed.DecodeEnvelope(raw)
-	if err != nil || envelope.Operation != "runner.guest" {
+	operation := "runner.guest"
+	if s.Transport {
+		operation = "runner.guest-transport"
+	}
+	if err != nil || envelope.Operation != operation {
 		return reply, ErrUnavailable
 	}
 	if !envelope.OK {
 		return reply, guestRefusalError(envelope.Error, q.Schema == "haepari.guest-request/v2")
 	}
-	reply, err = runner.DecodeGuestReply(envelope.Data)
+	if s.Transport {
+		var r runner.GuestTransportReply
+		r, err = runner.DecodeGuestTransportReply(envelope.Data)
+		if err != nil || r.ProtocolDigest != runner.GuestTransportDigest(capability) {
+			return reply, ErrUnavailable
+		}
+		reply = r.Guest
+		if q.Operation == "prepare" {
+			if reply.Request == nil || reply.Root == nil {
+				return reply, ErrUnavailable
+			}
+			owner := q
+			owner.Request = *reply.Request
+			owner.Root = reply.Root
+			if r.Binding == nil || runner.ValidateGuestTransportBinding(*r.Binding, owner) != nil {
+				return reply, ErrUnavailable
+			}
+			if s.prepared != nil {
+				s.prepared(*r.Binding)
+			}
+		} else if !reflect.DeepEqual(r.Binding, capability.Binding) {
+			return reply, ErrUnavailable
+		}
+	} else {
+		reply, err = runner.DecodeGuestReply(envelope.Data)
+	}
 	if err != nil || reply.ProtocolDigest != runner.GuestProtocolDigest(q) || reply.Schema != runner.GuestReplySchema(q) || reply.VMUUID != q.VMUUID || reply.MAC != q.MAC || reply.Challenge != q.Challenge || !uuidPattern.MatchString(reply.BootID) || reply.OS != "darwin" || reply.Arch != "arm64" || q.BootID != "" && reply.BootID != q.BootID {
 		return runner.GuestReply{}, ErrUnavailable
 	}
@@ -250,6 +356,8 @@ func guestRefusalError(failure *managed.MachineError, classified bool) error {
 // SSH, then issues one operation. An error after issuance is uncertainty, not
 // evidence of no guest effects. Callers never repeat start on transport loss.
 func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Reader, q runner.GuestRequest) (runner.GuestReply, error) {
+	var prepared *runner.GuestTransportBinding
+	s.prepared = func(b runner.GuestTransportBinding) { prepared = &b }
 	if q.Deadline.IsZero() || !time.Now().Before(q.Deadline) {
 		return runner.GuestReply{}, ErrUnavailable
 	}
@@ -264,7 +372,7 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	if err != nil {
 		return runner.GuestReply{}, err
 	}
-	if q.VMUUID != strings.ToLower(spec.VM.UTMVMUUID) || q.MAC != mac || q.JobRoot != spec.VM.GuestJobRoot || q.RunnerDigest != s.RunnerDigest || q.Request.Identity.ResourceID != spec.ID || q.Request.Identity.ConfigRevision != spec.Revision {
+	if q.VMUUID != strings.ToLower(spec.VM.UTMVMUUID) || q.MAC != mac || q.JobRoot != spec.VM.GuestJobRoot || q.RunnerDigest != s.RunnerDigest && !(s.Transport && q.Operation == "health" && s.Binding == nil) || q.Request.Identity.ResourceID != spec.ID || q.Request.Identity.ConfigRevision != spec.Revision {
 		return runner.GuestReply{}, ErrUnavailable
 	}
 	pin, err := ReadPin(spec.Guest.KnownHostsReference, spec.VM.UTMVMUUID)
@@ -283,7 +391,13 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 		probe.Challenge = nonce
 		probe.Files = nil
 		probe.Inventory = nil
-		r, e := s.exchange(ctx, spec, lease, probe)
+		proofTransport := s
+		// A replacement verifier proves identity with its own digest. The
+		// following health request still binds the original workload runner.
+		if q.Operation == "health" && q.RunnerDigest != s.RunnerDigest {
+			probe.RunnerDigest = s.RunnerDigest
+		}
+		r, e := proofTransport.exchange(ctx, spec, lease, probe)
 		proofErr = e
 		return GuestIdentity{VMUUID: r.VMUUID, MAC: r.MAC, Address: lease.Address, HostKey: pin, BootID: r.BootID, Nonce: r.Challenge, OS: r.OS, Arch: r.Arch}, e
 	}
@@ -360,6 +474,14 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	if q.Operation == "file" && (reply.File == nil || reply.File.Path != q.Path || reply.File.Inode == 0 || reply.File.Size < reply.NextOffset || reply.File.Size > 1<<30 || len(reply.File.SHA256) != 64) {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
+	if q.Operation == "prepare" && s.RecordPrepared != nil {
+		if prepared == nil {
+			return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
+		}
+		if err := s.RecordPrepared(*prepared); err != nil {
+			return reply, errors.Join(ErrGuestUncertain, err)
+		}
+	}
 	return reply, nil
 }
 
@@ -375,7 +497,7 @@ func runSSH(ctx context.Context, executable string, args []string, input []byte)
 	var stdout, stderr boundedOutput
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err = cmd.Run()
-	r := CommandResult{Stdout: string(stdout.bytes), Stderr: string(stderr.bytes), ExitCode: -1}
+	r := CommandResult{Stdout: string(stdout.bytes), Stderr: string(stderr.bytes), ExitCode: -1, StdoutBytes: stdout.total, StderrBytes: stderr.total}
 	if cmd.ProcessState != nil {
 		r.ExitCode = cmd.ProcessState.ExitCode()
 	}

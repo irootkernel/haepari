@@ -49,28 +49,28 @@ Why: one immediate readiness check does not cover a cold VM boot. Each guest exc
 
 #### Implement
 
-- [ ] Poll started state, the valid registered-MAC lease and pinned guest readiness within the admitted prepare deadline; preserve host-wide denial and no-effect pause behavior.
-- [ ] Measure the existing call/byte cost, then remove repeated complete-runner transfer using a digest-bound owned runner and bounded observation/collection operations. Record affected F2 decisions before changing the protocol.
-- [ ] Include runner payloads in safe finished-Job retention/purge or verified cleanup. Active and unresolved recovery must retain the exact runner; old request keys and required receipts must remain usable.
-- [ ] Expose a validated positive global execution limit at controller startup, default one, through the CLI and isolated development-service plan as needed. Keep host guest capacity separate and leave the general configuration loader and doctor to TASK-023.
-- [ ] Verify supported DHCP MAC representations before relaxing parsing; preserve unique-entry, individual-expiry and identity checks.
+- [x] Poll started state, the valid registered-MAC lease and pinned guest readiness within the admitted prepare deadline; preserve host-wide denial and no-effect pause behavior.
+- [x] Measure the existing call/byte cost, then remove repeated complete-runner transfer using a digest-bound owned runner and bounded observation/collection operations. Record affected F2 decisions before changing the protocol.
+- [x] Include runner payloads in safe finished-Job retention/purge or verified cleanup. Active and unresolved recovery must retain the exact runner; old request keys and required receipts must remain usable.
+- [x] Expose a validated positive global execution limit at controller startup, default one, through the CLI and isolated development-service plan as needed. Keep host guest capacity separate and leave the general configuration loader and doctor to TASK-023.
+- [x] Verify supported DHCP MAC representations before relaxing parsing; preserve unique-entry, individual-expiry and identity checks.
 
 #### Do not
 
-- [ ] Do not remove a pin or identity fence to save a call, delete unknown files, share mutable runner bytes, or introduce automatic evidence expiry.
-- [ ] Do not reset the VM, add a permanent guest scheduler or silently change the operator's running service.
+- [x] Do not remove a pin or identity fence to save a call, delete unknown files, share mutable runner bytes, or introduce automatic evidence expiry.
+- [x] Do not reset the VM, add a permanent guest scheduler or silently change the operator's running service.
 
 #### Verify
 
-- [ ] Use controlled readiness delays, expiry, permission denial and deadline boundaries; verify no guest staging before readiness.
-- [ ] Compare call counts, bytes and bounded collection before/after; reject changed runner/root/file identity and exercise interrupted transfer and purge.
-- [ ] Prove independent progress at global limits two and three, one slot per VM, unchanged default-one behavior and protection of unresolved runner payloads.
+- [x] Use controlled readiness delays, expiry, permission denial and deadline boundaries; verify no guest staging before readiness.
+- [x] Compare call counts, bytes and bounded collection before/after; reject changed runner/root/file identity and exercise interrupted transfer and purge.
+- [x] Prove independent progress at global limits two and three, one slot per VM, unchanged default-one behavior and protection of unresolved runner payloads.
 
 #### Done when
 
-- [ ] Focused and common checks pass for the recorded protocol, startup and retention changes.
-- [ ] Repeated calls no longer require complete-runner retransmission, finished runner storage has an explicit safe disposal path, and limits are selectable without a general configuration subsystem.
-- [ ] TASK-038 has a measurable candidate and documented operating controls; no real-VM throughput claim is inferred from fixtures.
+- [x] Focused and common checks pass for the recorded protocol, startup and retention changes.
+- [x] Repeated calls no longer require complete-runner retransmission, finished runner storage has an explicit safe disposal path, and limits are selectable without a general configuration subsystem.
+- [x] TASK-038 has a measurable candidate and documented operating controls; no real-VM throughput claim is inferred from fixtures.
 
 ## TASK-038
 

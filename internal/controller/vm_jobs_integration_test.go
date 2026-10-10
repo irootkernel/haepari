@@ -90,7 +90,18 @@ func nativeVMFixture(t ginkgo.FullGinkgoTInterface, script string) *vmJobFixture
 			}
 		}
 		var out, diag bytes.Buffer
-		code := runner.GuestCommand(bytes.NewReader(raw), &out, &diag)
+		code := 0
+		var shape struct {
+			Schema string `json:"schema"`
+		}
+		if json.Unmarshal(raw, &shape) != nil {
+			return utm.CommandResult{}, managed.ErrInvalid
+		}
+		if shape.Schema == "haepari.guest-transport-request/v1" {
+			code = runner.GuestTransportCommand(bytes.NewReader(raw), &out, &diag)
+		} else {
+			code = runner.GuestCommand(bytes.NewReader(raw), &out, &diag)
+		}
 		return utm.CommandResult{Stdout: out.String(), Stderr: diag.String(), ExitCode: code}, nil
 	}
 	source := filepath.Join(t.TempDir(), "input")
@@ -756,8 +767,19 @@ func vmTransportRequest(input []byte) runner.GuestRequest {
 			return runner.GuestRequest{}
 		}
 		if h.Name == "request.json" {
+			var raw json.RawMessage
+			_ = json.NewDecoder(archive).Decode(&raw)
+			var shape struct {
+				Schema string `json:"schema"`
+			}
+			_ = json.Unmarshal(raw, &shape)
+			if shape.Schema == "haepari.guest-transport-request/v1" {
+				var q runner.GuestTransportRequest
+				_ = json.Unmarshal(raw, &q)
+				return q.Guest
+			}
 			var q runner.GuestRequest
-			_ = json.NewDecoder(archive).Decode(&q)
+			_ = json.Unmarshal(raw, &q)
 			return q
 		}
 	}
