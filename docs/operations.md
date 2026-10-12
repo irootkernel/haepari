@@ -64,9 +64,11 @@ A terminal INCOMPLETE Job with retained evidence leaves its VM quarantined. The 
 
 ## Run a project test
 
-From the project, use its documented `make test-vm` with a named suite and mode. The wrapper freezes candidate/test input, displays its identity, submits once, and prints the job ID. It waits on the same ID. Continue host development without installing that candidate into the stable host toolchain.
+The project-owned `make test-vm` wrapper is planned under TASK-017 and is not implemented yet. Until delivered, submit and wait through the native public CLI under the established development scope. The planned wrapper freezes candidate/test input, displays its identity, submits once, and prints the job ID. It waits on the same ID. Continue host development without installing that candidate into the stable host toolchain.
 
 To inspect a dropped session, use `inspect`, `events`, or `wait` on the original job. Do not submit a replacement merely because the caller lost its result. An explicit new run after a settled failure uses a new key and retains the link to the old result.
+
+Before a bounded successor, inspect the resource and wait for `available` with zero occupancy after any required recovery. Admission can queue a Job while the resource is unavailable or quarantined; its original queue deadline can expire without reservation or workload execution. A terminal predecessor alone does not prove that the resource is reusable.
 
 For hands-on, wait for awaiting_manual, open the exact owned UTM guest, and follow the project checklist. Do not install unrelated tools while another project's lease is active. Complete the result with observed and unobserved items. The VM remains occupied through collection and cleanup.
 
