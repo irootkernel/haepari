@@ -11,13 +11,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irootkernel/haepari/internal/client"
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/utm"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )
 
-var _ = ginkgo.Describe("Task017NativeGuestProject", ginkgo.Label("integration"), func() {
+var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission", ginkgo.Label("integration"), func() {
 	ginkgo.It("runs the actual project caller and guest script through the fake/native guest", func() {
 		t := ginkgo.GinkgoT()
 		f := nativeVMFixture(t, "unused")
@@ -40,7 +41,7 @@ var _ = ginkgo.Describe("Task017NativeGuestProject", ginkgo.Label("integration")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		project := filepath.Join(root, "project")
 		gomega.Expect(os.Mkdir(project, 0700)).To(gomega.Succeed())
-		for _, name := range []string{"Makefile", "host.py", "project.json", "profile.json", "source/input.txt", "tests/vm/run.sh", "scenarios/check.md"} {
+		for _, name := range []string{"Makefile", "host.py", "haepari_inputs.py", "project.json", "profile.json", "source/input.txt", "tests/vm/run.sh", "scenarios/check.md"} {
 			path := filepath.Join(project, name)
 			gomega.Expect(os.MkdirAll(filepath.Dir(path), 0700)).To(gomega.Succeed())
 			data, err := os.ReadFile(filepath.Join("../../examples/project-test", name))
@@ -92,6 +93,29 @@ var _ = ginkgo.Describe("Task017NativeGuestProject", ginkgo.Label("integration")
 		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Pass))
 		gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("verified")))
 		gomega.Expect(result.Artifacts).To(gomega.ContainElement(gomega.HaveField("Path", "results/out.txt")))
+		c, err := client.Connect(context.Background(), f.s.root)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer c.Close()
+		before, _, err := c.Inspect(context.Background(), first)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		originalSpec, err := os.ReadFile(filepath.Join(root, "native-success", "spec-0.json"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		status, _, err := c.InspectResource(context.Background(), f.spec.ID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		successor := f.spec
+		successor.Revision = 2
+		updated, _, err := c.UpdateVMResource(context.Background(), f.spec.ID, mustJSONScheduling(successor), status.ConfigRevision, status.AvailabilityRevision)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(updated.ConfigRevision).To(gomega.Equal(int64(2)))
+		gomega.Expect(os.WriteFile(filepath.Join(project, "profile.json"), []byte("new opaque consumer profile\n"), 0600)).To(gomega.Succeed())
+		gomega.Expect(run("native-success", 0)).To(gomega.Equal(first))
+		after, _, err := c.Inspect(context.Background(), first)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(after.Receipt.Admission).To(gomega.Equal(before.Receipt.Admission))
+		gomega.Expect(after.Receipt.Admission.ResourceConfigRevision).To(gomega.Equal(int64(1)))
+		replaySpec, err := os.ReadFile(filepath.Join(root, "native-success", "spec-0.json"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(replaySpec).To(gomega.Equal(originalSpec))
 		gomega.Expect(os.WriteFile(filepath.Join(project, "source/input.txt"), []byte("wrong\n"), 0600)).To(gomega.Succeed())
 		failed := run("native-failure", 2)
 		result, err = f.s.ledger.Result(failed)

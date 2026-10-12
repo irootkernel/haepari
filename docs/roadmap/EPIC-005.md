@@ -37,20 +37,20 @@ Implementation and observation boundary: [TASK-017 record](../records/TASK-017-p
 Requirement coverage: `HP-REQ-035`, `HP-REQ-036`.
 
 #### Implement
-- [ ] Reuse selected-file digest/spec helpers. Pin candidate/test bytes and consumer profile bytes into the existing Job profile_id/profile_digest and provenance fields. Treat files as opaque payloads; provide a minimal runnable profile example without mandatory component, skill or installation inventories.
+- [x] Reuse selected-file digest/spec helpers. Pin candidate/test bytes and consumer profile bytes into the existing Job profile_id/profile_digest and provenance fields. Treat files as opaque payloads; provide a minimal runnable profile example without mandatory component, skill or installation inventories.
 
 #### Do not
-- [ ] Do not add a global compatibility registry, inspect host installation trees, resolve latest at dispatch, require product-specific versions/discovery, or change F1/F2 schemas.
+- [x] Do not add a global compatibility registry, inspect host installation trees, resolve latest at dispatch, require product-specific versions/discovery, or change F1/F2 schemas.
 
 #### Verify
-- [ ] Verify reproducible profile/payload digests, skill-only opaque input, executable modes, queued source changes, missing/corrupt selected files and original-admission replay after resource updates using local/fake fixtures.
-- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
+- [x] Verify reproducible profile/payload digests, skill-only opaque input, executable modes, queued source changes, missing/corrupt selected files and original-admission replay after resource updates using local/fake fixtures.
+- [x] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-019
 

@@ -36,8 +36,11 @@ The saved declared-suite list must match every saved Job entry. Empty, truncated
 or inconsistent run records are refused before another submission or aggregate
 PASS. Retain the original directory and inspect its keys and specs when refused.
 
-`project.json` declares the suites and their argv, outputs and optional non-secret
-environment. `SUITE=all` runs only those declared suites, serially, on the same
+`project.json` declares the selected files, candidate/test subsets, profile path
+and ID, and suite recipes with argv, explicit relative cwd, offline authorization
+reference, manual scenario (for manual mode), outputs and optional non-secret
+environment. The sibling stdlib `haepari_inputs.py` module supplies reusable
+`capture_inputs`, `tree_digest` and `job_spec` helpers; keep it beside the caller. `SUITE=all` runs only those declared suites, serially, on the same
 frozen bundle and reports skipped suites after a non-passing result. The sample
 declares only `regression`; installation and migration recipes are not required.
 `MODE=auto|manual` is independent of the suite. Manual spec preparation is
@@ -62,6 +65,28 @@ Each caller wait is 15 seconds. A larger inspection budget must be chosen before
 admission, not silently extended while reconnecting.
 
 Profile bytes are consumer data, not an installation inventory. The example
-hashes its selected `profile.json` into the existing environment reference.
+hashes its selected `profile.json` bytes into the existing environment reference.
+The profile need not be JSON: Haepari does not interpret its contents. Candidate
+and test subset digests use the public `haepari-tree-sha256/v1` algorithm, including
+paths, content and executable bits. Every subset and the profile path must be in
+`selected_files`. A skill-only Markdown payload with its test script and profile
+is sufficient; there is no required binary, daemon or installation inventory.
+Capture streams regular files in 64 KiB chunks, refuses links and unsafe or
+known credential path names, and preserves executable/non-executable modes. Missing inputs
+or mutation during capture leave an unfinished run for inspection, with no Job
+admission. A bundle digest mismatch is refused by the controller before admission.
+Reconnection uses only saved original specs and keys, even if the current input
+policy/profile changes or the registered resource gains a successor revision.
 Only declared files and environment are copied; no ambient credentials or host
 installation tree is collected.
+
+The recipe declares its own layout and authorization; the reusable spec helper
+has no default source directory or scenario path. Invalid profile IDs, recipe
+shapes, escaping cwd or a cwd without selected child files are refused locally.
+Case and Unicode normalization aliases are rejected without renaming selected
+paths. A permanent INVALID_REQUEST response requires correcting the declaration
+and choosing a new empty run directory; keep the refused run for inspection.
+
+Standalone `capture_inputs` callers must provide a trusted, caller-owned private
+bundle parent. The wrapper supplies its locked 0700 run directory. Credential
+name guards apply to selected inputs; generated outputs may use such names.

@@ -308,6 +308,10 @@ elif sys.argv[1] == "submit" and fault == "submission-refused":
     reply = {"schema":"haepari.envelope/v1", "operation":"submit", "ok":False,
              "error":{"code":"CONFLICT", "message":"injected conflict", "retry":"none"}}
     code = 2
+elif sys.argv[1] == "submit" and fault == "invalid-request":
+    reply = {"schema":"haepari.envelope/v1", "operation":"submit", "ok":False,
+             "error":{"code":"INVALID_REQUEST", "message":"injected invalid declaration", "retry":"none"}}
+    code = 2
 elif sys.argv[1] == "wait" and fault == "verdict-exit":
     code = 1
 elif sys.argv[1] == "wait" and fault == "transport-uncertain":
@@ -325,6 +329,7 @@ sys.exit(code)
         assert result.returncode == 0
         job_id = jobs(run, owned)["jobs"][0]["job_id"]
         for fault, message in (("different-job", "different Job"), ("submission-refused", "without changing its key"),
+                               ("invalid-request", "correct the declaration and select a new empty run directory"),
                                ("verdict-exit", "verdict and CLI exit disagree")):
             fault_env = dict(env, HAEPARI_REAL_CLI=str(BINARY), HAEPARI_TEST_REPLY=fault)
             result = host(project_root, fault_env, run, binary=proxy)
@@ -405,6 +410,11 @@ def test_reference_project_malformed_config_and_peer_refuse_without_false_fail(p
             result = host(project_root, env, project_root / f"invalid-config-{index}")
             assert result.returncode == 2 and "Traceback" not in result.stderr
             assert '"kind": "aggregate"' not in result.stdout
+        config_path.write_text("{")
+        malformed = project_root / "invalid-json-config"
+        result = host(project_root, env, malformed)
+        assert result.returncode == 2 and "project.json is invalid JSON" in result.stderr
+        assert not (malformed / "run.json").exists()
         config_path.write_bytes(original)
         assert _response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"] == []
     stub = project_root / "incompatible-cli"
@@ -458,6 +468,18 @@ def test_reference_project_selected_input_guards_and_malformed_guest_context(pro
             assert '"kind": "aggregate"' not in result.stdout
             selected.unlink()
             selected.write_bytes(original)
+        source = project / "source"
+        retained = project_root / "real-source"
+        source.rename(retained)
+        try:
+            source.symlink_to(retained, target_is_directory=True)
+            run = project_root / "parent-symlink-run"
+            result = host(project_root, env, run)
+            assert result.returncode == 2 and "without links" in result.stderr
+            assert not (run / "run.json").exists()
+        finally:
+            source.unlink()
+            retained.rename(source)
         assert _response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"] == []
     for context in ("garbage", json.dumps([{"job_id": "valid", "lease_generation": 0, "nonce": "a" * 64}]),
                     json.dumps([{"job_id": "../invalid", "lease_generation": 1, "nonce": "a" * 64}]),
@@ -540,6 +562,7 @@ sys.exit(r.returncode)
 def test_reference_project_refuses_selected_input_changed_during_read(project_root, monkeypatch):
     # Coordinate an actual write between the before/after metadata reads without
     # adding a production injection seam or depending on file size/race luck.
+    monkeypatch.syspath_prepend(str(project_root / "project"))
     module = runpy.run_path(str(project_root / "project/host.py"))
     selected = project_root / "project/source/input.txt"
     start = threading.Event()

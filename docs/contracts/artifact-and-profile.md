@@ -127,3 +127,22 @@ The queue's stored result includes workload outcome and cleanup status independe
 ## Absence policy selected by v2 Jobs (TASK-036)
 
 A positively absent required file is recorded as `required_output_absent`; it is not retained evidence. For v2 admissions only, proven termination, complete collection of everything that exists and verified cleanup may yield partial-evidence INCOMPLETE with an available resource. Files that exist but cannot be collected remain protected. Permission, identity, transport, deadline and worker uncertainty are never classified as absence. Retained v1 Jobs and immutable historical terminal results keep their original policy.
+
+## Generic input helpers (TASK-018)
+
+The [runnable caller](../../examples/project-test/README.md) provides consumer-owned
+stdlib Python helpers in `haepari_inputs.py`. Its explicit `project.json` input
+policy names selected files, candidate/test subsets, and a selected profile path
+and ID. Capture copies regular-file bytes and normalizes modes to executable or
+non-executable. Candidate and test provenance digests apply the existing
+`haepari-tree-sha256/v1` encoding to their declared subsets; the environment and
+target-profile digests are SHA-256 of the exact profile bytes. Profile content is
+opaque and need not be JSON. A selected skill Markdown file is a valid candidate
+without a binary, daemon or installation inventory.
+
+The helpers construct the existing Job v2 fields only. Native admission still
+verifies the whole selected inventory and seals the immutable object. Missing or
+changed inputs cannot become an admission. Saved-key replay preserves the original
+admission/profile reference after source changes or a resource update; current
+configuration is not a replacement for the original request. These helpers add
+no global registry, moving alias lookup, host installation discovery or F1/F2 schema.

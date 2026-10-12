@@ -24,7 +24,7 @@ The E2E handler uses `uv run --locked --group dev` to sync the pinned pytest env
 
 Design Revision 3.5 follows [ADR-0020](docs/architecture-decision-records/0020-local-development-scope.md). Run focused local checks for changed behavior, then the common gate at the applicable task/package boundary. Fault injection, identity refusal, boot/PID changes and controller restarts use isolated local/fake-native fixtures. No normal gate logs out the host, reboots a VM, expires DHCP or replaces the installed controller.
 
-The runnable [project-owned wrapper](examples/project-test/README.md) provides `make test-vm` with read-only selected-resource prerequisites. Focused checks are `go run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --label-filter=unit ./cmd/haepari`, `go run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --label-filter=unit --focus="Task017|Task014SSHBoundary" ./internal/utm`, `go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --label-filter=integration --focus="Task017ResourceDoctor|Task017NativeGuestProject" ./internal/controller`, and `uv run --locked --group dev python -m pytest -q tests/e2e/test_project_cli.py`. They use isolated local/fake-native resources, never a real VM. E2E controller state retains its existing short `/tmp` private-root fixture because the mounted external volume has a shared ancestor rejected by product guards; project payloads are test-owned scratch. TASK-027 will observe success, meaningful failure, cancellation, timeout, logs/outputs, original-run SSH reconnection, verified cleanup, successor reuse and one ordinary offline manual scenario with the exact packaged candidate. The historical thirty-Job/50 MiB campaign and DF-001–004 experiments are optional hardening. Runtime guards and existing fixture coverage remain.
+The runnable [project-owned wrapper](examples/project-test/README.md) provides `make test-vm` with read-only selected-resource prerequisites. Focused checks are `go run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --label-filter=unit ./cmd/haepari`, `go run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --label-filter=unit --focus="Task017|Task014SSHBoundary" ./internal/utm`, `go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --label-filter=integration --focus="Task017ResourceDoctor|Task017NativeGuestProject" ./internal/controller`, and `uv run --locked --group dev python -m pytest -q tests/e2e/test_project_cli.py tests/e2e/test_project_inputs.py`. They use isolated local/fake-native resources, never a real VM. E2E controller state retains its existing short `/tmp` private-root fixture because the mounted external volume has a shared ancestor rejected by product guards; project payloads are test-owned scratch. TASK-027 will observe success, meaningful failure, cancellation, timeout, logs/outputs, original-run SSH reconnection, verified cleanup, successor reuse and one ordinary offline manual scenario with the exact packaged candidate. The historical thirty-Job/50 MiB campaign and DF-001–004 experiments are optional hardening. Runtime guards and existing fixture coverage remain.
 
 Reuse established authorization for the same repository/test/resource/effect scope. Automatically record candidate/input/result identities; do not require a fresh approval file or question for ordinary Job execution, cancellation or owned cleanup. Optional `make test-utm` retains its existing campaign/authority files; service replacement, power operations, protected-evidence disposal and providers remain distinct effects. A temporarily missing VM blocks only a selected new live observation; it does not reopen accepted evidence or block independent local checks.
 
@@ -107,6 +107,22 @@ These fixtures operate no actual SSH server or UTM VM, configure no service and 
 ## TASK-016 VM timing observations
 
 `Task016VMAdapterTimings` exercises both a running VM and a required fenced start through the scripted native guest fixture. It checks measured authentication/transfer latency, durable result projection, collection/cleanup phase elapsed durations and immutable result replay. `VMPreparationStepValidation` rejects unobserved, foreign, repeated and negative preparation durations; the local phase integration fixture rejects VM-only observations on a local resource. These checks operate no real VM and do not freeze F2. The separately authorized installed-service campaign must bind the exact deployed executable and environment before backend acceptance.
+
+## TASK-018 opaque inputs
+
+`uv run --locked --group dev python -m pytest -q tests/e2e/test_project_cli.py tests/e2e/test_project_inputs.py`
+checks the reference caller and a skill-only candidate with arbitrary raw profile
+bytes, independently reproduced inventory/subset digests across multiple 64 KiB chunks, actual executable modes,
+queued source stability, missing inputs, unsafe/colliding/credential selections,
+corrupt-bundle refusal and restoration under the original key, malformed input
+policies/recipes, Unicode aliases, profile-ID/count/path bounds and cwd refusal.
+Local negatives include manual recipe validation, malformed project JSON,
+permanent-request guidance and intermediate-directory links; a generated
+credential-named output proves input-selection rules do not over-restrict results. The integration
+focus `Task017NativeGuestProject|Task018` also updates the fake/native VM resource,
+then proves the original saved spec, Job ID and admission/profile survive replay
+without another workload. These use isolated local/fake-native resources; they
+perform no host installation, live VM or provider action.
 
 ## TASK-036 recovery and evidence policy
 

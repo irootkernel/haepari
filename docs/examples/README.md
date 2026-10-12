@@ -22,4 +22,4 @@ The [lock resource](resource-lock.template.json) defines the advisory `mulgae-re
 
 ## Generic and optional profiles
 
-`profile-local.template.json` is a minimal consumer-defined opaque profile example, not a new public Haepari schema. TASK-018 will hash selected profile bytes into the existing Job environment reference. The rich `environment-lock.template.json`, install/skill inventories and migration examples are optional consumer recipe designs, outside Haepari F3 and first-release acceptance. All placeholders remain illustrative, not executable configuration.
+`profile-local.template.json` is a minimal consumer-defined opaque profile example, not a new public Haepari schema. TASK-018 hashes selected profile bytes into the existing Job environment reference. The rich `environment-lock.template.json`, install/skill inventories and migration examples are optional consumer recipe designs, outside Haepari F3 and first-release acceptance. All placeholders remain illustrative, not executable configuration.

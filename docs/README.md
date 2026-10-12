@@ -8,7 +8,7 @@ Design revision: 3.5, dated 2026-10-12. [ADR-0020](architecture-decision-records
 
 The accepted [EPIC-009](roadmap/EPIC-009.md) qualifies the reduced single-machine, same-user core operating loop and small isolated caller e2e before consumer integration. Its canonical operating records describe the selected candidate and limits; they do not establish release or consumer adoption. The [shared feedback dossier](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) remains for active later consumers, and historical TASK-016 acceptance is unchanged.
 
-TASK-017 adds the [runnable project caller](../examples/project-test/README.md), separate guarded guest entrypoint, sealed selected-file bundle, saved-key recovery and read-only selected-resource doctor. Its [implementation record](records/TASK-017-project-integration.md) distinguishes local/fake-native observations from TASK-027 live release checks. Manual controller delivery remains TASK-019 work.
+TASK-017 adds the [runnable project caller](../examples/project-test/README.md), separate guarded guest entrypoint, sealed selected-file bundle, saved-key recovery and read-only selected-resource doctor. Its [implementation record](records/TASK-017-project-integration.md) distinguishes local/fake-native observations from TASK-027 live release checks. TASK-018 adds reusable [opaque input helpers](records/TASK-018-opaque-inputs.md) and exact raw-profile binding. Manual controller delivery remains TASK-019 work.
 
 ## Read in this order
 

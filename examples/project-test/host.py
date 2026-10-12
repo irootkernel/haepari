@@ -10,7 +10,6 @@ from pathlib import Path
 import re
 import shutil
 import stat
-import struct
 import subprocess
 import sys
 import tempfile
@@ -18,44 +17,7 @@ import uuid
 
 
 PROJECT = Path(__file__).resolve().parent
-SELECTED = ("source/input.txt", "tests/vm/run.sh", "profile.json", "scenarios/check.md")
-
-
-class Refusal(Exception):
-    pass
-
-
-def regular_bytes(path):
-    path = Path(path).absolute()
-    parent = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        for part in path.parts[1:-1]:
-            successor = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
-            os.close(parent)
-            parent = successor
-        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
-    finally:
-        os.close(parent)
-    with os.fdopen(fd, "rb") as stream:
-        before = os.fstat(stream.fileno())
-        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-            raise Refusal(f"selected input must be a regular file with one link: {path}")
-        data = stream.read()
-        after = os.fstat(stream.fileno())
-    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns, before.st_mode) != (
-            after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns, after.st_mode):
-        raise Refusal(f"selected input changed during capture: {path}")
-    return data, bool(before.st_mode & 0o111)
-
-
-def tree_digest(root, selected):
-    digest = hashlib.sha256(b"haepari-tree-sha256/v1\0")
-    for name in sorted(selected):
-        data, executable = regular_bytes(root / name)
-        encoded = name.encode("utf-8")
-        digest.update(struct.pack(">Q", len(encoded)) + encoded + bytes([executable]))
-        digest.update(struct.pack(">Q", len(data)) + hashlib.sha256(data).digest())
-    return digest.hexdigest()
+from haepari_inputs import Refusal, capture_inputs, job_spec, regular_bytes, validate_recipe
 
 
 def save(path, value):
@@ -97,7 +59,10 @@ def invoke(binary, *args, timeout=25):
 
 
 def prepare(run, args, installation):
-    config = json.loads(regular_bytes(PROJECT / "project.json")[0])
+    try:
+        config = json.loads(regular_bytes(PROJECT / "project.json")[0])
+    except json.JSONDecodeError as exc:
+        raise Refusal(f"project.json is invalid JSON: {exc}") from None
     if not isinstance(config, dict) or not isinstance(config.get("suites"), dict):
         raise Refusal("project suites must be a mapping of declared suite names to recipes")
     suites = config["suites"]
@@ -105,46 +70,15 @@ def prepare(run, args, installation):
     if not names or any(name not in suites or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", name) for name in names):
         raise Refusal("select a consumer-declared suite; this project defaults to regression")
     for name in names:
-        recipe = suites[name]
-        if (not isinstance(recipe, dict) or not isinstance(recipe.get("argv"), list)
-                or not recipe["argv"] or not all(isinstance(arg, str) and arg for arg in recipe["argv"])
-                or not isinstance(recipe.get("required_outputs"), list)
-                or not all(isinstance(output, str) and output for output in recipe["required_outputs"])
-                or not isinstance(recipe.get("environment", {}), dict)
-                or not all(isinstance(key, str) and isinstance(value, str)
-                           for key, value in recipe.get("environment", {}).items())):
-            raise Refusal("project suite recipe requires argv, required_outputs and string environment mappings")
-    bundle = run / "bundle"
-    bundle.mkdir(mode=0o700)
-    for name in SELECTED:
-        data, executable = regular_bytes(PROJECT / name)
-        target = bundle / name
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        target.write_bytes(data)
-        target.chmod(0o700 if executable else 0o600)
-    profile = hashlib.sha256(regular_bytes(bundle / "profile.json")[0]).hexdigest()
-    inventory = tree_digest(bundle, SELECTED)
+        validate_recipe(suites[name], args.mode)
+    inputs = capture_inputs(PROJECT, run / "bundle", config.get("inputs"))
+    inventory = inputs["input"]["inventory_digest"]
     run_id = uuid.uuid4().hex
     record = {"schema": "haepari.project-run/v1", "installation_id": installation, "resource": args.resource,
               "suite": args.suite, "mode": args.mode, "inventory_digest": inventory, "declared_suites": names, "jobs": []}
     for index, name in enumerate(names):
         recipe = suites[name]
-        spec = {"schema": "haepari.job/v2", "execution_mode": "managed", "resource_id": args.resource,
-                "mode": args.mode, "suite": name,
-                "input": {"root": str(bundle), "selected_files": list(SELECTED), "inventory_digest": inventory},
-                "environment": {"profile_id": "reference-project", "profile_digest": profile},
-                "workload": {"argv": recipe["argv"], "cwd": "source", "environment": recipe.get("environment", {}),
-                             "required_outputs": recipe["required_outputs"]},
-                "deadlines": {"queue_seconds": 30, "prepare_seconds": 10, "collect_seconds": 5, "cleanup_seconds": 5},
-                "effects": {"mode": "offline", "authorization_reference": "project-owned-offline-test"},
-                "provenance": {"candidate_digest": hashlib.sha256(regular_bytes(bundle / "source/input.txt")[0]).hexdigest(),
-                               "tests_digest": hashlib.sha256(regular_bytes(bundle / "tests/vm/run.sh")[0]).hexdigest(),
-                               "target_profile_digest": profile, "evidence_class": "development"}}
-        if args.mode == "manual":
-            spec["manual"] = {"scenario_document": "scenarios/check.md", "required_scenarios": ["expected-output"]}
-            spec["deadlines"]["manual_seconds"] = 60
-        else:
-            spec["deadlines"]["run_seconds"] = 10
+        spec = job_spec(inputs, args.resource, name, args.mode, recipe)
         path = run / f"spec-{index}.json"
         save(path, spec)
         record["jobs"].append({"suite": name, "request_key": f"project-{run_id}-{index}", "spec": path.name,
@@ -199,7 +133,11 @@ def execute(run, args, record, doctor):
             save(run / "run.json", record)
         submitted, response = invoke(args.haepari, "submit", "--spec", str(path), "--request-key", entry["request_key"], "--json")
         if submitted or not response["ok"]:
-            raise Refusal("submission refused; retain this run directory without changing its key and inspect the error retry policy: " + json.dumps(response.get("error")))
+            issue = response.get("error", {})
+            guidance = ("correct the declaration and select a new empty run directory; retain this original run for inspection"
+                        if issue.get("code") == "INVALID_REQUEST" else
+                        "retain this run directory without changing its key and inspect the error retry policy")
+            raise Refusal("submission refused; " + guidance + ": " + json.dumps(issue))
         receipt = response["data"]
         if not valid_id(receipt.get("job_id")):
             raise Refusal("malformed Job receipt; retain this original run directory, spec and key")

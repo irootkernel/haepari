@@ -1,8 +1,38 @@
 {
   "suites": {
     "regression": {
-      "argv": ["/bin/sh", "../tests/vm/run.sh"],
-      "required_outputs": ["results/out.txt"]
+      "argv": [
+        "/bin/sh",
+        "../tests/vm/run.sh"
+      ],
+      "required_outputs": [
+        "results/out.txt"
+      ],
+      "cwd": "source",
+      "authorization_reference": "project-owned-offline-test",
+      "manual": {
+        "scenario_document": "scenarios/check.md",
+        "required_scenarios": [
+          "expected-output"
+        ]
+      }
     }
+  },
+  "inputs": {
+    "selected_files": [
+      "source/input.txt",
+      "tests/vm/run.sh",
+      "profile.json",
+      "scenarios/check.md"
+    ],
+    "candidate_files": [
+      "source/input.txt"
+    ],
+    "test_files": [
+      "tests/vm/run.sh",
+      "scenarios/check.md"
+    ],
+    "profile_file": "profile.json",
+    "profile_id": "reference-project"
   }
 }

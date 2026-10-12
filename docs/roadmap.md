@@ -70,7 +70,7 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-038](roadmap/EPIC-009.md#task-038) | Publish and execute repeatable real-VM qualification | TASK-016, TASK-037 | Active | Accepted |
 | [TASK-039](roadmap/EPIC-009.md#task-039) | Demonstrate a small isolated e2e caller cycle | TASK-038 | Active | Accepted |
 | [TASK-017](roadmap/EPIC-005.md#task-017) | Publish the project Make and guest integration contract | TASK-008, TASK-012, TASK-015, TASK-039 | Active | Accepted |
-| [TASK-018](roadmap/EPIC-005.md#task-018) | Implement generic candidate and environment input helpers | TASK-017 | Active | Planned |
+| [TASK-018](roadmap/EPIC-005.md#task-018) | Implement generic candidate and environment input helpers | TASK-017 | Active | Accepted |
 | [TASK-019](roadmap/EPIC-005.md#task-019) | Implement general manual jobs and recorded observations | TASK-018, TASK-010 | Active | Planned |
 | [TASK-020](roadmap/EPIC-005.md#task-020) | Validate the generic consumer loop; freeze the integration contract | TASK-018, TASK-019 | Active | Planned |
 | [TASK-021](roadmap/EPIC-006.md#task-021) | Complete concurrency and crash qualification | TASK-011, TASK-019, TASK-035 | Active | Planned |
