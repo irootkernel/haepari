@@ -11,8 +11,8 @@ ADR-0001 through ADR-0013 apply to the active managed design. ADR-0014/0015 pres
 | ADR-0005 | [Resource reuse requires verified cleanup](0005-cleanup-before-release.md) | Accepted for v0.1.0 design; clarified in Design Revision 3.4 |
 | ADR-0006 | [UTM lifecycle on the host, SSH supervision in the guest](0006-utm-ssh.md) | Accepted for v0.1.0 design; amended by ADR-0018 |
 | ADR-0007 | [Keep tests in their owning product repositories](0007-project-owned-tests.md) | Accepted for v0.1.0 design |
-| ADR-0008 | [Use frozen installation combinations including skills](0008-installation-combinations.md) | Accepted for v0.1.0 design |
-| ADR-0009 | [Test migration with prior-version state](0009-real-migration-state.md) | Accepted for v0.1.0 design |
+| ADR-0008 | [Use frozen installation combinations including skills](0008-installation-combinations.md) | Consumer recipe guidance; release scope narrowed by ADR-0020 |
+| ADR-0009 | [Test migration with prior-version state](0009-real-migration-state.md) | Consumer recipe guidance; release scope narrowed by ADR-0020 |
 | ADR-0010 | [Manual results are explicit observations](0010-manual-evidence.md) | Accepted for v0.1.0 design |
 | ADR-0011 | [Use a thin native integration before adding MCP](0011-native-cli-first.md) | Accepted for v0.1.0 design |
 | ADR-0012 | [Separate runtime isolation from authorization and external effects](0012-isolation-and-effects.md) | Accepted for v0.1.0 design |
@@ -23,5 +23,6 @@ ADR-0001 through ADR-0013 apply to the active managed design. ADR-0014/0015 pres
 | ADR-0017 | [Advisory named locks for cooperating tools](0017-advisory-named-locks.md) | Accepted for v0.1.0 design (Design Revision 3.2) |
 | ADR-0018 | [One persistent VM per resource, without per-job reset](0018-persistent-vm-no-reset.md) | Accepted for v0.1.0 design (Design Revision 3.3); amends ADR-0006 |
 | ADR-0019 | [Reuse an immutable per-Job runner for bounded SSH exchanges](0019-owned-runner-transport.md) | Selected for TASK-037 implementation; qualification pending |
+| ADR-0020 | [Local development scope and proportionate verification](0020-local-development-scope.md) | Accepted for v0.1.0 design (Design Revision 3.5); narrows F3 and release obligations |
 
 ADR-0014 and ADR-0015 record the Design Revision 2 external-lease and linked-segment decisions. ADR-0016 (Design Revision 3) defers their application; re-entry requires B1/B2 closure in the [deferred contract](../contracts/external-leases.md) and a separate accepted consumer need. Existing decision IDs are preserved.

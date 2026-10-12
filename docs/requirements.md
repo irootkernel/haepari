@@ -1,10 +1,12 @@
 # Haepari requirements
 
-Target: v0.1.0, Design Revision 3.4. All requirements below are planned and unchecked. A checkbox may be checked only after its acceptance evidence has been reviewed. Every active requirement (HP-REQ-001 through HP-REQ-062, plus HP-REQ-080 and HP-REQ-081 added in Design Revision 3.2) is mandatory for v0.1.0; there is no optional tier. Deferred requirements (HP-REQ-063 through HP-REQ-079) do not count toward the release. [Traceability](traceability.md) maps each active requirement to its task and verifying cases.
+Target: v0.1.0, Design Revision 3.5. Requirement IDs and historical acceptance evidence are preserved. Only requirements in the Requirements section are mandatory; checkboxes require reviewed evidence. Consumer-owned optional and deferred external requirements have separate owners and do not block release.
 
 ## Scope and ownership
 
-The release supplies resource-aware managed execution, local process supervision, immutable input admission, UTM/SSH control, manual ownership, and evidence transport on macOS. Public external execution is deferred. Product recipes own their functional assertions. Haepari does not implement another product's schema migration or rewrite another product's skills.
+The release supports general automatic and manual tests on one local macOS arm64 machine, one OS user and one already-running registered persistent UTM macOS VM. Haepari owns sealed inputs, scheduling, execution/observation, declared evidence collection, manual completion and safe Job cleanup. Consumer recipes own product installation, compatibility, skill discovery/behavior, migrations and their functional assertions. Existing VM power and cross-boot recovery implementation and deterministic fixtures remain; operating those optional paths is not required to develop or release this supported profile.
+
+[ADR-0020](architecture-decision-records/0020-local-development-scope.md) records the scope, evidence and authorization decision. The Requirements section is mandatory; Consumer-owned optional requirements and Deferred external-execution requirements do not count toward v0.1.0. Unobserved optional scenarios are limits, never passing evidence.
 
 ## Requirements
 
@@ -159,18 +161,18 @@ Acceptance: No VM job mounts the host home, live skills, plugin cache, source ch
 Implementation owner: `TASK-015`.
 
 ### HP-REQ-031
-- [ ] Prove UTM operation and job cleanup on one real macOS guest before accepting the adapter.
-Acceptance: Retain observed startup, authenticated execution, failure, log collection, cleanup, and next-job readiness evidence; mock-only success cannot qualify the adapter. Record per-phase VM timings (VM start when needed, SSH ready, transfer, collection, cleanup) for throughput planning.
-Implementation owner: `TASK-016`.
+- [ ] Prove the supported already-running UTM Job loop on one real macOS guest before advertising that backend.
+Acceptance: Retain observed authenticated success, meaningful failure, cancellation/timeout, logs/outputs, verified cleanup and successor reuse. Record phase timings from the tested candidate. Deterministic fixtures cover identity refusal and power/reboot boundaries; separate live experiments are optional. Historical TASK-016 and TASK-038 observations remain scoped evidence; TASK-027 owns the exact release candidate's small running-VM loop.
+Implementation owner: `TASK-016`, `TASK-027`.
 
 ### HP-REQ-032
 - [ ] Provide a project-owned `make test-vm` integration contract with a separate guest entrypoint.
-Acceptance: Two sample projects submit through the same queue without embedding AppleScript or duplicating the scheduler; executing the guest entrypoint on the host is rejected.
+Acceptance: One small synthetic project submits through the common queue, prints and saves Job IDs, waits and returns truthful results without embedding UTM control. Executing its guest entrypoint on the host is rejected.
 Implementation owner: `TASK-017`.
 
 ### HP-REQ-033
-- [ ] Support explicit install, migration, regression, and all suite selection, with auto/manual mode independent of suite.
-Acceptance: An all run uses separate jobs for install and migration. Haepari never resets the VM, so each job's recipe establishes its own starting state; a migration recipe creates the old state before the candidate checks.
+- [ ] Support consumer-selected suite wrappers, with auto/manual mode independent of suite.
+Acceptance: Keep existing suite values compatible; a project may use only regression. An all wrapper runs only that project’s declared suites as distinct Jobs with one frozen candidate and reports all IDs/results. Installation and migration suites are optional consumer recipes.
 Implementation owner: `TASK-017`.
 
 ### HP-REQ-034
@@ -179,29 +181,14 @@ Acceptance: VM absence fails only the explicitly selected VM gate. A missing req
 Implementation owner: `TASK-017`.
 
 ### HP-REQ-035
-- [ ] Capture an exact environment lock for every managed admission, while leaving product-specific compatibility policy to the consumer.
-Acceptance: The queue freezes a selected profile digest and opaque component identities; it neither resolves latest nor maintains a competing global tool registry.
+- [ ] Record an immutable consumer environment reference for every managed admission.
+Acceptance: Retain profile_id/profile_digest and the sealed selected inputs without resolving latest or inspecting a global installation registry. The small project helper hashes the selected consumer profile bytes; rich installation locks and compatibility checks are optional recipe inputs.
 Implementation owner: `TASK-018`.
 
 ### HP-REQ-036
-- [ ] Transport a declared installation unit with separately identified binary, daemon, plugin, paired skill, external skill, and connection settings; consumer recipes validate compatibility.
-Acceptance: A skill-only candidate is valid; a consumer recipe reports an incomplete CLI/daemon pair or missing required skill subtree before tests.
+- [ ] Transport declared candidate and test files as opaque, explicitly selected payloads.
+Acceptance: Arbitrary regular candidate/test files, including a skill-only payload, retain their selected bytes and executable modes. No binary/daemon pairing, skill layout, installation inventory or native discovery rule is required by Haepari.
 Implementation owner: `TASK-018`.
-
-### HP-REQ-037
-- [ ] Collect complete skill-tree inventories and declared locations, including actual selected home and project discovery roots; consumer recipes verify duplicates and effective discovery.
-Acceptance: Added, removed, changed, extra, and shadowing files are exercised; checking only SKILL.md or a minimum file list is insufficient.
-Implementation owner: `TASK-018`.
-
-### HP-REQ-038
-- [ ] Transport native skill version/location declarations, including independently pinned skills and per-CODEX_HOME external skills; consumer recipes enforce compatibility.
-Acceptance: A fixture with different binary and skill source revisions can pass when declared compatible; a duplicate shared/home installation is diagnosed rather than silently ignored.
-Implementation owner: `TASK-018`.
-
-### HP-REQ-039
-- [ ] Record consumer-submitted installed-file, fresh-session discovery, behavior, and cleanup results as distinct evidence classes; enforce declared required-result completeness.
-Acceptance: A file hash check or a prompt containing copied skill text cannot satisfy installed-skill discovery or behavior acceptance.
-Implementation owner: `TASK-019`.
 
 ### HP-REQ-040
 - [ ] Support hands-on jobs that retain exclusive ownership until a recorded outcome and cleanup.
@@ -212,21 +199,6 @@ Implementation owner: `TASK-019`.
 - [ ] Do not auto-grade skill behavior or invoke paid providers by default.
 Acceptance: Offline, live automatic, and human observations remain distinguishable. Missing human observations or unapproved required live checks result in INCOMPLETE.
 Implementation owner: `TASK-019`.
-
-### HP-REQ-042
-- [ ] Provide a sample migration recipe contract that lets a consumer create meaningful state through an old release before installing the candidate.
-Acceptance: Old and new identities, pre-upgrade assertions, preserved state identifiers, post-upgrade read/write behavior, and restart behavior are recorded.
-Implementation owner: `TASK-020`.
-
-### HP-REQ-043
-- [ ] Require consumer-declared tests for configuration, skill/rules, daemon, data, and supported in-progress-work migration policies.
-Acceptance: The scenario either proves supported resume or proves safe update refusal while busy; dropping work or inventing seamless upgrade is unacceptable.
-Implementation owner: `TASK-020`.
-
-### HP-REQ-044
-- [ ] Provide sample fault cases and required-result declarations for consumer-owned interrupted installation/migration and supported recovery or explicit unsupported upgrade paths.
-Acceptance: A retry does not duplicate logical work; unknown workload effects remain inconclusive. Downgrade support is never inferred from test cleanup.
-Implementation owner: `TASK-020`.
 
 ### HP-REQ-045
 - [ ] Exercise crash, race, repeated request, and resource starvation boundaries with bounded deterministic failure injection.
@@ -254,8 +226,8 @@ Acceptance: A local resource is documented as unsandboxed. An untrusted reposito
 Implementation owner: `TASK-022`.
 
 ### HP-REQ-050
-- [ ] Bound orchestration memory and apply explicit limits to request size, logs, artifacts, and retained events.
-Acceptance: Large output is streamed to disk; truncation is visible. A measured controller overhead test meets the verification budget or blocks the advertised performance claim.
+- [ ] Bound orchestration inputs, logs, artifacts and retained events, with streaming delivery.
+Acceptance: Configured bounds and visible truncation/gaps are verified with bounded local fixtures. Larger memory/throughput benchmarks are optional unless their measured performance is advertised; an unmeasured target is not a release blocker or a performance claim.
 Implementation owner: `TASK-023`.
 
 ### HP-REQ-051
@@ -275,7 +247,7 @@ Implementation owner: `TASK-024`.
 
 ### HP-REQ-054
 - [ ] Distribute a verified binary and same-release `use-haepari` skill, with explicit daemon service installation.
-Acceptance: A clean user installation can submit and wait using only the stable installed release; installation does not auto-enable UTM, modify Aquarium, or upgrade another product.
+Acceptance: An isolated installation verifies the complete packaged skill tree, documented CLI flow and explicit service lifecycle without Aquarium or another scheduler. External model/provider skill-behavior evaluation is optional; installation does not auto-enable UTM or modify other products.
 Implementation owner: `TASK-025`.
 
 ### HP-REQ-055
@@ -284,8 +256,8 @@ Acceptance: The consumer checks declared schema, backend, wait, manual, and reco
 Implementation owner: `TASK-025`.
 
 ### HP-REQ-056
-- [ ] Document VM preparation, skills, migration, manual runs, crash recovery, and decommissioning.
-Acceptance: An operator can follow the runbook without undeclared paths or invented UTM commands; unsupported capabilities stop at a precise prerequisite.
+- [ ] Document the supported VM setup, automatic/manual tests, ordinary recovery and decommissioning.
+Acceptance: The runbook supports one already-running registered VM with precise prerequisites and documented current commands. Product-specific skill and migration guidance is clearly optional consumer material; no power/logout/lease-expiry experiment is required for setup.
 Implementation owner: `TASK-026`.
 
 ### HP-REQ-057
@@ -300,7 +272,7 @@ Implementation owner: `TASK-027`.
 
 ### HP-REQ-059
 - [ ] Qualify at least two distinct managed resource use cases before calling the queue general purpose.
-Acceptance: Run real local-command jobs and the macOS VM campaign through the same scheduling ledger; record distinct resource occupancy and cleanup evidence.
+Acceptance: Run real local-command Jobs and the small already-running single-VM release loop through the same scheduling ledger; record distinct resource occupancy and cleanup evidence. The historical thirty-Job/50 MiB campaign is optional tooling, not a release requirement.
 Implementation owner: `TASK-027`.
 
 ### HP-REQ-060
@@ -315,7 +287,7 @@ Implementation owner: `TASK-028`.
 
 ### HP-REQ-062
 - [ ] Keep managed execution as the supported v0.1.0 request family; reserve a separate future external family without exposing its APIs.
-Acceptance: Reject external-mode requests and resource definitions as unsupported in v0.1.0; auto/manual stays independent. Freeze the managed core contract at gate F1 (after local and failure evidence), the VM fields at gate F2 (after real UTM qualification) and the consumer integration contract at gate F3 (after the integration examples), all before adoption.
+Acceptance: Reject external-mode requests/resources as unsupported; auto/manual stays independent. Preserve frozen F1/F2 and freeze F3 at TASK-020 for the project wrapper, guest entrypoint, consumer environment reference and general manual results. Product installation inventories and migration evidence are outside F3.
 Implementation owner: `TASK-002`, with freeze gates in `TASK-012` (F1), `TASK-016` (F2) and `TASK-020` (F3).
 
 ### HP-REQ-080
@@ -337,9 +309,43 @@ Implementation owner: `TASK-035`.
 | TASK-036 | Failure/evidence/recovery and frozen semantics: HP-REQ-018–022, HP-REQ-024–025, HP-REQ-027–030, HP-REQ-062. Master resolves missing-output, changed-boot and evidence-loss decisions before affected implementation. |
 | TASK-037 | Startup, transfer, runner retention and minimum limits: HP-REQ-011, HP-REQ-019, HP-REQ-022–024, HP-REQ-026–027, HP-REQ-050–051, HP-REQ-062. General configuration and performance qualification stay with TASK-023. |
 | TASK-038 | Exact installed-candidate qualification: HP-REQ-011, HP-REQ-018–031, HP-REQ-050–051, HP-REQ-059, HP-REQ-062. Required real campaign rows cannot pass from fixtures or historical results. |
-| TASK-039 | Real-project submission/evidence loop: HP-REQ-009–011, HP-REQ-014–015, HP-REQ-018–019, HP-REQ-021–022, HP-REQ-032, HP-REQ-034–035, HP-REQ-059, HP-REQ-062. Full Make, skill, manual and migration integration remains in EPIC-005. |
+| TASK-039 | Small isolated caller submission/evidence loop: HP-REQ-009–011, HP-REQ-014–015, HP-REQ-018–019, HP-REQ-021–022, HP-REQ-032, HP-REQ-034–035, HP-REQ-059, HP-REQ-062. Generic Make/input/manual integration remains in EPIC-005; product skill/migration recipes are consumer-owned optional scenarios. |
 
-The [dossier decisions](TODO-VM-OPERATIONAL-READINESS.md#decisions-before-affected-implementation) are proposals requiring their stated owner decisions. Existing verdicts, protected-evidence rules and F1/F2 shapes remain authoritative until recorded contract/version changes are accepted. Host logout remains DF-002; guest reboot is a separate operational campaign scenario.
+The [dossier decisions](TODO-VM-OPERATIONAL-READINESS.md#decisions-before-affected-implementation) retain the approved TASK-036 choices and historical execution scope. Existing verdicts, protected-evidence rules and F1/F2 shapes remain authoritative until recorded contract/version changes are accepted. DF-001–004 and guest-reboot experiments are optional hardening outside the supported first-release profile; they retain their uncertainty and require an explicit re-entry decision.
+
+## Consumer-owned optional requirements
+
+HP-REQ-037–039 and HP-REQ-042–044 retain recipe guidance and stable IDs. They are optional consumer scenarios, not Haepari feature or release prerequisites. A consumer selects and implements them in its own repository; Haepari runs the declared commands and collects ordinary outputs without interpreting product semantics. No active Haepari task owns their implementation.
+
+### HP-REQ-037
+- [ ] Collect complete skill-tree inventories and declared locations, including actual selected home and project discovery roots; consumer recipes verify duplicates and effective discovery.
+Acceptance: Added, removed, changed, extra, and shadowing files are exercised; checking only SKILL.md or a minimum file list is insufficient.
+Consumer owner: integrating project. Historical Haepari plan owner: `TASK-018`.
+
+### HP-REQ-038
+- [ ] Transport native skill version/location declarations, including independently pinned skills and per-CODEX_HOME external skills; consumer recipes enforce compatibility.
+Acceptance: A fixture with different binary and skill source revisions can pass when declared compatible; a duplicate shared/home installation is diagnosed rather than silently ignored.
+Consumer owner: integrating project. Historical Haepari plan owner: `TASK-018`.
+
+### HP-REQ-039
+- [ ] Record consumer-submitted installed-file, fresh-session discovery, behavior, and cleanup results as distinct evidence classes; enforce declared required-result completeness.
+Acceptance: A file hash check or a prompt containing copied skill text cannot satisfy installed-skill discovery or behavior acceptance.
+Consumer owner: integrating project. Historical Haepari plan owner: `TASK-019`.
+
+### HP-REQ-042
+- [ ] Provide a sample migration recipe contract that lets a consumer create meaningful state through an old release before installing the candidate.
+Acceptance: Old and new identities, pre-upgrade assertions, preserved state identifiers, post-upgrade read/write behavior, and restart behavior are recorded.
+Consumer owner: integrating project. Historical Haepari plan owner: `TASK-020`.
+
+### HP-REQ-043
+- [ ] Require consumer-declared tests for configuration, skill/rules, daemon, data, and supported in-progress-work migration policies.
+Acceptance: The scenario either proves supported resume or proves safe update refusal while busy; dropping work or inventing seamless upgrade is unacceptable.
+Consumer owner: integrating project. Historical Haepari plan owner: `TASK-020`.
+
+### HP-REQ-044
+- [ ] Provide sample fault cases and required-result declarations for consumer-owned interrupted installation/migration and supported recovery or explicit unsupported upgrade paths.
+Acceptance: A retry does not duplicate logical work; unknown workload effects remain inconclusive. Downgrade support is never inferred from test cleanup.
+Consumer owner: integrating project. Historical Haepari plan owner: `TASK-020`.
 
 ## Deferred external-execution requirements
 
@@ -436,6 +442,6 @@ No distributed controllers, public service, multi-tenant authorization, arbitrar
 
 ## Completion rule
 
-v0.1.0 requires every active requirement, the active [verification matrix](verification.md), managed local and UTM use cases, contracts frozen at gates F1, F2 and F3, a verified installation package, and the [Aquarium producer handoff](handoffs/haepari-to-aquarium.md). Any unobserved live prerequisite remains explicitly incomplete. Publication and host activation are separate authorized effects.
+v0.1.0 requires every mandatory requirement in the Requirements section, the mandatory [verification matrix](verification.md) in its declared local/fake/live layers, managed local and small already-running single-VM auto/manual use cases, contracts frozen at F1, F2 and narrowed F3, a verified installation package, and the [Aquarium producer handoff](handoffs/haepari-to-aquarium.md). Missing TASK-027 exact-candidate live evidence leaves release acceptance incomplete; it does not block TASK-017–026 local acceptance or reopen historical qualification. Consumer-owned HP-REQ-037–039 and HP-REQ-042–044, V25–V31 and optional DF-001–004 experiments do not block v0.1.0. Publication and host activation are separate authorized effects.
 
 HP-REQ-063 through HP-REQ-079 are preserved as **deferred** requirements owned by EPIC-008/TASK-029–032 or later consumer integration. HP-REQ-021 refers to managed external side effects of a submitted command, not the deferred public external-lease API. Linux and public lease acceptance require separate re-entry decisions.

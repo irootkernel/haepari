@@ -16,8 +16,8 @@ This is a completion template, not completed evidence. Aquarium:TASK-086 accepts
 - Requirements coverage and the finite verification matrix with actual outcomes.
 - Independent local-command use case plus a real UTM persistent-VM use case.
 - Lost reply, restart, SSH disconnection, cancellation, manual ownership and quarantined-resource recovery.
-- Immutable candidate/test transfer and skill installation/discovery/cleanup fixtures.
-- Old-state migration and interruption-recovery fixture results.
+- Immutable candidate/test transfer, declared outputs and owned cleanup.
+- Haepari storage compatibility and test-owned controller recovery fixture results; product migration is optional consumer evidence.
 - Protected host state and independent controller self-test evidence.
 - Exact environment/UTM/OS prerequisites, permissions, runner identity and the persistent-VM model (no reset, ADR-0018).
 
@@ -34,4 +34,8 @@ Do not populate fields with assumed values. A local build is not an official rel
 
 ## Design Revision 3 managed-first packet
 
-Include exact managed schemas/capabilities frozen at gates F1, F2 and F3, the advisory lock contract and `advisory-lock/v1`, local and real UTM execution evidence, V01–V65 results, nested acquisition and recovery cases, controller/runner exit behavior, job cleanup, installed skill behavior, storage schema classes, and known gaps. External lease activation, dispatch, settlement, continuation and E01–E20 are deferred and cannot block Aquarium:TASK-086. State any unqualified macOS session, Automation permission, guest identity or cleanup prerequisite explicitly. State the Aquarium-side plan alignment from [external requests](../to-external.md) §1.2 as a consumer prerequisite. No packet content implies Aquarium acceptance or publication.
+Include exact managed schemas/capabilities frozen at gates F1, F2 and F3, the advisory lock contract and `advisory-lock/v1`, local and real UTM execution evidence, the 58 mandatory V-case results in their declared layers (V25–V31 are optional consumer cases), nested acquisition and recovery cases, controller/runner exit behavior, job cleanup, packaged skill files and documented CLI flow, storage schema classes, and known gaps. External lease activation, dispatch, settlement, continuation and E01–E20 are deferred and cannot block Aquarium:TASK-086. State any unqualified macOS session, Automation permission, guest identity or cleanup prerequisite explicitly. State the Aquarium-side plan alignment from [external requests](../to-external.md) §1.2 as a consumer prerequisite. No packet content implies Aquarium acceptance or publication.
+
+## Design Revision 3.5 boundary
+
+The producer qualifies one machine/user/already-running VM with generic automatic/manual Jobs. F3 covers wrapper/guest entrypoint, immutable consumer environment references and general manual results. Product-specific skill discovery/behavior, installation compatibility and migration recipes belong to consumers, not Haepari completion. Power/logout/DHCP-expiry/multi-day/two-VM and performance campaigns remain optional unobserved limits. Ordinary execution records exact identities under an established scope without per-Job approval files. Existing F1/F2, packaged-service/storage checks and safe recovery remain. See [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).

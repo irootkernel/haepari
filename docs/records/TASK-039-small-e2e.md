@@ -58,9 +58,13 @@ wait is limited to 15 seconds. A quarantined resource and unknown cleanup still
 require their public recovery rules; this small cycle exercises a known native
 failure followed by verified ordinary cleanup, not an evidence-loss escape.
 
-TASK-017 owns the later full project Make, environment-lock and guest integration
-contract. It should preserve sealed queued inputs, permanent request keys,
-truthful caller/native exit distinctions, selected output declarations and
-separate collection/cleanup evidence. Consumer-owned real-project integration,
-VM readiness/recovery, manual observations and release/adoption remain later
-coverage; the small local result does not replace those owners' required checks.
+Under Design Revision 3.5, TASK-017 owns the generic project Make and guest
+entrypoint contract; TASK-018 owns opaque consumer profile references and
+TASK-019–020 own general manual results and the narrowed F3 boundary
+([ADR-0020](../architecture-decision-records/0020-local-development-scope.md)).
+Preserve sealed queued inputs, permanent request keys, truthful caller/native
+exit distinctions, selected output declarations and separate collection/cleanup
+evidence. Rich environment-lock decoding and real-project installation/migration
+are optional consumer work. This historical local result does not replace
+TASK-027's exact-release running-VM and manual observations or required runtime
+readiness/recovery checks.

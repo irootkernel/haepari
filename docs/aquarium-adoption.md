@@ -2,6 +2,8 @@
 
 The actual Aquarium repository is the authority for this rollout. Its planned Aquarium:EPIC-019 and Aquarium:TASK-086 through Aquarium:TASK-102 are defined in `docs/roadmap/README.md` and detailed in `docs/todo/TODO-HAEPARI-VM-ADOPTION.md`. This package copy is a portable briefing, not a second lifecycle database.
 
+Design Revision 3.5 boundary: the broader product skill/installation/migration policies below are consumer-owned rollout guidance, not Haepari v0.1.0 producer prerequisites. Haepari supplies generic automatic/manual execution and evidence; each consumer decides its native recipe acceptance. This copy changes no external repository or rollout authority.
+
 ## Objective and external dependency
 
 After Haepari's independent v0.1.0 handoff is verified, adopt project-owned VM installation, skill, hands-on, migration and regression tests. Aquarium is the first implementation. Then Aquarium sends one explicitly authorized Sorage request to each project in order and verifies the returned implementation evidence. Aquarium implements no foreign repository as part of these coordination tasks.

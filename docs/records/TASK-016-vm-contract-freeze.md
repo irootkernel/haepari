@@ -1,5 +1,7 @@
 # TASK-016 VM contract freeze decision
 
+Current scope note (2026-10-12): [ADR-0020](../architecture-decision-records/0020-local-development-scope.md) narrows current release obligations. Product-specific installation/skill/migration assertions and DF-001–004 live experiments are optional. This note preserves the original decision, frozen F1/F2 runtime semantics and all historical observations below.
+
 Decision date: 2026-10-05; qualification and recovery candidate updated 2026-10-08. Effective when TASK-016 becomes Accepted in the [canonical roadmap](../roadmap.md). This record defines the candidate F2 boundary; it does not independently accept the Task or Epic. The accepted Task commit and its review/verification evidence identify the exact frozen bytes.
 
 ## Scope and authorities
@@ -60,9 +62,9 @@ Exact candidate, native receipts, command outcomes and reviewer provenance remai
 
 ## Owner-approved later verification
 
-The owner waived actual expired DHCP-entry rejection, host logout/post-login recovery and multi-day DHCP lease currency for the current TASK-016 campaign. [DF-001 through DF-003](../deferred-feedback.md) own their remaining uncertainty, authority and re-entry conditions; all three must be verified before TASK-027 release acceptance. They are unobserved, not passed, and the waiver is not permanent removal. Current Task completion may rely on the explicitly accepted deferrals while retaining these limits.
+The owner waived actual expired DHCP-entry rejection, host logout/post-login recovery and multi-day DHCP lease currency for the current TASK-016 campaign. [DF-001 through DF-003](../deferred-feedback.md) own their remaining uncertainty, authority and re-entry conditions; the original decision required all three before TASK-027 release acceptance. ADR-0020 subsequently removed that release deadline. They remain unobserved, not passed, with optional hardening re-entry conditions. Current Task completion may rely on the explicitly accepted deferrals while retaining these limits.
 
-F2 freezes the stated contract, not every unobserved environmental behavior. TASK-017 may consume the frozen VM field semantics after canonical TASK-016 acceptance; TASK-027 must close the deferred real checks and requalify its exact release candidate before release acceptance. Power-loss durability, additional platforms, production release services and external providers remain with their own tasks and authority.
+F2 freezes the stated contract, not every unobserved environmental behavior. TASK-017 consumes the accepted frozen VM field semantics without reopening historical qualification. TASK-027 qualifies its exact release candidate through the small already-running single-VM loop; DF-001–004 are optional hardening with no v0.1.0 deadline. Power-loss durability and additional platforms remain unqualified limits unless separately advertised; packaged service verification and any selected external providers retain their own scope and authority.
 
 ## Guest-attested recovery candidate boundary
 

@@ -97,6 +97,14 @@ Date: 2026-09-28. The product target remains Haepari v0.1.0, and every implement
 
 Date: 2026-09-28. Product target remains Haepari v0.1.0. This is a documentation revision that keeps the Revision 3 managed-first scope. Every implementation task remains planned. It answers the re-review of Revision 3; the [review disposition](review-disposition.md) lists every finding from both reviews with its outcome.
 
+## Design Revision 3.5 — local development scope (2026-10-12)
+
+The [scope review disposition](review-disposition.md#local-development-scope-agreement-design-revision-35) records iterative Grok review corrections. Historical VM qualification is separate from TASK-027's new small exact-release loop and TASK-028's dependent final handoff. The validator checks this current closure and rejects empty or duplicate mandatory traceability rows.
+
+Master selected general automatic/manual local and already-running single-VM tests as the first-release product. ADR-0020 records the boundary. TASK-017–020 keep their IDs/prerequisites with generic integration responsibilities; Accepted history and F1/F2 runtime schemas remain unchanged. F3 excludes rich installation inventories and migration evidence. HP-REQ-037–039/042–044 and V25–V31 become consumer-owned optional material. DF-001–004 lose their first-release obligations without becoming passing evidence.
+
+Routine authorized checks reuse their development scope and automatically record candidate/result identities. The full single-VM campaign remains optional tooling with its unchanged authority interface; disruptive environment experiments, large soak/benchmarks and provider skill grading are not recurring or release gates. Current guidance, traceability and documentation validation distinguish mandatory/consumer-owned/deferred sets. This revision changes no runtime, host service, VM, external repository, staged state or release publication.
+
 ## Roadmap
 
 - **Dependencies.** The roadmap's actual prerequisites now form a checked DAG. Every active task except TASK-028 gates a later task.

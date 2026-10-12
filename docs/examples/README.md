@@ -19,3 +19,7 @@ The [local result](result-local.template.json) shows distinct job, resource avai
 The [VM resource](resource-macos.template.json) names one persistent UTM VM by UUID, MAC address and pinned SSH host key, with automatic capacity-driven stop disabled unless the operator explicitly allows it. Haepari never clones, resets or deletes that VM (ADR-0018).
 
 The [lock resource](resource-lock.template.json) defines the advisory `mulgae-review` lock from the [lock contract](../contracts/locks.md): capacity one, a 120-second liveness window and a six-hour maximum hold. It has no default queue deadline, so a request waits until it is granted or cancelled. It has no adapter or execution mode.
+
+## Generic and optional profiles
+
+`profile-local.template.json` is a minimal consumer-defined opaque profile example, not a new public Haepari schema. TASK-018 will hash selected profile bytes into the existing Job environment reference. The rich `environment-lock.template.json`, install/skill inventories and migration examples are optional consumer recipe designs, outside Haepari F3 and first-release acceptance. All placeholders remain illustrative, not executable configuration.

@@ -19,7 +19,7 @@ Requirement coverage: `HP-REQ-054`, `HP-REQ-055`.
 - [ ] Do not auto-install into production while packaging, auto-enroll UTM, or add a required MCP transport.
 
 #### Verify
-- [ ] Install into clean test users/roots, verify full skill tree and service lifecycle, and run native submit/wait/reconnect/manual/cancel scenarios.
+- [ ] Install into an isolated test root in the same user, verify packaged skill files/documented CLI flow and service lifecycle, and run native submit/wait/reconnect/manual/cancel scenarios. No extra host account or model/provider behavior session is required.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -35,7 +35,7 @@ Requirement coverage: `HP-REQ-054`, `HP-REQ-055`.
 Requirement coverage: `HP-REQ-056`, `HP-REQ-057`.
 
 #### Implement
-- [ ] Reconcile requirements, architecture, CLI help, examples, security guidance, project-owned testing, migration and legacy-retirement boundaries against implemented behavior.
+- [ ] Reconcile requirements, architecture, CLI help, examples, security guidance, project-owned testing, optional consumer skill/migration guidance and legacy-retirement boundaries against implemented behavior.
 - [ ] Reconcile stale implementation/candidate wording and command availability across public and maintainer documents, using the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) without rewriting historical records as current observations.
 
 #### Do not
@@ -55,17 +55,17 @@ Requirement coverage: `HP-REQ-056`, `HP-REQ-057`.
 
 ### Run exact release acceptance
 
-Requirement coverage: `HP-REQ-058`, `HP-REQ-059`.
+Requirement coverage: `HP-REQ-031`, `HP-REQ-058`, `HP-REQ-059`.
 
 #### Implement
-- [ ] Confirm that freeze gates F1, F2 and F3 hold for the candidate, freeze candidate binary/runner/skill identities, and execute release acceptance: deterministic failure coverage, real local and UTM resources, installed skill/manual evidence, migration and self-host protection.
-- [ ] Run the TASK-017 through TASK-020 sample scenarios (install, migration, manual/installed-skill) on the real UTM resource under the installed release service.
+- [ ] Confirm that freeze gates F1, F2 and F3 hold for the candidate, freeze candidate binary/runner/skill identities, and execute release acceptance: deterministic failure coverage, real local and one already-running UTM resource, packaged skill/CLI flow, ordinary manual evidence and self-test protection.
+- [ ] Run the small TASK-017 through TASK-020 core auto/manual sample on the running VM under the packaged release service: success, meaningful failure, cancel, timeout, logs/outputs, bounded SSH observation loss/reconnection, cleanup and successor reuse. Bind actual candidate/input/result identities automatically. Do not rerun the full historical TASK-038 campaign or require DF-001–004, live identity-refusal, product skill/migration, soak or benchmark experiments.
 
 #### Do not
 - [ ] Do not infer distribution success from a local build or publish automatically from a test result.
 
 #### Verify
-- [ ] Require managed local and real UTM evidence, the active V-cases as applicable, exact artifacts and truthful skill/runtime limits. E01 through E20 remain deferred.
+- [ ] Require managed local and real UTM evidence, all 58 mandatory V-invariants in their declared local/fake/live layers, exact artifacts and truthful skill/runtime limits. E01 through E20 remain deferred.
 - [ ] Record exact artifacts, platform inventory, all required outcomes and evidence completeness; a changed artifact invalidates affected acceptance.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 

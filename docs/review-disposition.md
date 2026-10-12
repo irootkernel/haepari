@@ -1,4 +1,39 @@
-# Design review disposition: Revision 3.4
+# Design review disposition: Revision 3.5
+
+
+## Local development scope agreement (Design Revision 3.5)
+
+Status: Agreed after correction and focused Grok re-review on 2026-10-12. Master authorized the scope revision and iterative review. Grok reported “AGREED” with no remaining actionable contradictions or defects in the revised documentation scope. This agreement claims no new runtime observation or task acceptance.
+
+[ADR-0020](architecture-decision-records/0020-local-development-scope.md) owns the scope decision. The [roadmap](roadmap.md#hardware-and-environment-gates) retains all task IDs, actual prerequisites and lifecycle states. TASK-016/TASK-038 are accepted historical real-UTM qualification, not recurring live prerequisites for TASK-017–026. TASK-027 alone owns the new exact-packaged-candidate small running-VM auto/manual observation. TASK-028 retains its actual dependency on TASK-027: local handoff preparation may continue, but final producer handoff cannot precede release acceptance. A missing VM blocks that selected new live gate and final handoff, not independent local development.
+
+The supported target is one macOS arm64 machine, one user and one already-running registered persistent VM. Normal authorized Jobs reuse the established finite development scope across candidate changes. Sealed inputs, truthful results, required evidence retention, unknown-execution fencing, cleanup and original-run reconnection remain mandatory under F1/F2. No public profile decoder, runtime recovery relaxation or mandatory per-Job approval file is introduced. TASK-017–020 still own the planned generic integration and narrowed F3; editing this design does not implement those features.
+
+The initial Grok review used two completed specialist reviews (scope/authority and roadmap/contracts). Its validator specialist did not complete; Grok's parent performed a static validator review, and the implementation agent independently reproduced and corrected a traceability defect. The verification below is offline documentation/tooling evidence, not VM acceptance. Historical review sections below retain their original revisions.
+
+| Finding | Disposition and concrete correction |
+| --- | --- |
+| G-01: Historical VM gates block local successors | Resolved. Separate accepted historical tasks from the current live gate and compute only TASK-027/TASK-028's current dependency closure. Regression fixtures reject local tasks added to that closure or the final handoff omitted. TASK-028's actual prerequisite is preserved. |
+| G-02: Old DF release deadlines survive in records/gaps | Resolved. Add current-scope annotations to the F2 freeze, TASK-038 record, operating guidance and dossier. DF-001–004 remain uncertain optional hardening without a v0.1.0 deadline; historical observations are unchanged. |
+| G-03: Completion scope is ambiguous | Clarified. “Every mandatory requirement” refers to the Requirements section, excluding consumer-owned/deferred sets. Required new live evidence blocks its own gate; unrelated local tasks continue. |
+| G-04: Optional inventory guidance hides required settlement; envelope decoder implied | Resolved. Separate mandatory managed evidence retention/settlement into its own section. Consumer environment-lock bytes are opaque selected files, with format/compatibility validation owned by the consumer. |
+| G-05: TASK-039/dossier imply a full rich environment-lock F3 | Resolved. Annotate the historical handoff with generic Make/guest entrypoint, opaque profile reference and general manual results; keep the original local observation and limits. |
+| G-06: Mulgae completion packet appears to gate Haepari | Clarified. The packet applies only to a consumer-selected Mulgae rollout under its policy; Haepari producer completion follows its own handoff. No external consumer policy is changed. |
+| G-07: Roadmap revision label | Resolved. Target is Design Revision 3.5. |
+| G-08: Generic Make requirements classified as real UTM | Resolved. HP-REQ-032/033 use fixture/unit and local integration evidence. |
+| G-09: V58 implies live expiry/two-VM fault campaigns | Clarified. Fault invariants and logical VM isolation use bounded local/fake-native fixtures. Historical TASK-016 evidence remains; actual expiry/second-VM experiments stay optional DF hardening. |
+| G-10: Guest context requires installation | Resolved. Job context is required before executing the generic guest entrypoint. |
+| G-11: Power-loss experiments remain a later gate | Resolved. Historical UTM observations and the current small release loop are distinguished; power-loss durability remains unqualified, with optional experiments unless advertised. |
+| G-12: VM setup requires product candidate installation | Resolved. Setup uses read-only existing-target preflight; selected generic Jobs check execution/cleanup within their scope. Installation is a consumer recipe choice. |
+| G-13: New small release criterion lacks an owner | Resolved. HP-REQ-031, traceability and TASK-027 coverage explicitly assign new exact-release evidence to TASK-027 while preserving historical owners. |
+| G-14: Haepari self-test implies the large VM campaign | Clarified. HP-REQ-059 uses the small running-VM release loop; the thirty-Job/50 MiB campaign is optional historical tooling. |
+| G-15: Old ADR statuses still imply release implementation | Resolved. ADR-0008/0009 retain their original rationale as consumer guidance with release obligations superseded by ADR-0020; no historical F1/F2 observations are invented. |
+| G-16: Scope tests do not catch semantic contradictions | Partly adopted. Add structural dependency-closure regressions and document their limit. Arbitrary prose semantics require review; literal phrase-matching tests would not establish correctness and are not added. |
+| Additional validator defect | Resolved. Each mandatory requirement must own at least one verifying case, even if other rows cover the global case union. Duplicate traceability rows fail rather than hiding an invalid earlier row. Both have behavioral regressions. |
+
+The implementation prompt now separates generic core invariants from optional consumer installation/skill/migration assertions. This is a documentation and documentation-validator correction; it changes no runtime Go code, service, VM, external repository, task status, staging or release publication.
+
+Verification: `UV_OFFLINE=1 make test-qualification` passed all 84 offline checks; documentation validation and relative-link checks passed. Task IDs, actual prerequisites and lifecycle states match HEAD; the index is empty. Automated checks cover structural rules, not arbitrary prose. Grok read the corrected source and delta without rerunning these checks, and explicitly agreed with the TASK-027/TASK-028 distinction and partial adoption of G-16. Its agreement is a documentation/tooling review, not independent product or VM verification. The synthetic dependency tests check structural behavior; non-write documentation validation also checks the actual roadmap. No further corrective review round was needed after the first re-review. Product/VM checks are outside this documentation-only change; TASK-027's future required live evidence remains unobserved.
 
 ## Pre-implementation correction (Revision 3.4)
 

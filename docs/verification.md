@@ -1,26 +1,26 @@
 # Verification and release acceptance
 
-No case in this document is marked executed. The TASK-034 host probe ([record](records/TASK-034-utm-probe.md)) observed some of the behavior behind V47 and V58, but it is not a case execution. Each implementation task supplies focused evidence; the final release combines the exact artifact identities and results. Passing unit tests does not prove real UTM control, installed skill behavior, or human observations.
+No case in this document is marked executed. The TASK-034 host probe ([record](records/TASK-034-utm-probe.md)) observed some of the behavior behind V47 and V58, but it is not a case execution. Each implementation task supplies focused evidence; the final release combines the exact artifact identities and results. Passing unit tests does not prove the required real-VM loop or human observations. Consumer-specific installed-skill and migration cases are optional.
 
 ## Operational readiness before consumer integration
 
-[EPIC-009](roadmap/EPIC-009.md) and its [execution dossier](TODO-VM-OPERATIONAL-READINESS.md#campaign-and-acceptance-matrix) add task-specific scenarios under the existing V01–V65 vocabulary. TASK-036–037 require focused failure/identity/deadline tests and the common gate; TASK-038 requires exact installed-candidate real-VM observations; TASK-039 requires a small repository-owned native public-CLI e2e cycle before TASK-017, under the 2026-10-12 scope revision. External real-project adoption is not required by this Epic. These are planned checks, not newly executed cases.
+EPIC-009 is Accepted. Its TASK-016/TASK-038 real-VM and TASK-039 native local caller records retain their exact candidates and limits. The historical TASK-038 campaign included 50 MiB logs, thirty Jobs, SSH interruption and installed controller restart; those observations are not recurring development or release obligations. The full campaign remains an explicit optional tool.
 
-The campaign covers success/successor reuse, missing versus uncollected evidence, cancellation/timeout, SSH observation loss, controller restart, 50 MiB logs and a 30-Job soak on one already-running registered VM at global limit one and host guest limit one. The separate small local caller e2e covers sealed inputs, truthful failure, result collection and saved-key reuse. VM power/reboot/power-intent experiments, adversarial identity-refusal tests, packet benchmarks and external project adoption are outside the owner-approved core scope. Two VM Jobs plus local progress at global limit three are deferred to [DF-004](deferred-feedback.md#df-004-two-vm-and-local-concurrency) outside TASK-038–039 and EPIC-009 acceptance. Retain exact source/executable/runner identities and existing timing/application-byte/storage observations as supporting data; no separate benchmark is a completion gate. D1–D3 must be resolved before changing their affected assertions; the current verdict and evidence rules remain in force until then.
-
-Guest reboot does not verify host logout. DF-001–003 retain their separate TASK-027 obligations. A missing real-VM campaign observation blocks TASK-038; historical TASK-016 evidence and local fixtures do not substitute for it. TASK-039 separately requires actual native local caller-e2e observations, not mocks or external project adoption.
+Design Revision 3.5 uses the scope and approval rules in [ADR-0020](architecture-decision-records/0020-local-development-scope.md). Reuse one already-running registered VM. Real VM power/reboot, host logout, actual DHCP expiry, multi-day operation, identity-refusal experiments and two-VM campaigns are optional hardening; DF-001–004 do not block TASK-027. Existing runtime guards and local regression fixtures remain mandatory. Removed scenarios are unobserved limits, not passes.
 
 ## Layers
 
 | Layer | Scope | Environment |
 | --- | --- | --- |
-| Unit | State transitions, schemas, digests, queues, path validation, verdict derivation | Deterministic isolated fixtures |
-| Integration | SQLite transactions, Unix API, process supervisor, event streaming, repeated requests, fake UTM/SSH | Local temporary state with controlled subprocesses |
-| Real local E2E | Installed CLI and service controlling independent command resources | Isolated Haepari state root |
-| Deferred external client E2E | R2 proposal, subject to B1/B2 redesign | Not a v0.1.0 release gate |
-| Real UTM E2E | Actual VM identity, preparation, SSH, detached execution, collection and job cleanup on the persistent VM | Explicitly registered test VM |
-| Installed skills/manual | Discovery, behavior and operator observations | Fresh guest product session and approved provider scope |
-| Migration | Old state, upgrade, regression, interruption/recovery | Exact prior and candidate installation units |
+| Unit/integration | Contracts, SQLite, queues, race/crash injection, identity refusal, process supervision and fake/native guest execution | Private local state and test-owned subprocesses; no managed VM or installed-service replacement |
+| Local E2E | Built public CLI, foreground controller, sealed input, failure, result, replay and controller restart | Isolated state/root/socket and test-owned processes |
+| Running-VM core E2E | Success, meaningful failure, cancel, timeout, logs/outputs, SSH observation reconnection, verified cleanup and successor reuse | One already-running registered VM; exact tested candidate |
+| General manual | Ready is not PASS; explicit observer/scenario result, collection and cleanup | One small offline guest scenario at release; local/fake coverage during development |
+| Packaged service/skill | Exact package files, documented CLI flow and isolated service lifecycle | TASK-025/027 installation scope; no default model/provider evaluation |
+| Consumer-owned optional | Product skill discovery/behavior and old-state migration | Consumer-selected recipe/environment; no Haepari release obligation |
+| Deferred external | External-client proposal, subject to B1/B2 redesign | Not a v0.1.0 gate |
+
+The mandatory V-cases below specify invariants, not a demand to reproduce each fault on a live VM. Use bounded local/fake-native fixtures for wrong identity, boot/PID reuse, power races, storage and concurrency faults. Confirm the supported VM execution/SSH/collection boundary with the small running-VM core loop. Requalify installed-service interruption when service supervision or packaging changes, not for every task. Missing selected live prerequisites fail that live gate without blocking independent local development.
 
 ## Mandatory failure matrix
 
@@ -41,7 +41,7 @@ Guest reboot does not verify host logout. DF-001–003 retain their separate TAS
 | V13 | Workload forks a child or leaves stdout open | Bounded group/pipe handling; uncertainty is explicit. |
 | V14 | Cancel races with workload exit or arrives after completion | One immutable result; known workload failure remains recorded, terminal verdict and capacity cannot be rewritten by a late cancel. |
 | V15 | SSH disconnects while guest work runs | Same run is reattached; no duplicate install/test. |
-| V16 | Guest reboots and an old PID is reused | Boot identity blocks incorrect process attachment. |
+| V16 | Injected guest boot change and reused PID | Boot identity blocks incorrect process attachment. |
 | V17 | Wrong SSH key, VM UUID, MAC-to-address lease or guest boot/run identity | No candidate installation or cleanup of foreign state; an unexpired pre-start lease is accepted only after all current identity checks. |
 | V18 | A second job runs on the persistent VM after a passed, failed or cancelled job with verified cleanup | None of the earlier jobs' Haepari files or runners remain; no clone, delete or reset call is made; files outside the job root are untouched. A resource retaining required evidence cannot run that successor. |
 | V19 | Preparation fails after partially changing guest | Cleanup still executes under the lease. |
@@ -50,6 +50,26 @@ Guest reboot does not verify host logout. DF-001–003 retain their separate TAS
 | V22 | Stale recovery token arrives after a new lease | Reject without touching the later job. |
 | V23 | Manual environment is ready but no result exists | It remains awaiting_manual or finishes INCOMPLETE after recovery. |
 | V24 | Two conflicting manual completions | Revision/conflict checks prevent overwritten outcomes. |
+| V32 | Candidate Haepari is tested | Stable controller and its real state/socket remain unchanged. |
+| V33 | Haepari store is too new or migration fails | Refuse unsafe startup; retain recoverable state. |
+| V34 | Live endpoint/credential prerequisites missing | INCOMPLETE, with no silent skip, authentication, or production fallback. |
+| V35 | A resource's VM identity changes after request admission | The job keeps its resolved revision or blocks explicitly. |
+| V36 | Ordinary tests run without VM | Standard local gate works; explicit VM gate fails with a prerequisite gap. |
+
+V25–V31 are consumer-owned optional cases, outside Haepari release acceptance. A test may cover several cases, but each case must map to an actual assertion. Fault injection stays bounded and private to tests. Production code cannot enable arbitrary failure injection by an untrusted job.
+
+## Resource and performance checks
+
+Verify configured request/log/artifact/event bounds, streaming and visible truncation/gaps with bounded local fixtures. A running-VM smoke collects small declared logs and output digests and retains existing result timings without a separate throughput benchmark.
+
+The historical design targets (1,000 queued Jobs/four active local Jobs below 256 MiB controller memory; 1 GiB log with less than 32 MiB growth after warm-up), percentile measurements and thirty-Job soak are optional measurements unless their performance is explicitly advertised. An unmeasured target is neither a release blocker nor a supported performance claim. Protected evidence must not be silently discarded to satisfy a limit.
+
+## Consumer-owned optional cases
+
+These stable IDs describe optional consumer recipe assertions and contribute zero to the mandatory matrix. They are not owned by active Haepari tasks.
+
+| Case | Scenario | Consumer assertion |
+| --- | --- | --- |
 | V25 | Candidate skill has missing/extra/stale files | Installation verification fails and the result records the difference; Haepari leaves the files in place. |
 | V26 | Shared/home/project duplicate skill exists | The consumer identifies the effective discovery conflict. |
 | V27 | Skill bytes match but the native session cannot discover it | Discovery remains failed/unverified; file checks do not mask it. |
@@ -57,21 +77,10 @@ Guest reboot does not verify host logout. DF-001–003 retain their separate TAS
 | V29 | Old version creates state; candidate upgrades | Data/configuration/identity invariants and post-upgrade writes hold. |
 | V30 | Migration is interrupted or retried | Native recovery is safe; no duplicate logical work. |
 | V31 | Busy work exists during update | The declared resume or refuse/drain policy is observed. |
-| V32 | Candidate Haepari is tested | Stable controller and its real state/socket remain unchanged. |
-| V33 | Haepari store is too new or migration fails | Refuse unsafe startup; retain recoverable state. |
-| V34 | Live endpoint/credential prerequisites missing | INCOMPLETE, with no silent skip, authentication, or production fallback. |
-| V35 | A resource's VM identity changes after request admission | The job keeps its resolved revision or blocks explicitly. |
-| V36 | Ordinary tests run without VM | Standard local gate works; explicit VM gate fails with a prerequisite gap. |
-
-For Haepari release evidence, V25–V31 may use a small sample consumer with real prior sample-version state; each producer later supplies its own native migration and skill behavior observations. A test may cover several cases, but each case must map to an actual assertion. Fault injection stays bounded and private to tests. Production code cannot enable arbitrary failure injection by an untrusted job.
-
-## Resource and performance checks
-
-Design targets, to be measured rather than claimed: with 1,000 queued jobs and four active local jobs, controller memory excluding workload processes and OS file cache remains below 256 MiB. Stream a 1 GiB workload log while controller growth remains below 32 MiB after warm-up. Run a local-only submit/inspect/wait scenario without an unbounded polling loop and record latency, machine, build, load, and storage conditions; no universal latency promise is made. VM tests run in the development loop, and the owner expects 10–30 VM jobs a day. TASK-016 and TASK-027 therefore record VM cycle phase durations (VM start when needed, SSH ready, transfer, collection, cleanup) and queue wait p50/p95, derived from result `timings`.
-
-Set explicit request-size, per-stream log, artifact-count/size, and per-phase time limits in operator configuration. Required evidence may not be silently discarded to satisfy a limit. Limits and truncation must appear in the result. Limits are resource-protection settings, not a new restriction on an integrated tool's native semantic contract.
 
 ## Migration evidence
+
+This section is optional consumer recipe guidance, not a Haepari v0.1.0 gate. Haepari’s own storage compatibility remains mandatory under V33.
 
 Retain source/target profile and artifact digests, exact old-state creation commands, pre-upgrade assertions, expected invariants, actual installation/migration commands, post-upgrade checks, restart checks, and interruption recovery. All state is synthetic or explicitly approved test data. Do not copy production databases or account stores into the VM.
 
@@ -81,22 +90,22 @@ Where prior fixtures are generated by an old binary, that artifact must be verif
 
 Record observer, exact job/profile/candidate/test identity, scenario, observed action/result, and any missing checks. A default suite never starts a paid provider. Explicit live tests declare endpoints and spending/time boundaries. The queue reports their completion state without pretending to verify a model's internal decisions.
 
-The native `use-haepari` skill is verified for managed submit-once, wait, same-ID observation, cancellation and recovery. Verify no nested capacity acquisition, no nested blocking wait and no automatic rerun of uncertain work. Explicit cancel and honest cleanup/manual/native-outcome reporting remain required. Run it against the installed stable CLI in a fresh test session. The test controller remains independent of the candidate skill and binary under evaluation.
+The native `use-haepari` skill is verified for managed submit-once, wait, same-ID observation, cancellation and recovery. Verify no nested capacity acquisition, no nested blocking wait and no automatic rerun of uncertain work. Explicit cancel and honest cleanup/manual/native-outcome reporting remain required. Verify the packaged skill files, examples and documented flow against the installed CLI. A fresh model/provider session and probabilistic behavior grading are optional consumer checks, not a release prerequisite. The test controller remains independent of the candidate skill and binary under evaluation.
 
 TASK-014 may record an early real-guest SSH detach/reconnect/receipt/cancel smoke observation when an authorized guest is available. It is exploratory, optional for local and fake-backend work, and cannot complete TASK-016 or F2. TASK-016 still supplies mandatory real-backend qualification; the accepted TASK-034 host probe remains unchanged.
 
 ## v0.1.0 release checklist
 
-- [ ] Every active requirement has reviewed evidence and no unsupported PASS claim.
-- [ ] Unit/integration tests and the mandatory failure matrix are complete.
+- [ ] Every mandatory requirement has reviewed evidence and no unsupported PASS claim; optional consumer/hardening cases are excluded explicitly.
+- [ ] Unit/integration tests and all 58 mandatory invariants are covered in their declared layers; the seven consumer cases are optional.
 - [ ] Actual execution is recorded for each advertised platform/backend.
-- [ ] Real local and macOS UTM managed use cases pass. E01 through E20 remain deferred.
+- [ ] The exact packaged candidate passes local and already-running single-VM core auto/manual flows; no full historical campaign rerun is required. E01 through E20 remain deferred.
 - [ ] Advisory lock cases V59–V64 pass, and `advisory-lock/v1` appears in the capability output.
 - [ ] Contracts are frozen at gates F1 (TASK-012), F2 (TASK-016) and F3 (TASK-020), and the TASK-004 and TASK-034 decision records are reviewed.
 - [ ] Installed CLI, daemon service and full same-release skill are verified.
 - [ ] A second job on the persistent VM finds none of the first job's Haepari files, and nothing outside the job directory is reset.
-- [ ] Initial Haepari schema creation, too-new rejection, synthetic migration-framework fixtures and supported recovery are verified. Consumer projects still run meaningful product old-state migration. Actual Haepari prior-public-release migration is N/A until a predecessor exists.
-- [ ] Required manual observations are complete and independently distinguishable from deterministic tests.
+- [ ] Initial Haepari schema creation, too-new rejection, synthetic migration-framework fixtures and supported recovery are verified. Consumers select product old-state migration when their own release policy requires it. Actual Haepari prior-public-release migration is N/A until a predecessor exists.
+- [ ] One ordinary offline manual scenario has explicit observations and safe cleanup; no product-specific skill/migration or paid-provider evaluation is required.
 - [ ] Exact archive/executable/skill identities and capabilities are frozen in the producer handoff.
 - [ ] Publication, installation on the real host, and Aquarium adoption remain separate actions.
 
@@ -116,7 +125,7 @@ TASK-014 may record an early real-guest SSH detach/reconnect/receipt/cancel smok
 | V46 | The controller exits or restarts under the development LaunchAgent while a local runner works | The runner survives in its own session and process group; the controller reattaches it or records an interrupted execution with retained occupancy; no rerun; macOS supervision. |
 | V47 | UTM is controlled from the service context | `utmctl` operations work from the LaunchAgent in the Aqua session without a signing identity, as TASK-034 observed; a missing session or a refused `utmctl` call is a prerequisite gap, never a host fallback; real UTM (TASK-034, TASK-016). |
 | V48 | `HAEPARI_HOME` yields a socket path over the platform limit | Rejected before bind or any mutation; tests use short socket roots; local integration. |
-| V49 | VM host limit, automatic-stop policy and power-transition races | Paused maintenance VM, occupied/quarantined/recovering/transitioning VM and unregistered VM are never automatic-stop victims. Victim/target intents and host-place claims serialize two starts at capacity one; a new victim Job cannot reserve during stop. Crashes after stop intent, after issuance and before state confirmation retain protection; stale responses cannot release it. With no eligible victim, the target remains queued under its deadline with an actionable reason. A confirmed framework no-start limit error remains INCOMPLETE without quarantine and pauses VM dispatch; fake backend, plus real UTM when enough VMs are available. |
+| V49 | VM host limit, automatic-stop policy and power-transition races | Paused maintenance VM, occupied/quarantined/recovering/transitioning VM and unregistered VM are never automatic-stop victims. Victim/target intents and host-place claims serialize two starts at capacity one; a new victim Job cannot reserve during stop. Crashes after stop intent, after issuance and before state confirmation retain protection; stale responses cannot release it. With no eligible victim, the target remains queued under its deadline with an actionable reason. A confirmed framework no-start limit error remains INCOMPLETE without quarantine and pauses VM dispatch; local/fake fixtures satisfy this fault row; real UTM power experiments are optional hardening. |
 | V50 | A second resource names an already registered VM UUID or MAC address, or an unknown UUID | Registration fails without VM control; fixture/unit. |
 | V51 | Reserved cancel or proven no-effect preparation failure; queued cancel; replay/restart around settlement; interruption during cleaning/settling; recovery while occupied; evidence retention and multi-slot quarantine | Reserved no-effect cancel finishes CANCELLED and preparation failure INCOMPLETE, both with `cleanup_outcome=not_needed` and exactly one `(-1,-1)` return; queued cancel remains `(0,0)`. Immutable result, lease return and terminal event commit atomically, so replay/restart cannot duplicate them. Existing pause/quarantine survives settlement; uncertain workload, collector or VM power effects cannot use this path. Cleanup/settlement resumes from durable intent; unproven termination retains occupancy; resource recover is blocked while occupied; local integration plus fake UTM. |
 | V52 | Sealed input is corrupted, or a pinned prerequisite disappears, while a job is queued | The job finishes INCOMPLETE without a lease; a prerequisite unavailable at admission is rejected without consuming the key; local integration. |
@@ -125,7 +134,7 @@ TASK-014 may record an early real-guest SSH detach/reconnect/receipt/cancel smok
 | V55 | CLI and controller share no protocol version | `PROTOCOL_UNSUPPORTED` before any mutation; local integration. |
 | V56 | The store is opened on darwin | `fullfsync` and `checkpoint_fullfsync` are on; if the driver ignores them, the power-loss durability claim is recorded as blocked; macOS supervision (TASK-004). |
 | V57 | Haepari installation, service lifecycle and default jobs run on a host that has legacy development state | No deletion of `~/.aquarium-dev`, foreign Git hooks, Sorage data or host skills; a before/after file-system audit shows only Haepari-owned paths changed; installed release observation. |
-| V58 | VM A has a proven no-effect prerequisite failure: unknown registered UUID, unexpected utmctl status, expired post-start lease, ambiguous/missing lease, stale lease after restart, Error from event with exit 0, or wrong SSH host key; also test unexpired pre-start lease and renewal on a continuously running VM | Reject expired entries regardless of creation time; a pre-start unexpired entry needs current pinned key and guest MAC/boot/run identity. Missing expiry or identity fails without alternate discovery or installation. A alone pauses `vm_unavailable` before its reserved Job finishes INCOMPLETE with legitimate `not_needed` cleanup and one capacity return; later A Jobs stay queued while VM B and independent local resources remain eligible. A stale failure cannot pause a newer registration; existing quarantine remains, uncertain power effects stay protected, and only explicit readiness-verified resume restores A dispatch; fixture plus real UTM (TASK-016). |
+| V58 | VM A has a proven no-effect prerequisite failure: unknown registered UUID, unexpected utmctl status, expired post-start lease, ambiguous/missing lease, stale lease after restart, Error from event with exit 0, or wrong SSH host key; also test unexpired pre-start lease and renewal on a continuously running VM | Reject expired entries regardless of creation time; a pre-start unexpired entry needs current pinned key and guest MAC/boot/run identity. Missing expiry or identity fails without alternate discovery or installation. A alone pauses `vm_unavailable` before its reserved Job finishes INCOMPLETE with legitimate `not_needed` cleanup and one capacity return; later A Jobs stay queued while VM B and independent local resources remain eligible. A stale failure cannot pause a newer registration; existing quarantine remains, uncertain power effects stay protected, and only explicit readiness-verified resume restores A dispatch; bounded local/fake-native fixtures exercise these fault invariants, including logical VM B isolation. TASK-016 retains historical real-UTM boundary evidence; actual DHCP expiry and a second live VM are optional DF-001/DF-004 experiments, not new V58 acceptance prerequisites. |
 | V59 | Two cooperating callers acquire capacity-one mulgae-review; parent acquires and child borrows | FIFO grants never have two holders. Borrower validates installation, lock, grant ID/generation and live state; child success, failure or cancellation does not renew or end the parent grant. Owner later releases; local integration. |
 | V60 | Lost/replayed acquire, changed key payload, ended request replay, or inherited grant for wrong installation/lock | Original request is recovered without a second queue entry; changed payload or wrong installation/lock is CONFLICT. An ended request replay exits 4; invalid borrowed grant is never reacquired under a new key; local integration. |
 | V61 | A holder stops renewing; a waiter leaves before its grant; a holder runs `keepalive` until the maximum hold; an operator forces a release or cancellation | The stopped holder's grant and the unclaimed grant each end as `hold_expired` after one liveness window. `keepalive` renews until the maximum hold ends the grant. Forced actions are recorded with their reasons. Local integration. |
@@ -163,8 +172,8 @@ These cases preserve design-revision-2 proposals and are **deferred**; B1/B2 are
 | E19 | Queue-backed native capability is missing or a VM test would request its parent slot | Fail the selected path; use isolated fixture controller/resources, no silent direct path or self-deadlock. |
 | E20 | Queued/unactivated work is cancelled while activation/begin races | Free capacity only after atomic no-intent proof and authority invalidation; live/uncertain effects stay occupied. |
 
-External owner attestations are evidence about resource return, not independent proof of native product outcomes. Preserve native references and the exact fixture assertion for each row. V01 through V65 are the active managed matrix; V59–V64 cover advisory locks and V65 covers result timings. E01 through E20 remain deferred and need revision for B1/B2 before re-entry.
+External owner attestations are evidence about resource return, not independent proof of native product outcomes. Preserve native references and the exact fixture assertion for each row. Mandatory managed cases: 58 (V01–V24 and V32–V65). Consumer-owned optional cases: 7 (V25–V31). V59–V64 cover advisory locks and V65 covers result timings. E01 through E20 remain deferred and need revision for B1/B2 before re-entry.
 
 ## Storage verification classes
 
-Initial schema creation, unsupported newer schema rejection and synthetic migration-framework fault tests are active Haepari tests. Actual migration from a prior public Haepari release is not applicable until one exists. This does not weaken product-owned old-version-state creation and migration tests in consumer VM recipes.
+Initial schema creation, unsupported newer schema rejection and synthetic migration-framework fault tests are active Haepari tests. Actual migration from a prior public Haepari release is not applicable until one exists. Consumers choose any old-version-state and migration obligations under their own recipe/release policy.

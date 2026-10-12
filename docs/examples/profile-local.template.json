@@ -1,0 +1,6 @@
+{
+  "schema": "example.test-profile/v1",
+  "profile_id": "<consumer-profile>",
+  "platform": "darwin-arm64",
+  "recipe": "<selected-guest-entrypoint>"
+}

@@ -1,6 +1,6 @@
 # Controller configuration contract
 
-Design Revision 3.4. This contract owns the operator configuration schema `haepari.config/v1`. It does not own resource definitions or transitions:
+Design Revision 3.5. This contract owns the operator configuration schema `haepari.config/v1`. It does not own resource definitions or transitions:
 
 - Resource definitions (`haepari.resource/v1`) are in the [resource contract](resource-and-runner.md).
 - Lifecycle effects are in the [managed transition table](managed-transitions.md).
@@ -46,13 +46,9 @@ The [configuration example](../examples/config.template.json) shows every field.
 
 ## Development-loop profile
 
-VM tests run in the development loop, and the owner expects 10–30 VM jobs a day. The defaults above stay conservative. For this load, the recommended setup is:
+Use one already-running registered `utm-macos` resource (capacity one) and one local resource, on the same machine and user. The recommended development limits are `host_macos_guest_limit=1` and `global_limit=2`, so uncertain VM work does not consume the only global slot needed by independent local work. Fresh installation defaults remain one; the existing startup flags implement these explicit limits.
 
-- **Two `utm-macos` resources.** Each is its own persistent VM with its own MAC address, used without reset in queue order ([ADR-0018](../architecture-decision-records/0018-persistent-vm-no-reset.md)). A job names its resource, for example one VM for install tests and one for migration tests.
-- **`host_macos_guest_limit` 2,** when the operator runs no other macOS VM on the host.
-- **`global_limit` 3:** two VM jobs plus one local job. Advisory locks never count toward it.
-
-**Measure before adding capacity.** TASK-016 records the VM cycle phases, and result `timings` give queue wait p50/p95. The host allows at most two macOS guests. If waits stay high with two VMs, shorten the job cycle instead of adding VMs.
+Use the persistent VM without per-Job reset. Local/fake concurrency fixtures verify limit enforcement and independent progress. Two-VM/global-three operation remains optional DF-004 hardening, not the default setup or a release requirement. Results retain phase timings without requiring benchmarks or percentile campaigns. The user prepares/starts the VM outside routine validation; power controls are not part of the core test scenario.
 
 ## Queue deadlines for capacity-one resources
 

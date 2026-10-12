@@ -13,12 +13,22 @@ Enrollment: configured for the local Go product slice, fake UTM control and scri
 | `make test` | Serial, fail-fast prepare → unit → integration → local E2E. |
 | `make test-prepare` | Formatting and deterministic static/build checks. |
 | `make test-unit` | Go unit specs and offline qualification-driver checks. |
-| `make test-qualification` | Offline campaign schema, binding, replay, deadline and evidence checks; no VM or service. |
-| `make test-utm` | Explicit approved single-VM public-CLI observation campaign; outside the local aggregate. |
+| `make test-qualification` | Offline campaign checks and documentation scope/traceability regressions; no VM or service. |
+| `make test-utm` | Optional full single-VM public-CLI campaign with its existing exact manifest/authority interface; outside the local aggregate. |
 | `make test-int` | Self-contained Go integration specs. |
 | `make test-e2e` | Built local CLI and foreground-controller black-box scenario. |
 
-The E2E handler uses `uv run --locked --group dev` to sync the pinned pytest environment before the scenario; its first run may contact the Python package index. Missing dependencies fail the gate if they cannot be installed. Go build and Ginkgo CLI compilation may fetch pinned public Go modules when the module cache is empty; `go mod download` is the explicit offline preparation step. `make check` delegates to `make test`. `make test-integration` delegates to `make test-int`. `make test-macos-supervision` remains an explicit logged-in macOS host probe; `make test-utm` requires the exact private campaign, actual authority and evidence paths documented in [the campaign instructions](tests/qualification/README.md). Missing prerequisites fail; the live gate is outside the local aggregate.
+The E2E handler uses `uv run --locked --group dev` to sync the pinned pytest environment before the scenario; its first run may contact the Python package index. Missing dependencies fail the gate if they cannot be installed. Go build and Ginkgo CLI compilation may fetch pinned public Go modules when the module cache is empty; `go mod download` is the explicit offline preparation step. `make check` delegates to `make test`. `make test-integration` delegates to `make test-int`. `make test-macos-supervision` remains an explicit logged-in macOS host probe; `make test-utm` requires the exact private campaign, actual authority and evidence paths documented in [the campaign instructions](tests/qualification/README.md). Missing selected prerequisites fail; the optional live campaign is outside the local aggregate and is not a recurring task or release requirement.
+
+## Development and release selection
+
+Design Revision 3.5 follows [ADR-0020](docs/architecture-decision-records/0020-local-development-scope.md). Run focused local checks for changed behavior, then the common gate at the applicable task/package boundary. Fault injection, identity refusal, boot/PID changes and controller restarts use isolated local/fake-native fixtures. No normal gate logs out the host, reboots a VM, expires DHCP or replaces the installed controller.
+
+TASK-017 owns the future lightweight `make test-vm` wrapper for one already-running registered VM; that target is not implemented yet. TASK-027 will observe success, meaningful failure, cancellation, timeout, logs/outputs, original-run SSH reconnection, verified cleanup, successor reuse and one ordinary offline manual scenario with the exact packaged candidate. The historical thirty-Job/50 MiB campaign and DF-001–004 experiments are optional hardening. Runtime guards and existing fixture coverage remain.
+
+Reuse established authorization for the same repository/test/resource/effect scope. Automatically record candidate/input/result identities; do not require a fresh approval file or question for ordinary Job execution, cancellation or owned cleanup. Optional `make test-utm` retains its existing campaign/authority files; service replacement, power operations, protected-evidence disposal and providers remain distinct effects. A temporarily missing VM blocks only a selected new live observation; it does not reopen accepted evidence or block independent local checks.
+
+Documentation tooling regression tests run offline with `uv run --locked --group dev python -m pytest -q tests/qualification/test_validate_docs.py` through the existing `test-qualification` stage. They test scope classification, per-requirement case ownership, duplicate traceability rows and historical/current VM-gate dependency closure, not arbitrary prose semantics or product/VM acceptance.
 
 ## Stage Mapping
 

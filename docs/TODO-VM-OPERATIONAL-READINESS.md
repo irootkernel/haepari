@@ -8,6 +8,8 @@ from the roadmap; excluded experiments do not become later closeout obligations.
 
 Consumer Epic: [EPIC-009](roadmap/EPIC-009.md). This is its consolidated execution SOT for epic-handler, not a second lifecycle authority. The [roadmap](roadmap.md) owns identity, status, order and prerequisites; the Epic file owns task acceptance checklists.
 
+Design Revision 3.5 supersession: EPIC-009 is Accepted and its campaign instructions/evidence below retain historical scope. Ordinary development and TASK-027 follow [ADR-0020](architecture-decision-records/0020-local-development-scope.md), not another full campaign. DF-001–004 and product-specific skill/migration qualification are optional; their uncertainty is preserved.
+
 ## Goal and reason for the work
 
 An ordinary project must be able to submit a sealed VM workload, obtain truthful diagnostics and evidence, and run a successor after bounded failure handling. Unknown workload or filesystem-worker lifetime must remain fenced and occupied until resolved. Establish this operating loop before expanding project, skill, manual and migration integration.
@@ -34,7 +36,7 @@ These are entry-point facts to recheck at execution, not a claim about a current
 | [Configuration](contracts/configuration.md) | Distinct global and host guest limits; minimum startup selection versus later general configuration. |
 | [F1](records/TASK-012-managed-core-freeze.md) and [F2](records/TASK-016-vm-contract-freeze.md) | Recorded frozen boundaries and change/version decisions. |
 | [Testing](../TESTING.md), [verification](verification.md) and [operations](operations.md) | Product checks, scenario assertions and current versus planned operating procedures. |
-| [External requests](to-external.md) and [deferred feedback](deferred-feedback.md) | Consumer-owned alignment and unchanged DF-001–003 obligations. |
+| [External requests](to-external.md) and [deferred feedback](deferred-feedback.md) | Consumer-owned alignment and optional DF-001–004 uncertainty; no v0.1.0 release deadline. |
 
 If a planned policy conflicts with a current contract, resolve and update that canonical owner before implementing it. This dossier links those decisions and integrates acceptance; it does not override them.
 
@@ -92,7 +94,7 @@ Master revised TASK-039 on 2026-10-12 to a small repository-owned e2e caller tes
 
 The implementation envelope must distinguish repository edits/checks, service replacement, VM effects, reviewed candidate acceptance, staging/commits and final Epic acceptance. No dossier text grants installation, network/provider effects, publication, external messages or changes to other repositories.
 
-DF-001 actual DHCP expiry, DF-002 host logout/post-login recovery and DF-003 multi-day lease currency remain unobserved release obligations before TASK-027. The bounded same-boot or guest-reboot scenarios do not close them. Release services, manual/skill acceptance and Aquarium adoption remain later work.
+DF-001 actual DHCP expiry, DF-002 host logout/post-login recovery, DF-003 multi-day lease currency and DF-004 multi-VM concurrency remain unobserved optional hardening; Design Revision 3.5 removes their first-release deadline. The bounded same-boot or guest-reboot scenarios do not close them. Release services, manual/skill acceptance and Aquarium adoption remain later work.
 
 ## Feedback disposition
 
@@ -144,7 +146,7 @@ These assignments are summarized in the existing task and external-request owner
 
 For each accepted candidate retain source revision (or exact isolated candidate digest before commit), executable and guest-runner digests, platform/service/resource qualification scope, commands, scenario outcomes, phase/call timings, byte/storage measurements and skipped checks with reasons. Never present historical receipts as fresh evidence. Private run IDs, local state paths, tokens, SSH material and raw workflow logs stay local; promote only bounded non-secret summaries.
 
-TASK-039 hands TASK-017 the small offline recipe, declared inputs/outputs, helper invocation, candidate-bound result summary, local-e2e limits and open consumer questions. It does not deliver a release or freeze the full project Make/environment-lock/manual contract.
+TASK-039 hands TASK-017 the small offline recipe, declared inputs/outputs, helper invocation, candidate-bound result summary, local-e2e limits and open consumer questions. It does not deliver a release or freeze the generic project Make/guest entrypoint, opaque profile reference and general manual-result contract. ADR-0020 narrows that later F3 boundary; rich consumer environment locks remain optional.
 
 At final Epic assessment, repeat affected integration scenarios on the final candidate, reconcile the task checklists with this matrix, and state every environmental limit. Promote behavior to contracts, measurements/qualification to the VM record, operating procedures to operations, developer commands to TESTING/implementation guidance, and consumer alignment to external requests.
 

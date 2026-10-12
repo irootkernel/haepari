@@ -1,10 +1,10 @@
 # Haepari roadmap
 
-Target: v0.1.0, Design Revision 3.4. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. The tables below record current task and epic lifecycle states. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
+Target: v0.1.0, Design Revision 3.5. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. The tables below record current task and epic lifecycle states. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
 
 ## Execution policy
 
-The task table gives the recommended epic-handler order and, separately, each task's actual implementation prerequisites. Within an epic, use task order. A task may start earlier than its epic when its actual prerequisites are met; TASK-034 ran this way, before TASK-001. A task is done only with its focused implementation, failure evidence, documentation and review; a missing real-environment gate leaves it Blocked, not done. When an epic waits only on a hardware gate, the handler may continue with later tasks whose actual prerequisites are met; the waiting epic is accepted after its gated task is. Commit and release authority are separate.
+The task table gives the recommended epic-handler order and, separately, each task's actual implementation prerequisites. Within an epic, use task order. A task may start earlier than its epic when its actual prerequisites are met; TASK-034 ran this way, before TASK-001. A task is done only with its focused implementation, failure evidence, documentation and review. Missing evidence required by that task blocks its acceptance; accepted historical evidence is not reopened by a temporarily unavailable VM. When an epic waits only on a hardware gate, the handler may continue with later tasks whose actual prerequisites are met; the waiting epic is accepted after its gated task is. Commit and release authority are separate.
 
 Lifecycle status vocabulary:
 
@@ -20,6 +20,10 @@ Lifecycle status vocabulary:
 
 `Scope` separately says whether a task counts toward v0.1.0 (`Active`) or not (`Deferred`).
 
+## Local development scope (Design Revision 3.5)
+
+[ADR-0020](architecture-decision-records/0020-local-development-scope.md) narrows v0.1.0 to one machine, one user and one already-running registered VM. TASK-017–020 keep their IDs/prerequisites with generic project/manual responsibilities. Product-specific skill and migration requirements are consumer-owned optional scenarios. Existing F1/F2 contracts, runtime recovery and Accepted status are preserved; F3 is narrowed before its acceptance. The mandatory release matrix uses bounded local failure fixtures plus a small exact-candidate real-VM Job loop, not another full TASK-038 campaign. VM power/reboot/logout/DHCP-expiry/multi-day/two-VM experiments and performance benchmarks do not block release. Ordinary same-scope authorized development checks do not require a new approval per Job or binary digest.
+
 ## Epic sequence
 
 | Epic | Goal | Tasks | Scope | Status |
@@ -29,7 +33,7 @@ Lifecycle status vocabulary:
 | [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Accepted |
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Accepted |
 | [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Accepted |
-| [EPIC-005](roadmap/EPIC-005.md) | Project, skill, manual and migration integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Planned |
+| [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Planned |
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Planned |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Planned |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
@@ -66,9 +70,9 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-038](roadmap/EPIC-009.md#task-038) | Publish and execute repeatable real-VM qualification | TASK-016, TASK-037 | Active | Accepted |
 | [TASK-039](roadmap/EPIC-009.md#task-039) | Demonstrate a small isolated e2e caller cycle | TASK-038 | Active | Accepted |
 | [TASK-017](roadmap/EPIC-005.md#task-017) | Publish the project Make and guest integration contract | TASK-008, TASK-012, TASK-015, TASK-039 | Active | Planned |
-| [TASK-018](roadmap/EPIC-005.md#task-018) | Implement environment locks and installation inventories | TASK-017 | Active | Planned |
-| [TASK-019](roadmap/EPIC-005.md#task-019) | Implement manual jobs and submitted installed-skill evidence | TASK-018, TASK-010 | Active | Planned |
-| [TASK-020](roadmap/EPIC-005.md#task-020) | Add migration and recovery recipe examples; freeze the consumer integration contract | TASK-018, TASK-019 | Active | Planned |
+| [TASK-018](roadmap/EPIC-005.md#task-018) | Implement generic candidate and environment input helpers | TASK-017 | Active | Planned |
+| [TASK-019](roadmap/EPIC-005.md#task-019) | Implement general manual jobs and recorded observations | TASK-018, TASK-010 | Active | Planned |
+| [TASK-020](roadmap/EPIC-005.md#task-020) | Validate the generic consumer loop; freeze the integration contract | TASK-018, TASK-019 | Active | Planned |
 | [TASK-021](roadmap/EPIC-006.md#task-021) | Complete concurrency and crash qualification | TASK-011, TASK-019, TASK-035 | Active | Planned |
 | [TASK-022](roadmap/EPIC-006.md#task-022) | Harden trust, privacy and external-effect boundaries | TASK-021 | Active | Planned |
 | [TASK-023](roadmap/EPIC-006.md#task-023) | Measure bounds and qualify supported platforms | TASK-021 | Active | Planned |
@@ -90,7 +94,7 @@ TASK-002 defines provisional schemas; it does not freeze them. Three gates freez
 
 - **F1, managed core contract (TASK-012).** Covers job, resource, result, event and envelope schemas; lifecycle/outcome enums; error codes; CLI exit codes; canonicalization; cursor semantics; and the advisory lock contract. It freezes after local failure and crash evidence (TASK-010, TASK-011, TASK-012), as defined in the [F1 decision record](records/TASK-012-managed-core-freeze.md); canonical TASK-012 acceptance makes that decision effective. TASK-017 builds the project Make contract on F1.
 - **F2, VM contract fields (TASK-016).** Covers `utm-macos` resource fields, guest runner protocol, host-session identity fields and the VM-specific job and result fields. The [F2 decision record](records/TASK-016-vm-contract-freeze.md) defines the candidate inventory and qualified scope, including the owner-approved later checks in [deferred feedback](deferred-feedback.md). Canonical TASK-016 acceptance makes the freeze effective.
-- **F3, consumer integration contract (TASK-020).** Covers the project Make and guest entrypoint conventions, `haepari.environment-lock/v1`, installation inventories, the manual result format and migration evidence fields. It freezes after TASK-017 through TASK-020.
+- **F3, consumer integration contract (TASK-020).** Covers the project Make and guest entrypoint conventions, immutable consumer environment references and the general manual result format. Rich installation locks, installed-skill evaluation and migration evidence are optional consumer material outside F3. It freezes after TASK-017 through TASK-020.
 
 F3 follows the real-VM qualification and isolated caller cycle in TASK-038–039 through TASK-017. EPIC-009 must resolve its affected F1/F2 contract decisions and version changes before implementing the new semantics; it neither reopens historical acceptance by implication nor grants a blanket additive-change waiver. TASK-020 uses the pilot lessons before freezing the consumer integration contract.
 
@@ -98,12 +102,16 @@ After a gate, a change needs a recorded contract decision and a schema version c
 
 ## Hardware and environment gates
 
-Mandatory real UTM qualification is collected in TASK-016 (historical backend qualification), TASK-038 (corrected-candidate operational qualification), TASK-039 (isolated small caller e2e) and TASK-027 (release acceptance). TASK-034 collected its host probe before bootstrap and is Accepted. TASK-014 may record an optional early SSH detach/reconnect/cancel smoke observation; it does not satisfy a mandatory qualification gate. TASK-036–037 can develop against local resources and the fake UTM/SSH backend without live VM operations. A missing UTM environment therefore blocks TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028, TASK-038 and TASK-039 only. This set is the dependency closure of the declared real-UTM evidence tasks, not a retrospective reopening of accepted TASK-016. New missing real-VM observations block TASK-038 and its unfinished successors. TASK-039 uses a native local small e2e test under the 2026-10-12 scope revision; it retains TASK-038 as its prerequisite and does not substitute local results for that VM gate.
+Historical real-UTM qualification tasks: TASK-016, TASK-038. These Accepted records retain their candidate-bound backend and operating observations. TASK-034's Accepted host probe and TASK-039's Accepted native local caller cycle also remain historical; TASK-039 is not real-VM evidence.
 
-TASK-004 needs a macOS host but no VM. TASK-011 implements the development LaunchAgent used for qualification; operating or replacing an exact service and registered VM still requires a bounded execution envelope. TASK-038 observes core Job execution, collected evidence, large logs and repeated reuse on one already-running registered VM. Master removed VM power-on/off, cold-start, guest-reboot and power-intent scenario qualification from EPIC-009 on 2026-10-12; these are no longer acceptance requirements and are not recorded as passed. The same-machine, same-user scope also excludes separate identity-refusal fault experiments and transport/network benchmarking. Reproducibility is the tracked small core e2e command, not an additional live VM campaign. The two-VM/global-three profile is deferred to a separately authorized campaign in [DF-004](deferred-feedback.md#df-004-two-vm-and-local-concurrency); it does not block TASK-038, TASK-039 or EPIC-009 acceptance. DF-001–003 retain their separate release obligations before TASK-027. Linux runtime, public external leases and an upgrade from a nonexistent public Haepari predecessor remain outside the release gate.
+Current real-VM acceptance tasks: TASK-027. It observes the exact packaged candidate's small already-running single-VM auto/manual loop. Current real-VM prerequisite closure: TASK-027, TASK-028. Missing that new observation blocks release acceptance and the subsequent final producer handoff, not independent local development. TASK-028 may prepare its handoff locally but cannot deliver an accepted release before TASK-027.
+
+TASK-017–026 implement and verify their changed behavior locally or with fake/native guest fixtures; their acceptance requires no new live campaign. The accepted VM prerequisites remain valid while a VM is temporarily unavailable. An optional TASK-014 smoke or selected `make test-utm` rerun needs its own actual observations and cannot substitute for TASK-027. No task ID, actual prerequisite or lifecycle status changes with this distinction.
+
+TASK-004 needs a macOS host but no VM. TASK-011 implements the development LaunchAgent used for qualification; operating or replacing an exact service and registered VM still requires a bounded execution envelope. TASK-038 observes core Job execution, collected evidence, large logs and repeated reuse on one already-running registered VM. Master removed VM power-on/off, cold-start, guest-reboot and power-intent scenario qualification from EPIC-009 on 2026-10-12; these are no longer acceptance requirements and are not recorded as passed. The same-machine, same-user scope also excludes separate identity-refusal fault experiments and transport/network benchmarking. Reproducibility is the tracked small core e2e command, not an additional live VM campaign. The two-VM/global-three profile is deferred to a separately authorized campaign in [DF-004](deferred-feedback.md#df-004-two-vm-and-local-concurrency); it does not block TASK-038, TASK-039 or EPIC-009 acceptance. DF-001–004 are optional hardening outside v0.1.0 acceptance under ADR-0020, with uncertainty retained. Linux runtime, public external leases and an upgrade from a nonexistent public Haepari predecessor remain outside the release gate.
 
 ## Milestones and preservation
 
-TASK-033 proves a production-path submit/wait/result/reconnect local slice inside EPIC-001. TASK-035 adds advisory named locks on the same store and wait path. EPIC-003 hardens its scheduling, supervision and recovery without a second scheduler and ends at freeze gate F1. TASK-034 probed UTM automation before bootstrap; EPIC-004 then qualifies the VM adapter independently of EPIC-008 and ends at freeze gate F2. EPIC-009 restores and measures the ordinary VM loop and proves a small isolated caller cycle before EPIC-005, which ends at freeze gate F3. EPIC-007 supplies the exact Aquarium handoff; the Aquarium-side prerequisites are listed in [external requests](to-external.md). EPIC-008, TASK-029–032 and E01–E20 retain their IDs and design history for post-v0.1.0 re-entry, subject to B1/B2 closure.
+TASK-033 proves a production-path submit/wait/result/reconnect local slice inside EPIC-001. TASK-035 adds advisory named locks on the same store and wait path. EPIC-003 hardens its scheduling, supervision and recovery without a second scheduler and ends at freeze gate F1. TASK-034 probed UTM automation before bootstrap; EPIC-004 then qualifies the VM adapter independently of EPIC-008 and ends at freeze gate F2. EPIC-009 restores and measures the ordinary VM loop and proves a small isolated caller cycle before EPIC-005, which delivers generic automatic/manual integration and ends at freeze gate F3. EPIC-007 supplies the exact Aquarium handoff; the Aquarium-side prerequisites are listed in [external requests](to-external.md). EPIC-008, TASK-029–032 and E01–E20 retain their IDs and design history for post-v0.1.0 re-entry, subject to B1/B2 closure.
 
 Totals: nine epics (eight active, one deferred); 39 tasks (35 active, four deferred).

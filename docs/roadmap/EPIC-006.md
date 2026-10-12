@@ -11,7 +11,7 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-045`, `HP-REQ-046`.
 
 #### Implement
-- [ ] Execute the mandatory failure matrix across admissions, leases, runners, events, manual state and terminal settlement with deterministic, bounded fault injection.
+- [ ] Cover mandatory failure invariants across admissions, leases, runners, events, manual state and settlement with deterministic, bounded local/fake-native fault fixtures.
 - [ ] Evaluate repeated settlement/receipt-import paths, filesystem durability primitives and test-only export/substitute paths identified by the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition). Consolidate only where a concrete invariant or drift justifies it; no universal backend abstraction is prescribed.
 
 #### Do not
@@ -20,7 +20,7 @@ Requirement coverage: `HP-REQ-045`, `HP-REQ-046`.
 #### Verify
 - [ ] Run managed capacity cases including nested acquisition at global limit one and multiple occupied slots, a nested caller's rejected blocking wait, independent resource progress with `global_limit` of at least two, and stale return races.
 - [ ] Run the advisory lock cases (V59–V64) under concurrent callers alongside managed jobs.
-- [ ] Map every matrix row to assertions, run repeated stress scenarios with finite bounds, and review resource/job state after restart.
+- [ ] Map every mandatory row to assertions and review state after test-owned controller restart. Run extra stress only for a concrete remaining concurrency concern; no repeated live VM campaign is required.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -44,7 +44,7 @@ Requirement coverage: `HP-REQ-047`, `HP-REQ-048`, `HP-REQ-049`.
 
 #### Verify
 - [ ] Verify managed parent-context privacy, recovery provenance and refusal to manufacture stop evidence from lost process handles.
-- [ ] Run malicious-path/request fixtures, wrong-target VM tests, log/secret scans and missing-live-prerequisite rejection. Review each destructive path against ownership evidence.
+- [ ] Run malicious-path/request fixtures, wrong-target VM fixtures, log/secret scans and missing-live-prerequisite rejection. Review each destructive path against ownership evidence.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
@@ -60,15 +60,15 @@ Requirement coverage: `HP-REQ-047`, `HP-REQ-048`, `HP-REQ-049`.
 Requirement coverage: `HP-REQ-050`, `HP-REQ-051`.
 
 #### Implement
-- [ ] Implement/configure input, output, event and phase bounds; measure controller memory/log streaming; execute local backend on qualified macOS targets and test control without Aquarium dependencies.
+- [ ] Implement/configure input, output, event and phase bounds; verify streaming/log bounds; measure extra memory/throughput only for advertised claims or a concrete regression; execute local backend on qualified macOS targets and test control without Aquarium dependencies.
 - [ ] Complete the general operator configuration loader and doctor diagnostics declared by the configuration contract, including explicit retention policy. TASK-037 owns only minimum startup global-limit selection and safe runner payload disposal; automatic deletion must preserve protected evidence and permanent replay identities.
-- [ ] Verify running-VM log usability and measure idle lock-clock writes, native process-census cost, controller/collection performance and check duration. Preserve clock, process-identity and evidence guarantees before optimizing; [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) records which claims still need measurement.
+- [ ] Verify running-VM log usability. Treat idle-clock writes, native process-census cost and controller/collection performance as optional measurements unless a concrete issue or advertised claim requires them. Preserve clock, process-identity and evidence guarantees before optimizing; [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) records which claims still need measurement.
 
 #### Do not
 - [ ] Do not hide output truncation or publish unmeasured performance/platform claims.
 
 #### Verify
-- [ ] Meet or explicitly resolve the documented memory budgets, record machine/load conditions, and prove inspection/cancellation/recovery without tools under test.
+- [ ] Verify configured bounds/truncation without mandatory large benchmarks, document unmeasured targets, and prove inspection/cancellation/recovery without tools under test.
 - [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when

@@ -2,6 +2,8 @@
 
 The structural entries below are independent follow-up candidates for the managed local core, not accepted work or roadmap status changes. Recheck the current implementation and tests at the named re-entry point before adopting an item. `docs/roadmap.md` alone owns task identity and lifecycle. Adopted execution dossiers are indexed separately.
 
+Design Revision 3.5: entries below are conditional engineering feedback, not extra task acceptance gates. Apply them only when their named behavior changes or a concrete regression warrants work. Product-specific skill/migration and disruptive live environment experiments remain optional under [ADR-0020](architecture-decision-records/0020-local-development-scope.md).
+
 ## Adopted execution dossiers
 
 - [VM operational feedback](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition): shared later-owner feedback retained for active EPIC-006/007. [EPIC-009](roadmap/EPIC-009.md), TASK-036–039 are Accepted under their reduced core scope; the roadmap links their canonical outcomes. Retaining this dossier does not reopen excluded experiments or create another Epic acceptance gate.

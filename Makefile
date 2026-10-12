@@ -27,7 +27,7 @@ test-unit:
 	+$(MAKE) test-qualification
 
 test-qualification:
-	uv run --locked --group dev python -m pytest -q tests/qualification/test_utm_campaign.py
+	uv run --locked --group dev python -m pytest -q tests/qualification
 
 test-int:
 	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration ./cmd/haepari ./internal/controller ./internal/managed ./internal/runner ./internal/store/sqlite ./internal/utm

@@ -17,7 +17,8 @@ import sys
 
 DOCS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(DOCS)
-REVISION = "3.4"
+REVISION = "3.5"
+REVISION_DATE = "2026-10-12"
 EXCLUDED_DIRS = {".omc"}
 MANIFEST = "MANIFEST.json"
 CHECKS = "checks.json"
@@ -112,17 +113,48 @@ def check_json(files):
     return errors
 
 
+def scoped_items(text, pattern, sections):
+    """Classify stable IDs by their declared section, independent of numbering/order."""
+    scope, seen = None, set()
+    for line in text.splitlines():
+        if line.startswith("## "):
+            scope = sections.get(line[3:])
+        match = re.match(pattern, line)
+        if match:
+            identity = match.group(1)
+            if scope is None:
+                raise ValueError(f"{identity}: missing declared scope section")
+            if identity in seen:
+                raise ValueError(f"{identity}: duplicate scoped ID")
+            seen.add(identity)
+            yield identity, scope
+
+
 def parse_requirements():
     text = read("requirements.md")
-    deferred_at = text.index("## Deferred external-execution requirements")
+    scopes = dict(scoped_items(text, r"^### (HP-REQ-\d{3})$", {
+        "Requirements": "mandatory",
+        "Consumer-owned optional requirements": "consumer-owned",
+        "Deferred external-execution requirements": "deferred",
+    }))
     reqs = {}
     for m in re.finditer(r"^### (HP-REQ-\d{3})\n(.*?)(?=^### |^## |\Z)", text, re.S | re.M):
         owner = re.search(r"Implementation owner:(.*)", m.group(2))
         reqs[m.group(1)] = {
-            "active": m.start() < deferred_at,
+            "active": scopes[m.group(1)] == "mandatory",
+            "scope": scopes[m.group(1)],
             "owners": set(re.findall(r"TASK-\d{3}", owner.group(1))) if owner else set(),
         }
     return reqs
+
+
+def parse_cases():
+    return dict(scoped_items(read("verification.md"), r"^\| ([VE]\d{2}) \|", {
+        "Mandatory failure matrix": "mandatory",
+        "Additional active managed cases": "mandatory",
+        "Consumer-owned optional cases": "consumer-owned",
+        "External execution and continuation matrix": "deferred",
+    }))
 
 
 def parse_roadmap():
@@ -184,15 +216,24 @@ def check_dag(tasks):
                     todo.append(c)
         return out
 
-    # The roadmap prose declares which tasks require real-UTM qualification and which tasks a
-    # missing UTM environment blocks. Optional early observations are not qualification gates.
+    # Historical qualification is preserved without reopening it when a VM is unavailable.
+    # Only current live gates and their actual successors depend on new VM observations.
     prose = read("roadmap.md")
-    ev = re.search(r"Mandatory real UTM qualification is collected in (.*?)\.", prose)
-    bl = re.search(r"A missing UTM environment therefore blocks (.*?) only\.", prose)
+    hi = re.search(r"Historical real-UTM qualification tasks: (.*?)\.", prose)
+    ev = re.search(r"Current real-VM acceptance tasks: (.*?)\.", prose)
+    bl = re.search(r"Current real-VM prerequisite closure: (.*?)\.", prose)
+    historical = set(re.findall(r"TASK-\d{3}", hi.group(1))) if hi else set()
     evidence = set(re.findall(r"TASK-\d{3}", ev.group(1))) if ev else set()
     declared_blocked = set(re.findall(r"TASK-\d{3}", bl.group(1))) if bl else set()
-    if not evidence or not declared_blocked:
-        errors.append("roadmap does not state the real-UTM evidence tasks and the blocked set")
+    if not historical or not evidence or not declared_blocked:
+        errors.append("roadmap must distinguish historical qualification, current live gates and their closure")
+    if historical & evidence:
+        errors.append("historical qualification cannot also be a current live gate")
+    for t in historical | evidence:
+        if t not in active:
+            errors.append(f"real-VM qualification names non-active {t}")
+        elif t in historical and tasks[t]["status"] != "Accepted":
+            errors.append(f"historical qualification {t} is not Accepted")
     blocked = set(evidence)
     for t in evidence:
         if t in children:
@@ -207,8 +248,10 @@ def check_dag(tasks):
     if sinks != ["TASK-028"]:
         errors.append(f"active sinks should be only TASK-028, found {sinks}")
     if blocked != declared_blocked:
-        errors.append(f"DAG closure of real-UTM tasks {sorted(blocked)} differs from the stated blocked set {sorted(declared_blocked)}")
+        errors.append(f"DAG closure of current real-VM tasks {sorted(blocked)} differs from the stated prerequisite closure {sorted(declared_blocked)}")
     return errors, {"sinks": sinks, "utm_gated": sorted(blocked),
+                    "historical_utm_qualification": sorted(historical),
+                    "current_live_vm_gates": sorted(evidence),
                     "longest_chain": max(depth(t) for t in active)}
 
 
@@ -217,18 +260,28 @@ def check_traceability(reqs, tasks, coverage):
     text = read("traceability.md")
     rows = {}
     for m in re.finditer(r"^\| (HP-REQ-\d{3}) \| ([^|]+)\| ([^|]+)\| ([^|]+)\|$", text, re.M):
-        rows[m.group(1)] = (set(re.findall(r"TASK-\d{3}", m.group(2))), set(re.findall(r"V\d{2}", m.group(3))))
+        if m.group(1) in rows:
+            errors.append(f"{m.group(1)}: duplicate traceability row")
+        rows[m.group(1)] = (set(re.findall(r"TASK-\d{3}", m.group(2))), set(re.findall(r"[VE]\d{2}", m.group(3))))
     active_reqs = {r for r, v in reqs.items() if v["active"]}
     if set(rows) != active_reqs:
         errors.append(f"traceability rows differ from active requirements: "
                       f"missing {sorted(active_reqs - set(rows))}, extra {sorted(set(rows) - active_reqs)}")
-    vtext = read("verification.md")
-    vcases = set(re.findall(r"^\| (V\d{2}) \|", vtext, re.M))
-    ecases = set(re.findall(r"^\| (E\d{2}) \|", vtext, re.M))
+    cases = parse_cases()
+    vcases = {c for c, scope in cases.items() if scope == "mandatory"}
+    optional_cases = {c for c, scope in cases.items() if scope == "consumer-owned"}
+    ecases = {c for c, scope in cases.items() if scope == "deferred"}
     referenced = set().union(*(c for _, c in rows.values())) if rows else set()
     if referenced != vcases:
         errors.append(f"case references differ: unreferenced {sorted(vcases - referenced)}, unknown {sorted(referenced - vcases)}")
-    for req, (row_tasks, _) in rows.items():
+    for req, (row_tasks, row_cases) in rows.items():
+        if req not in reqs:
+            errors.append(f"{req}: unknown traced requirement")
+            continue
+        if reqs[req]["active"] and not reqs[req]["owners"]:
+            errors.append(f"{req}: mandatory requirement has no implementation owner")
+        if reqs[req]["active"] and not row_cases:
+            errors.append(f"{req}: mandatory requirement has no verifying case")
         if not reqs[req]["owners"] <= row_tasks:
             errors.append(f"{req}: owners {sorted(reqs[req]['owners'])} not all in traceability {sorted(row_tasks)}")
         for t in row_tasks:
@@ -239,16 +292,18 @@ def check_traceability(reqs, tasks, coverage):
     for t, reqset in coverage.items():
         if t in tasks and tasks[t]["active"]:
             for r in reqset:
+                if r not in reqs:
+                    errors.append(f"{t} covers unknown {r}")
                 if r in rows and t not in rows[r][0]:
                     errors.append(f"{t} covers {r} but traceability row omits {t}")
                 if r in reqs and not reqs[r]["active"]:
-                    errors.append(f"active {t} covers deferred {r}")
+                    errors.append(f"active {t} covers {reqs[r]['scope']} {r}")
     for r, v in reqs.items():
         if not v["active"]:
             for t in v["owners"]:
                 if t in tasks and tasks[t]["active"]:
-                    errors.append(f"deferred {r} owned by active {t}")
-    return errors, vcases, ecases
+                    errors.append(f"{v['scope']} {r} owned by active {t}")
+    return errors, vcases, ecases, optional_cases
 
 
 def check_titles(tasks, titles):
@@ -309,22 +364,23 @@ def check_stated_counts(counts, link_count):
         ("roadmap.md", r"Totals: (\w+) epics \((\w+) active, (\w+) deferred\); (\w+) tasks \((\w+) active, (\w+) deferred\)",
          (c["epics"]["total"], c["epics"]["active"], c["epics"]["deferred"],
           c["tasks"]["total"], c["tasks"]["active"], c["tasks"]["deferred"])),
-        ("package-validation.md", r"\| Requirements \| (\d+) \| (\d+) \| (\d+) \|",
-         (c["requirements"]["total"], c["requirements"]["active"], c["requirements"]["deferred"])),
-        ("package-validation.md", r"\| Epics \| (\d+) \| (\d+) \| (\d+) \|",
+        ("package-validation.md", r"\| Requirements \| (\d+) \| (\d+) \| (\d+) \| (\d+) \|",
+         (c["requirements"]["total"], c["requirements"]["active"],
+          c["requirements"]["consumer_owned"], c["requirements"]["deferred"])),
+        ("package-validation.md", r"\| Epics \| (\d+) \| (\d+) \| 0 \| (\d+) \|",
          (c["epics"]["total"], c["epics"]["active"], c["epics"]["deferred"])),
-        ("package-validation.md", r"\| Tasks \| (\d+) \| (\d+) \| (\d+) \|",
+        ("package-validation.md", r"\| Tasks \| (\d+) \| (\d+) \| 0 \| (\d+) \|",
          (c["tasks"]["total"], c["tasks"]["active"], c["tasks"]["deferred"])),
-        ("package-validation.md", r"\| ADRs \| (\d+) \| (\d+) \| (\d+) \|",
+        ("package-validation.md", r"\| ADRs \| (\d+) \| (\d+) \| 0 \| (\d+) \|",
          (c["adrs"]["total"], c["adrs"]["active"], c["adrs"]["deferred"])),
-        ("package-validation.md", r"\| Verification cases \| (\d+) \| (\d+) \(V01–V(\d+)\) \| (\d+) \(E01–E(\d+)\) \|",
+        ("package-validation.md", r"\| Verification cases \| (\d+) \| (\d+) \| (\d+) \| (\d+) \|",
          (c["verification_cases"]["total"], c["verification_cases"]["active_managed"],
-          c["verification_cases"]["active_managed"], c["verification_cases"]["deferred_external"],
-          c["verification_cases"]["deferred_external"])),
+          c["verification_cases"]["consumer_owned"], c["verification_cases"]["deferred_external"])),
         ("package-validation.md", r"holds (\d+) Markdown documents, (\d+) JSON design templates",
          (c["markdown_documents"], c["json_templates"])),
         ("package-validation.md", r"Relative links and anchors \((\d+) links", (link_count,)),
-        ("verification.md", r"V01 through V(\d+) are the active managed matrix", (c["verification_cases"]["active_managed"],)),
+        ("verification.md", r"Mandatory managed cases: (\d+)", (c["verification_cases"]["active_managed"],)),
+        ("verification.md", r"Consumer-owned optional cases: (\d+)", (c["verification_cases"]["consumer_owned"],)),
     ]
     errors = []
     for rel, pattern, expected in expectations:
@@ -389,7 +445,7 @@ def main():
     guards = []
     if len(reqs) < 1 or len(tasks) < 1 or len(coverage) < 1:
         guards.append("requirements, roadmap tasks or epic task sections were not parsed")
-    trace_errors, vcases, ecases = check_traceability(reqs, tasks, coverage)
+    trace_errors, vcases, ecases, optional_cases = check_traceability(reqs, tasks, coverage)
     if len(vcases) < 1:
         guards.append("no V-cases were parsed from verification.md")
     if not re.search(r"^\| HP-REQ-\d{3} \|", read("traceability.md"), re.M):
@@ -405,14 +461,16 @@ def main():
 
     counts = {
         "requirements": {"total": len(reqs), "active": sum(v["active"] for v in reqs.values()),
-                         "deferred": sum(not v["active"] for v in reqs.values())},
+                         "consumer_owned": sum(v["scope"] == "consumer-owned" for v in reqs.values()),
+                         "deferred": sum(v["scope"] == "deferred" for v in reqs.values())},
         "epics": {"total": len(epics), "active": sum(s == "Active" for _, s in epics),
                   "deferred": sum(s == "Deferred" for _, s in epics)},
         "tasks": {"total": len(tasks), "active": sum(v["active"] for v in tasks.values()),
                   "deferred": sum(not v["active"] for v in tasks.values())},
         "adrs": {"total": len([f for f in files if re.match(r"architecture-decision-records/\d{4}-", f)]),
                  "deferred": 2},
-        "verification_cases": {"total": len(vcases) + len(ecases), "active_managed": len(vcases),
+        "verification_cases": {"total": len(vcases) + len(optional_cases) + len(ecases),
+                               "active_managed": len(vcases), "consumer_owned": len(optional_cases),
                                "deferred_external": len(ecases)},
         "markdown_documents": len(md),
         "json_templates": len(json_templates),
@@ -450,7 +508,7 @@ def main():
         manifest = {
             "package": "Haepari v0.1.0 managed-first design with advisory locks and Aquarium adoption handoff",
             "design_revision": REVISION,
-            "revision_date": "2026-09-28",
+            "revision_date": REVISION_DATE,
             "status": "implementation in progress; no product acceptance or release claimed",
             "counts": {"package_files_excluding_manifest": len(entries), **{
                 k: v for k, v in counts.items() if k != "relative_links_checked"}},

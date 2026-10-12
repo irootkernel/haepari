@@ -82,7 +82,9 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 
 ### Project-Specific Operating Rules
 
-- Haepari has no runtime dependency on Aquarium or its tools. Managed local and UTM macOS execution is the active v0.1.0 scope; public external leases and linked segments remain deferred.
+- Haepari has no runtime dependency on Aquarium or its tools. General automatic/manual local and already-running single-VM UTM macOS tests on one machine and one user are the active v0.1.0 scope; public external leases and linked segments remain deferred.
+- Follow [ADR-0020](docs/architecture-decision-records/0020-local-development-scope.md) and the operating development scope. Reuse authorization for normal offline Jobs, wait/reconnect, cancellation and owned cleanup across candidate changes; record exact identities automatically instead of asking for per-Job approval or creating approval files. Registration alone does not authorize arbitrary workloads.
+- Product-specific skill/migration scenarios and VM power/reboot/logout/DHCP-expiry/multi-day/multi-VM experiments are optional; DF-001–004 do not block first release. Preserve runtime identity, deduplication, ownership and safe-cleanup guards. Use isolated local/fake-native fault tests and the small running-VM core release loop; the full `make test-utm` campaign is optional.
 - Follow the roadmap's actual task prerequisites and freeze gates. Do not mark a task accepted from compilation, mocks, a command exit code, or an unobserved manual check.
 - For TASK-001, confirm the module path, license, AGENTS.md, and Make targets with Master before the first implementation commit, as required by `docs/handoffs/implementation-prompt.md`.
 - `docs/examples/` contains illustrative design fixtures, not ready-to-run production configuration.

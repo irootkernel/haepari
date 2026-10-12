@@ -98,6 +98,8 @@ proposed again as a completion condition.
 
 Master revised TASK-039 on 2026-10-12 to the repository-owned small native
 caller e2e instead of external real-project selection or application. Its
-[observation and limits](TASK-039-small-e2e.md) are separate from this VM campaign. DF-001–003 release obligations and
-DF-004 two-VM concurrency remain unchanged. VM power scenario qualification is
+[observation and limits](TASK-039-small-e2e.md) are separate from this VM campaign. Design Revision 3.5 supersedes the former DF-001–003 release obligations;
+DF-001–004 retain their uncertainty as optional hardening with no v0.1.0 deadline
+([ADR-0020](../architecture-decision-records/0020-local-development-scope.md)).
+The recorded campaign observations and acceptance are unchanged. VM power scenario qualification is
 excluded from this Epic and must not be proposed again as its completion gate.

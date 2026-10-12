@@ -2,6 +2,8 @@
 
 Status: TEMPLATE. Replace all bracketed fields with observed values or explicit gaps. Send this as a producer-to-Aquarium Handoff under the authorized rollout request; do not edit the sender-owned original request or the managed Vault.
 
+Design Revision 3.5 boundary: the broader product skill/installation/migration policies below are consumer-owned rollout guidance, not Haepari v0.1.0 producer prerequisites. Haepari supplies generic automatic/manual execution and evidence; each consumer decides its native recipe acceptance. This copy changes no external repository or rollout authority.
+
 ## Correlation and ownership
 
 Original logical request: [key and request digest]. Native request Handoff: [actual reference and revision]. Producer: [resolved project identity and repository]. Producer work: [producer-owned epic/task IDs]. This response has its own native Handoff identity.
@@ -30,4 +32,4 @@ Changed paths, exact producer commits, tests performed, tests not performed, kno
 
 ## Mulgae native review evidence when applicable
 
-Report the installed `use-mulgae` tree, native review/recovery behavior, exact rerun lineage and composition according to Mulgae's own accepted scope. Ordinary-review Haepari lease identities are not required in v0.1.0. Review queuing on Haepari's advisory lock and any rate-limit safeguards are a separate Mulgae change (Haepari `docs/to-external.md` §2.1). They are not reported in this VM adoption packet. The managed VM installation, migration, regression, skill and cleanup packet remains mandatory.
+Report the installed `use-mulgae` tree, native review/recovery behavior, exact rerun lineage and composition according to Mulgae's own accepted scope. Ordinary-review Haepari lease identities are not required in v0.1.0. Review queuing on Haepari's advisory lock and any rate-limit safeguards are a separate Mulgae change (Haepari `docs/to-external.md` §2.1). They are not reported in this VM adoption packet. The managed VM installation, migration, regression, skill and cleanup packet is mandatory only for a consumer-selected Mulgae rollout under Mulgae's own policy. It is not a Haepari v0.1.0 producer prerequisite; use the [Haepari producer handoff](haepari-to-aquarium.md) for that boundary.

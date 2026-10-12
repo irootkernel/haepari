@@ -6,6 +6,8 @@ Identity, status, order and actual prerequisites belong to the [canonical roadma
 
 Canonical Outcomes: [owned runner and collection contract](../architecture-decision-records/0019-owned-runner-transport.md), [core VM operating observations](../records/TASK-038-operating-campaign.md), and [small caller e2e and TASK-017 handoff](../records/TASK-039-small-e2e.md). The [shared feedback dossier](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) remains for later active consumers.
 
+Current scope note: this Epic is Accepted. Its checked acceptance criteria and candidate-bound observations are historical. Design Revision 3.5 uses [ADR-0020](../architecture-decision-records/0020-local-development-scope.md) for ordinary development and release; it does not require another full campaign or DF-001–004 experiments.
+
 ## TASK-036
 
 ### Restore recoverable VM failure handling

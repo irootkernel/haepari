@@ -1,5 +1,5 @@
 {
-  "design_revision": "3.4",
+  "design_revision": "3.5",
   "validation_date": "2026-10-12",
   "scope": "documentation only",
   "generator": "docs/tools/validate_docs.py",
@@ -24,28 +24,23 @@
       "TASK-028"
     ],
     "utm_gated": [
-      "TASK-016",
-      "TASK-017",
-      "TASK-018",
-      "TASK-019",
-      "TASK-020",
-      "TASK-021",
-      "TASK-022",
-      "TASK-023",
-      "TASK-024",
-      "TASK-025",
-      "TASK-026",
       "TASK-027",
-      "TASK-028",
-      "TASK-038",
-      "TASK-039"
+      "TASK-028"
+    ],
+    "historical_utm_qualification": [
+      "TASK-016",
+      "TASK-038"
+    ],
+    "current_live_vm_gates": [
+      "TASK-027"
     ],
     "longest_chain": 25
   },
   "counts": {
     "requirements": {
       "total": 81,
-      "active": 64,
+      "active": 58,
+      "consumer_owned": 6,
       "deferred": 17
     },
     "epics": {
@@ -59,19 +54,20 @@
       "deferred": 4
     },
     "adrs": {
-      "total": 19,
+      "total": 20,
       "deferred": 2,
-      "active": 17
+      "active": 18
     },
     "verification_cases": {
       "total": 85,
-      "active_managed": 65,
+      "active_managed": 58,
+      "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 76,
-    "json_templates": 11,
+    "markdown_documents": 77,
+    "json_templates": 12,
     "producer_request_drafts": 9,
-    "relative_links_checked": 626
+    "relative_links_checked": 653
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",

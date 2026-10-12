@@ -1,4 +1,4 @@
-# Artifact, environment, and migration contract
+# Artifact and consumer environment contract
 
 ## Artifact identity
 
@@ -30,9 +30,17 @@ Purge deletes unprotected artifacts, logs, supplementary files, eligible sealed 
 
 Protected evidence can be re-collected or explicitly disposed of through a revision-bound resource recovery plan. Durable intent binds original results, protected paths, required outputs, native owner/root and independent collection/cleanup deadlines derived once from admitted budgets. Disposal lists evidence loss before apply and records `request:<permanent-mutation-key>` authority before deletion. Recollection records a separate `recovery-<key>` inventory before cleanup and rechecks it on restart. The complete revalidation pass consumes the original cleanup deadline, with one tracked durable reader owner; no file or restart receives a renewed allowance. A stopped expired attempt records failure without reading supplementary bytes or deleting protected source, then returns to quarantine for a new explicit recovery plan. A live old controller or worker blocks resumption; an expired or unproven collector preserves source bytes and quarantine. Completed recovery remains supplementary, never alters the original verdict, and requires separate observed resource-health recovery before dispatch or purge. Production selects separate local and UTM/SSH evidence backends. TASK-015 implements VM collection and revision-bound recovery, with bounded fake/native guest coverage; TASK-016 records the bounded real backend qualification and F2 decision.
 
+## Generic consumer environment reference
+
+Every Job retains the existing environment.profile_id and environment.profile_digest alongside sealed selected candidate/test files and provenance. Haepari records these identities without matching an installed VM profile or interpreting component compatibility. TASK-018 supplies a small consumer helper that hashes exact selected profile bytes; F3 freezes this integration convention and the general manual format, not a new public profile schema. The minimal [consumer profile example](../examples/profile-local.template.json) is illustrative consumer data and may be bundled as an ordinary selected file.
+
+Candidate files, test scripts, expected outputs and optional recipe metadata are opaque regular-file payloads. A binary-only or skill-only payload needs no artificial sibling daemon, skill declaration or installation inventory. Ordinary collection validates declared output paths/bytes and manual result completeness, not product-specific installation success. The richer environment-lock, skill and migration guidance below is optional consumer material, with no implemented Haepari decoder implied by its examples.
+
 ## Environment lock
 
-The consumer owns `haepari.environment-lock/v1` documents as reproducible test inputs. Haepari validates the envelope and seals bytes; the product-specific expected installation inventory belongs to the consumer. This is not an authoritative registry of what happens to be installed on the host.
+This section is optional consumer recipe guidance, outside Haepari F3 and v0.1.0 release acceptance under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).
+
+The consumer may use `haepari.environment-lock/v1` documents as reproducible test inputs. Haepari seals selected regular-file bytes without decoding this consumer format or checking component compatibility. The consumer owns format validation and the expected installation inventory; this is not an authoritative registry of what happens to be installed on the host.
 
 An environment lock records:
 
@@ -54,6 +62,8 @@ Haepari does not bind a profile to a VM. The VM resource definition holds the ma
 
 ## Installation units and skills
 
+This section is optional consumer recipe guidance, outside Haepari F3 and v0.1.0 release acceptance under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).
+
 Each component can identify a CLI binary, sibling daemon, application bundle, plugin package, paired skill trees, external skill/rules trees, and connection configuration. Only actual native components are declared. A product without an agent skill records not_applicable with its source evidence rather than inventing `use-<name>`.
 
 The exact binary version and skill source ref are separate fields. They normally move together when the native contract requires it, but an independently pinned skill remains independent. A skill-only candidate is an explicit override of the skill tree with the binary unchanged. A project candidate may replace its entire declared unit; it does not upgrade other products implicitly.
@@ -66,6 +76,8 @@ Install identity, discovery in a fresh product process/session, observed skill b
 
 ## Profile selection policy
 
+This section is optional consumer recipe guidance, outside Haepari F3 and v0.1.0 release acceptance under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).
+
 Normal project development uses the most recent explicitly accepted stable profile and overrides only the target project's declared candidate unit. The profile is pinned at admission. A changed integration can select a named next-release profile; it must not silently rewrite the stable profile.
 
 Aquarium's final VM gate uses its intended complete release combination, including exact tool binaries, paired skills, external global skills/rules, and effective configuration. Components that do not change remain pinned. Candidate integration and final release distribution are separate evidence classes; a digest change requires new affected evidence.
@@ -73,6 +85,8 @@ Aquarium's final VM gate uses its intended complete release combination, includi
 A latest-compatibility run is an explicit maintenance action: resolve supported releases, prepare a new immutable profile, verify it, and then select it as the future default. It never modifies already accepted job inputs. Old profiles required by supported migrations and retained reproductions remain available.
 
 ## Suite execution
+
+This section is optional consumer recipe guidance, outside Haepari F3 and v0.1.0 release acceptance under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).
 
 Each product owns its tests under a project path such as `tests/vm/`. The host-side Make target submits a bundle and waits; the guest entrypoint performs the actual product work. Common resource control stays in Haepari.
 
@@ -84,6 +98,8 @@ A regression scenario exercises supported behavior on an installed candidate. Ex
 
 ## Required migration assertions
 
+This section is optional consumer recipe guidance, outside Haepari F3 and v0.1.0 release acceptance under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).
+
 1. Preserve declared user data, IDs, associations, custom configuration, and referenced files.
 2. Read prior data and create/read new data after migration, then restart and repeat essential checks.
 3. Verify configuration defaults and renamed/removed fields without silently overwriting custom values.
@@ -94,11 +110,17 @@ A regression scenario exercises supported behavior on an installed candidate. Ex
 8. Reject unsupported source versions before destructive change, or test every advertised supported direct/stepped path.
 9. Distinguish product downgrade/rollback from test cleanup. Removing a test installation does not prove a product can downgrade its data.
 
-For v0.1.0 adoption, the immediately preceding accepted profile to candidate is mandatory. Wider upgrade paths are mandatory only when advertised by the product. A first-release product records that no predecessor exists; it must not fabricate a migration pass. Its installation and forward state-persistence tests still apply, and the first subsequent supported upgrade becomes a real migration case.
+A consumer requiring migration chooses its preceding accepted profile to candidate under its own release policy. Wider upgrade paths are mandatory only when advertised by that consumer product. A first-release consumer records that no predecessor exists; it must not fabricate a migration pass. Installation and forward state-persistence tests apply when selected by that consumer policy, and the first subsequent supported upgrade becomes a real migration case. Haepari separately retains its own required storage compatibility and packaged installation checks.
 
 ## Result inventories
 
-Record before and candidate installation inventories, and an after-cleanup inventory when the recipe cleans up. Each inventory references the profile and recipe digests and contains only non-sensitive identity fields. Collect needed logs to the host before deleting their guest paths. If required evidence remains recoverable but cannot be exported, stop owned processes as necessary, durably record the protected paths, owner, collection gaps and retention reason, and quarantine the VM; do not delete that evidence or assert it passed. A proven-terminated Job may settle INCOMPLETE with `cleanup_outcome=failed`/`evidence_retained` while the resource remains quarantined. Unproven workload or collector termination keeps occupancy in reconciliation. Recovery may re-collect or explicitly authorize disposal with the evidence loss identified in advance; purge and retention expiry cannot erase unresolved references. Supplementary recovery evidence never rewrites the immutable terminal verdict. See [evidence-preserving settlement](managed-transitions.md#evidence-preserving-settlement).
+This section is optional consumer recipe guidance, outside Haepari F3 and v0.1.0 release acceptance under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).
+
+Record before and candidate installation inventories, and an after-cleanup inventory when the recipe cleans up. Each inventory references the profile and recipe digests and contains only non-sensitive identity fields.
+
+## Required evidence retention and settlement
+
+The following rules apply to every managed Job under the existing F1/F2 contracts, independently of optional consumer inventories. Collect needed logs to the host before deleting their guest paths. If required evidence remains recoverable but cannot be exported, stop owned processes as necessary, durably record the protected paths, owner, collection gaps and retention reason, and quarantine the VM; do not delete that evidence or assert it passed. A proven-terminated Job may settle INCOMPLETE with `cleanup_outcome=failed`/`evidence_retained` while the resource remains quarantined. Unproven workload or collector termination keeps occupancy in reconciliation. Recovery may re-collect or explicitly authorize disposal with the evidence loss identified in advance; purge and retention expiry cannot erase unresolved references. Supplementary recovery evidence never rewrites the immutable terminal verdict. See [evidence-preserving settlement](managed-transitions.md#evidence-preserving-settlement).
 
 The queue's stored result includes workload outcome and cleanup status independently. A product can fail with a successful job cleanup; a product can appear to pass while the resource remains unusable. Only the latter resource's verified recovery permits another job.
 

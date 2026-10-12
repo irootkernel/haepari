@@ -1,6 +1,8 @@
 # ADR-0008: Use frozen installation combinations including skills
 
-Status: accepted for v0.1.0 design; implementation pending.
+Current scope note (2026-10-12): [ADR-0020](../architecture-decision-records/0020-local-development-scope.md) narrows current release obligations. Product-specific installation/skill/migration assertions and DF-001–004 live experiments are optional. The original design rationale below remains as consumer guidance; ADR-0020 supersedes its product-specific Haepari release obligations without changing F1/F2 runtime semantics.
+
+Status: originally accepted for v0.1.0 design. Product-specific release obligations are superseded by ADR-0020; implementation of this consumer guidance is optional.
 
 ## Context
 

@@ -1,5 +1,10 @@
 # Resource, UTM, and runner contract
 
+
+## Supported validation scope
+
+Design Revision 3.5 qualifies one machine, one user and an already-running registered persistent VM under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md). Existing power/reboot/session recovery semantics below remain implemented contracts with deterministic regression coverage; they do not require live power, identity-refusal, logout or lease-expiry experiments for ordinary development or first release. Internal UUID/MAC/SSH/boot/run and owned-root guards remain automatic. Scope narrowing changes no F1/F2 schema or runtime behavior; consumers must not infer that a live scope authorizes optional power effects.
+
 ## Resource definition
 
 `haepari.resource/v1` is operator-owned configuration. It names `id`, `kind` (`local`, `utm-macos` or `lock`), `execution_mode` (`managed`, for `local` and `utm-macos` only), positive capacity and configuration revision. A `lock` resource has no adapter or execution; the [lock contract](locks.md) defines it, and it counts toward no managed or global capacity. `local` and `utm-macos` require managed execution. Definitions include owned paths, pinned adapter identities and lifecycle budgets. A `utm-macos` definition names one persistent, operator-owned UTM VM ([ADR-0018](../architecture-decision-records/0018-persistent-vm-no-reset.md)): its UTM VM UUID, the MAC address used for address discovery, the pinned SSH host key and SSH mapping, the guest job root that Haepari owns, and `vm.allow_automatic_stop` (boolean, default `false`). This operator authorization permits capacity-driven forced stops only while the resource is otherwise eligible; absence of a Haepari Job does not establish that guest services or operator work are safe to interrupt. Two resources cannot name the same VM UUID or MAC address. A job's profile digest is consumer evidence that Haepari records; it is not matched against the VM, which keeps whatever earlier jobs left. A local job names an explicit local environment reference instead. Public external resources are deferred; reject them as unsupported in v0.1.0.
@@ -29,7 +34,7 @@ If preparation produced no owned Job effect requiring cleanup and left no protec
 
 UTM documents a CLI wrapper around AppleScript. Its examples for guest command and file access assume a QEMU Guest Agent, which a macOS guest on the Apple backend does not have. The Haepari protocol does not invent unavailable `utmctl` flags. See [S1 through S3](../sources.md).
 
-TASK-034 probed the installed UTM version, Apple backend, host OS and `utmctl` behaviour in a logged-in, unlocked session ([probe record](../records/TASK-034-utm-probe.md)). TASK-016 qualifies them, together with the guest OS and the behaviour when the screen is locked or the user is logged out. Missing ability to complete a safe job cycle blocks the backend. Do not silently switch to QEMU, a beta build, or a different VM manager.
+TASK-034 probed the installed UTM version, Apple backend, host OS and `utmctl` behaviour in a logged-in, unlocked session ([probe record](../records/TASK-034-utm-probe.md)). TASK-016 retains the bounded observed host/guest combination; screen-lock observations remain historical. Host logout and other session-disruption experiments are optional hardening, not first-release prerequisites. Missing ability to complete a safe job cycle blocks the backend. Do not silently switch to QEMU, a beta build, or a different VM manager.
 
 The v0.1.0 strategy is one persistent VM per resource, with no reset between jobs ([ADR-0018](../architecture-decision-records/0018-persistent-vm-no-reset.md)). The adapter must:
 

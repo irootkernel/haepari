@@ -2,6 +2,10 @@
 
 Target: v0.1.0. This document specifies the intended system. TASK-001 provides identity reporting and the private foreground controller bootstrap. TASK-033 implements the first local auto-Job path: sealed admission, capacity-one scheduling, execution, collection, settlement and blocking wait. TASK-008 connects durable cancellation admission, bounded local termination, protocol negotiation and reconnectable observers. TASK-009 adds the independent local per-run supervisor and schema 8 receipt import. TASK-010 adds durable common phase settlement, path-sensitive evidence and result timings. TASK-011 implements local restart recovery and isolated installed development-service supervision. TASK-012 adds bounded evidence delivery and schema 9 retention. TASK-015 integrates automatic development VM execution and recovery; manual Jobs and real backend qualification remain with their later owning tasks.
 
+## Local development profile
+
+Design Revision 3.5 supports one local macOS arm64 machine, one user and one already-running registered persistent VM. General automatic/manual execution is the product; installed-skill and migration assertions are optional consumer recipes. [ADR-0020](architecture-decision-records/0020-local-development-scope.md) narrows release evidence and F3 without changing frozen F1/F2 runtime semantics. The recommended mixed local/VM profile is global limit two and host guest limit one; defaults remain one. Ordinary authorized development scope is reused across Jobs while exact candidate/result identities are recorded automatically.
+
 ## System boundary
 
 ```text
@@ -158,13 +162,15 @@ An environment profile is a consumer-owned, frozen selection of components and e
 
 A `utm-macos` resource is one persistent, operator-owned UTM VM ([ADR-0018](architecture-decision-records/0018-persistent-vm-no-reset.md)). Haepari starts it when it is stopped, runs one job at a time, removes the job's own files afterwards and leaves the VM running. It never clones, restores, resets, deletes or edits the VM; what a workload changes elsewhere in the guest persists, and consumer recipes own their starting state and cleanup. The adapter controls UTM only through `utmctl`, as the [TASK-034 probe record](records/TASK-034-utm-probe.md) observed, and TASK-016 qualifies it against the installed backend. See [S1, S2, S3](sources.md).
 
-During a migration scenario, the product recipe first establishes the prior supported environment in the VM, removing leftovers from earlier jobs as it needs. It then creates prior-version state, applies the target installation unit and verifies preserved behavior. Haepari does not intervene between those actions. A whole-system release profile may override several tools together; the default product job overrides only its selected component unit.
+When a consumer selects an optional migration scenario, the product recipe first establishes the prior supported environment in the VM, removing leftovers from earlier jobs as it needs. It then creates prior-version state, applies the target installation unit and verifies preserved behavior. Haepari does not intervene between those actions. A whole-system release profile may override several tools together; the default product job overrides only its selected component unit.
 
 ## Skill and configuration boundary
 
+The following rich-profile guidance is optional consumer policy, outside Haepari F3 and first-release acceptance.
+
 A skill is an identified complete directory, not just SKILL.md. A consumer lock records upstream identity, full tree digest, expected target, selected home, and relevant effective configuration. Paired skills can share the binary release or have an independent source pin. Consumer recipes enforce the appropriate native rule.
 
-The queue does not become a global skill installer. It transports frozen payloads and invokes the consumer's guest installation/inspection recipes. The guest result includes before and candidate inventories. Those recipes verify declared global and project discovery locations, stale files, duplicate names, and connection identities, then open a fresh product session for installed-behavior observation. Hash equality alone is installation evidence, not behavior evidence. See [S7](sources.md) for the external skill-directory concept.
+The queue does not become a global skill installer. It transports frozen payloads and invokes the consumer's guest installation/inspection recipes. A consumer may declare before and candidate inventories as ordinary result files. Optional recipes verify declared global and project discovery locations, stale files, duplicate names, and connection identities, then open a fresh product session for installed-behavior observation. Hash equality alone is installation evidence, not behavior evidence. See [S7](sources.md) for the external skill-directory concept.
 
 ## Security and authority
 
@@ -180,7 +186,7 @@ Nothing Haepari does undoes messages, repository pushes, external databases, or 
 
 The CLI submits once and waits on a blocking event stream with a durable cursor. Reconnection observes the same job. `make test-vm` maps the final verdict to a nonzero/zero gate result; inspect commands return successfully even when reporting failure. It prints the job ID early enough for a caller to reconnect.
 
-Project-owned guest entrypoints never call `make test-vm` or re-enqueue themselves. The all suite is an ordinary host wrapper that submits distinct install and migration jobs in order using the same frozen candidate; there is no Haepari DAG language.
+Project-owned guest entrypoints never call `make test-vm` or re-enqueue themselves. The all suite is an ordinary host wrapper that submits only the consumer-declared suites in order using the same frozen candidate; there is no Haepari DAG language.
 
 Aquarium consumes a release/capability handoff and owns its rollout. The controller never reads Sorage's database or Vault. Sorage transports implementation requests and returned evidence between project owners; it does not schedule VM work.
 

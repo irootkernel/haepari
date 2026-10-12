@@ -1,10 +1,10 @@
-# EPIC-005: Project, skill, manual and migration integration
+# EPIC-005: Generic project and manual test integration
 
-Support project-owned VM suites and complete installation-unit evidence, then freeze the consumer integration contract (gate F3).
+Provide a small project-owned automatic/manual test loop and freeze the consumer integration contract (F3). Consumer-specific skill and migration qualification is optional under [ADR-0020](../architecture-decision-records/0020-local-development-scope.md).
 
 Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). These checklists define implementation acceptance only.
 
-TASK-017 consumes the accepted operational qualification and real-project pilot from [EPIC-009](EPIC-009.md). Its full Make/environment-lock/manual integration remains here; the earlier pilot supplies minimal CLI helpers and observations, not a substitute for these tasks. F3 therefore follows real usage.
+Consume the accepted EPIC-009 core VM and isolated caller outcomes without another campaign. Product implementation remains in these planned tasks; no new runtime capability is asserted by the scope revision.
 
 ## TASK-017
 
@@ -13,14 +13,14 @@ TASK-017 consumes the accepted operational qualification and real-project pilot 
 Requirement coverage: `HP-REQ-032`, `HP-REQ-033`, `HP-REQ-034`.
 
 #### Implement
-- [ ] Provide sample host submission wrappers and distinct guest entrypoints, immutable bundle packaging and separate install/migration/regression/all dispatch. Keep ordinary test targets independent.
+- [ ] Provide one small synthetic project’s host `make test-vm` wrapper, distinct guest entrypoint, sealed selected-file bundle and saved-key submit/wait/result reporting. Default the sample to regression; auto/manual is independent of suite. Optional all dispatch uses only consumer-declared suites.
 
 #### Do not
-- [ ] Do not create a mandatory integration-test repository, install products on the host, or enqueue recursively inside the guest.
+- [ ] Do not install candidates on the host, duplicate UTM control, require install/migration suites, create a mandatory integration repository or enqueue from the guest.
 
 #### Verify
-- [ ] Integrate two synthetic project fixtures against the frozen F1 contract, change source while queued, run with local resources and the fake UTM backend, and verify aggregate suite outcome/ID reporting. The real UTM run of these fixtures is part of TASK-027.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [ ] Exercise the sample with local resources and the fake/native guest fixture: success, meaningful failure, same-key replay, changed queued source, truthful aggregate results and host refusal of the guest entrypoint. Implement the lightweight running-VM path for TASK-027 with read-only running/session/SSH preflight and actionable prerequisite failures, without power controls or automatic environment repair; no live campaign is required to complete this task.
+- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
 - [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
@@ -30,19 +30,19 @@ Requirement coverage: `HP-REQ-032`, `HP-REQ-033`, `HP-REQ-034`.
 
 ## TASK-018
 
-### Implement environment locks and installation inventories
+### Implement generic candidate and environment input helpers
 
-Requirement coverage: `HP-REQ-035`, `HP-REQ-036`, `HP-REQ-037`, `HP-REQ-038`.
+Requirement coverage: `HP-REQ-035`, `HP-REQ-036`.
 
 #### Implement
-- [ ] Validate and transport frozen consumer profiles and before and candidate inventory evidence. Add fixture installers for complete skill trees, independent binary/skill refs and declared home scopes.
+- [ ] Reuse selected-file digest/spec helpers. Pin candidate/test bytes and consumer profile bytes into the existing Job profile_id/profile_digest and provenance fields. Treat files as opaque payloads; provide a minimal runnable profile example without mandatory component, skill or installation inventories.
 
 #### Do not
-- [ ] Do not resolve latest at execution, invent a global compatibility registry, vendor real third-party skills, or assume all skills share a binary tag.
+- [ ] Do not add a global compatibility registry, inspect host installation trees, resolve latest at dispatch, require product-specific versions/discovery, or change F1/F2 schemas.
 
 #### Verify
-- [ ] Test skill-only candidate, obsolete/extra/missing files, duplicate discovery roots, changed effective settings and resource revision changes.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [ ] Verify reproducible profile/payload digests, skill-only opaque input, executable modes, queued source changes, missing/corrupt selected files and original-admission replay after resource updates using local/fake fixtures.
+- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
 - [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
@@ -52,21 +52,19 @@ Requirement coverage: `HP-REQ-035`, `HP-REQ-036`, `HP-REQ-037`, `HP-REQ-038`.
 
 ## TASK-019
 
-### Implement manual jobs and submitted installed-skill evidence
+### Implement general manual jobs and recorded observations
 
-Requirement coverage: `HP-REQ-039`, `HP-REQ-040`, `HP-REQ-041`.
-
-TASK-007 supplies the internal fenced `HoldManualCapacity` accounting transition and durable scenario/deadline event. This task integrates it with observed setup, runtime session discovery, human completion and abandonment; the existing accounting seam alone does not provide a public manual Job or accepted human result.
+Requirement coverage: `HP-REQ-040`, `HP-REQ-041`.
 
 #### Implement
-- [ ] Add awaiting_manual, revision-bound human results, exact retry semantics and long-lived resource ownership. Provide installed-session discovery/behavior scenario templates and use-haepari behavior cases.
+- [ ] Connect existing manual schema and capacity accounting to observed setup, awaiting_manual, revision-bound human completion, exact retry, collection/cleanup, cancellation and abandonment. Required scenarios and evidence references are consumer-declared; Haepari records pass/fail/unobserved without interpreting product behavior.
 
 #### Do not
-- [ ] Do not mark environment-ready as PASS, synthesize observations, add a default LLM evaluator, or authorize providers from tool availability.
+- [ ] Do not mark ready as PASS, synthesize observations, require installed-skill/session discovery or invoke model providers by default.
 
 #### Verify
-- [ ] Test unobserved checks, conflicting completion, caller exit, abandonment recovery, fresh-session identity and required manual-result omissions with local manual sessions and fake-backend guest fixtures. Real guest installed-skill and manual evidence is part of TASK-027.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [ ] Use small local manual sessions and fake/native guest fixtures to verify exact/conflicting completion, unobserved required checks, caller exit, timeout/cancel, cleanup and successor reuse. TASK-027 observes one ordinary manual scenario on the running VM without a provider.
+- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
 - [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
@@ -76,20 +74,19 @@ TASK-007 supplies the internal fenced `HoldManualCapacity` accounting transition
 
 ## TASK-020
 
-### Add migration and recovery recipe examples; freeze the consumer integration contract
+### Validate the generic consumer loop; freeze the integration contract
 
-Requirement coverage: `HP-REQ-042`, `HP-REQ-043`, `HP-REQ-044`, `HP-REQ-062` (freeze gate F3).
+Requirement coverage: `HP-REQ-062` (freeze gate F3).
 
 #### Implement
-- [ ] Create an old-version synthetic product with data/config/skills and an upgrade candidate. Exercise old-state creation, in-place upgrade, preserved invariants, post-upgrade writes, restart, interruption and supported busy-work policy.
-- [ ] Freeze gate F3: freeze the project Make and guest entrypoint conventions, `haepari.environment-lock/v1`, installation inventories, the manual result format and migration evidence fields, recording each change since TASK-002 and its evidence.
+- [ ] Combine the small automatic/manual project flow and freeze F3: host wrapper, separate guest entrypoint, immutable consumer environment reference and general manual-result format. Record the accepted surface and evidence. Rich installation locks, skill inventories and migration schemas remain optional consumer design, outside F3.
 
 #### Do not
-- [ ] Do not reset state between old-state creation and upgrade assertions or present test cleanup as product downgrade.
+- [ ] Do not make prior-product installation, migration interruption, installed-skill behavior or external-project adoption prerequisites of this freeze.
 
 #### Verify
-- [ ] Run a genuine old-state migration of the synthetic product through the VM job contract on the fake backend, include failed/interrupted upgrade and a first-release not-applicable case, and validate source/target evidence. The real UTM migration run is part of TASK-027.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [ ] Run the small combined local/fake-guest flow through success, meaningful failure, manual completion, saved-key recovery and next-job readiness. TASK-027 checks its running-VM release path; do not repeat accepted TASK-038 qualification.
+- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
 - [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.

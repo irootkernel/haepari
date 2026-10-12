@@ -1,6 +1,6 @@
 # Active requirement traceability
 
-Design Revision 3.4. This table is bidirectional: search by requirement, implementation Task, or V-case. Cases are planned, not executed. A consumer-owned evidence class means Haepari checks declared result completeness and provides a sample recipe; the consumer owns product assertions. The detailed case assertions live in [verification](verification.md).
+Design Revision 3.5. This table is bidirectional: search by requirement, implementation Task, or V-case. Cases are planned, not executed. The mandatory table excludes consumer-owned optional requirements/cases; Haepari still checks generic declared-output and manual-result completeness. The detailed case assertions live in [verification](verification.md).
 
 | Requirement | Implementation Task | Verifying cases | Evidence class |
 | --- | --- | --- | --- |
@@ -34,20 +34,14 @@ Design Revision 3.4. This table is bidirectional: search by requirement, impleme
 | HP-REQ-028 | TASK-014, TASK-036, TASK-038 | V17 | real UTM + fixture |
 | HP-REQ-029 | TASK-015, TASK-036, TASK-038 | V19,V20,V21,V49,V51,V53,V58 | real UTM + fixture |
 | HP-REQ-030 | TASK-015, TASK-036, TASK-038 | V07,V17 | real UTM + fixture |
-| HP-REQ-031 | TASK-016, TASK-038 | V15,V17,V21,V47,V65 | real UTM + fixture |
-| HP-REQ-032 | TASK-017, TASK-039 | V25,V36 | real UTM + fixture |
-| HP-REQ-033 | TASK-017 | V29,V36 | real UTM + fixture |
+| HP-REQ-031 | TASK-016, TASK-038, TASK-027 | V08,V14,V15,V17,V18,V21,V47,V65 | historical real UTM + local/fake invariants + small release loop |
+| HP-REQ-032 | TASK-017, TASK-039 | V36,V37 | fixture/unit + local integration |
+| HP-REQ-033 | TASK-017 | V36,V37 | fixture/unit + local integration |
 | HP-REQ-034 | TASK-017, TASK-039 | V36 | fixture/unit + local integration |
 | HP-REQ-035 | TASK-018, TASK-039 | V35,V54 | fixture + local integration |
-| HP-REQ-036 | TASK-018 | V25,V28 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-037 | TASK-018 | V25,V26 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-038 | TASK-018 | V26,V28 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-039 | TASK-019 | V25,V27 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-040 | TASK-019 | V23,V24 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-041 | TASK-019 | V23,V34 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-042 | TASK-020 | V29 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-043 | TASK-020 | V29,V31 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-044 | TASK-020 | V30 | consumer-owned recipe/observations + Haepari completeness fixture |
+| HP-REQ-036 | TASK-018 | V06,V07,V52 | opaque selected-payload fixture |
+| HP-REQ-040 | TASK-019 | V23,V24 | generic payload/manual completeness fixture |
+| HP-REQ-041 | TASK-019 | V23,V34 | generic payload/manual completeness fixture |
 | HP-REQ-045 | TASK-021 | V01,V02,V10,V11,V21,V38,V39 | fixture/unit + local integration |
 | HP-REQ-046 | TASK-021 | V14 | fixture/unit + local integration |
 | HP-REQ-047 | TASK-022 | V07,V17,V48 | fixture/unit + local integration |
@@ -57,11 +51,11 @@ Design Revision 3.4. This table is bidirectional: search by requirement, impleme
 | HP-REQ-051 | TASK-023, TASK-037, TASK-038 | V32,V42 | fixture/unit + local integration |
 | HP-REQ-052 | TASK-024 | V33 | isolated storage fixture |
 | HP-REQ-053 | TASK-024 | V32 | isolated storage fixture |
-| HP-REQ-054 | TASK-025 | V27,V37 | installed release/skill observation |
-| HP-REQ-055 | TASK-025 | V37,V55 | installed release/skill observation |
+| HP-REQ-054 | TASK-025 | V37,V57 | installed package/CLI flow observation |
+| HP-REQ-055 | TASK-025 | V37,V55 | installed package/CLI flow observation |
 | HP-REQ-056 | TASK-026 | V18,V21,V42 | real UTM + fixture |
-| HP-REQ-057 | TASK-026 | V25,V29 | consumer-owned recipe/observations + Haepari completeness fixture |
-| HP-REQ-058 | TASK-027 | V25,V27,V31 | consumer-owned recipe/observations + Haepari completeness fixture |
+| HP-REQ-057 | TASK-026 | V36,V37 | generic payload/manual completeness fixture |
+| HP-REQ-058 | TASK-027 | V37,V47,V65 | exact installed release + running-VM core observation |
 | HP-REQ-059 | TASK-027, TASK-038, TASK-039 | V08,V09,V37 | real UTM + fixture |
 | HP-REQ-060 | TASK-028 | V08,V17,V21 | real UTM + fixture |
 | HP-REQ-061 | TASK-028 | V32,V57 | installed release observation + fixture |
@@ -74,6 +68,10 @@ Design Revision 3.4. This table is bidirectional: search by requirement, impleme
 TASK-033 implements the first slice of HP-REQ-007, 009, 010, 011, 012, 014, 015 and 016; the owning tasks harden the same path. TASK-034 contributes the UTM probe observations to HP-REQ-006 and HP-REQ-026. Freeze gates F1 (TASK-012), F2 (TASK-016) and F3 (TASK-020) complete HP-REQ-062.
 
 For requirements owned by TASK-013 through TASK-015 and TASK-017 through TASK-020, focused implementation checks use local resources or the fake UTM/SSH backend. TASK-016 retains historical backend qualification; TASK-038 adds corrected-candidate operational qualification, TASK-039 adds a small isolated native caller-e2e cycle under the 2026-10-12 scope revision, and TASK-027 qualifies the exact release. TASK-036–039 are corrective contributions, not replacements for the original owners. TASK-039 local observations do not claim the real-VM or full consumer integration coverage owned by TASK-038 and TASK-017–020. The [dossier campaign](TODO-VM-OPERATIONAL-READINESS.md#campaign-and-acceptance-matrix) extends the listed V-case assertions with task-specific scenarios without claiming them executed.
+
+## Consumer-owned optional traceability
+
+HP-REQ-037–039 and HP-REQ-042–044 retain their IDs and map to optional V25–V31. Integrating projects own their recipes and assertions; no active Haepari task implements them. They contribute zero to mandatory requirement/case acceptance. General manual completion remains HP-REQ-040–041/V23–V24; arbitrary file transport remains HP-REQ-036/V06,V07,V52.
 
 ## Deferred traceability
 
