@@ -1,0 +1,8 @@
+{
+  "suites": {
+    "regression": {
+      "argv": ["/bin/sh", "../tests/vm/run.sh"],
+      "required_outputs": ["results/out.txt"]
+    }
+  }
+}

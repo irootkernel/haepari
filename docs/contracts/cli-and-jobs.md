@@ -10,7 +10,7 @@ This contract describes managed Jobs. TASK-033 implements `resource register`, `
 | --- | --- |
 | `haepari version --json` | Report product version, source identity, and executable identity without starting a daemon. |
 | `haepari capabilities --json` | Report protocol versions and compiled/backend-qualified capabilities separately, including implemented `managed-execution/v1`, `durable-observation/v1`, `advisory-lock/v1` and `managed-recovery/v1`, `artifact-delivery/v1` and `evidence-retention/v1`. |
-| `haepari doctor --json` | Read-only configuration/service/prerequisite inspection; never boot or repair a VM. |
+| `haepari doctor --resource <id> --json` | Implemented read-only selected-resource prerequisites; never boot or repair a VM. |
 | `haepari daemon run [--global-limit <positive-int>] [--host-macos-guest-limit 1|2]` | Run the exclusive local controller in the foreground; both limits default to 1 and invalid values refuse before state creation. |
 | `haepari runner start/inspect/watch/cancel --request <absolute-request.json> [--json]` | Transient local supervisor protocol over an existing private, identity-bound request; no admission or capacity mutation. |
 | `haepari service plan --instance <id> --binary <absolute-path> --root <private-root> --json`; `install/uninstall --plan-file <json> --json` | Current isolated development lifecycle. Plan is read-only and pins executable bytes, root, instance, gui domain and Aqua plist. Optional `--global-limit <positive-int>` and `--host-macos-guest-limit 1|2` select a v2 plan with exact daemon argv; unchanged v1 plans retain default-one argv. Install/uninstall accept only the saved plan and cannot override its limits. Install/bootout are separate authorized effects; uninstall preserves state. Release service status/stop remain planned. |
@@ -155,11 +155,22 @@ An execution deadline can request cancellation/recovery of an abandoned manual s
 
 ## Consumer Make contract
 
-`make test-vm [SUITE=install|migration|regression|all] MODE=auto|manual` is the proposed convention delivered by TASK-017. The small reference project defaults to regression. Existing suite values remain compatible; installation/migration recipes are optional consumer choices, not Haepari-required scenarios. A project host wrapper assembles immutable inputs, checks the installed Haepari capability contract, submits, prints the job ID, waits, and returns the gate result. It does not run UTM commands itself.
+`make test-vm SUITE=<consumer-suite>|all MODE=auto|manual` is implemented in the [runnable reference project](../../examples/project-test/README.md). It defaults to regression. Installation/migration recipes are optional consumer choices. The host wrapper saves sealed selected files, the exact specs and request keys before submission, then records the returned Job IDs before waiting. Reconnect with the same private `RUN_DIR`, resource, suite and mode; original installation identity and spec hashes fence replay. No replacement Job is created after an uncertain reply. Manual spec construction is available; manual controller execution remains TASK-019 work.
+
+`doctor --resource <id> --json` emits `haepari.doctor/v1`: installation/resource identity, current resource projection when registered, UTC observation time, `ready` and actionable `gaps[]` (`code`, `message`). Readiness requires no diagnostic gap. VM gaps distinguish host platform, Aqua session, private pin/mapping, readable/individual unexpired DHCP lease, running UTM identity and guest SSH/boot/platform/MAC checks; messages contain no raw private path or SSH output. For UTM it observes an existing Aqua session, running registered UUID, an unexpired individual DHCP lease, pinned SSH mapping/key, fresh challenge, boot identity and Darwin arm64 guest with the registered MAC present. It transfers no runner or project files and writes no guest state. A valid diagnostic envelope has `ok=true`; a gap makes the CLI exit 2. Missing controller connection emits `PREREQUISITE_UNAVAILABLE`, and the wrapper retains its actionable explanation. It does not warn about queue budgets, alter availability, reserve capacity or prove cleanup. Admission and dispatch still enforce current fences.
+
+A failed post-probe resource re-read reports `resource_observation_unavailable`; it does not assert that the configuration changed. A confirmed revision/digest change reports `configuration_changed`.
 
 The VM executes a distinct entrypoint, conventionally `make test-vm-guest` or `tests/vm/run.sh`. It requires the job/lease context that the guest runner provides before executing the guest entrypoint. The host wrapper must not be copied into an execution path that recursively submits another job. Ordinary `make test` remains unchanged unless a separately adopted repository policy deliberately adds an external gate.
 
 `SUITE=all` is a serial host wrapper over only the consumer-declared suites as distinct Jobs, all bound to the same candidate/test bundle. It retains every job ID and reports skipped suites after a failure. Do not claim aggregate PASS unless every required suite and manual check completed.
+
+A wait-expired wrapper reports `PENDING`, while a non-verdict transport/storage observation failure reports `UNKNOWN` and preserves the CLI error exit. Neither is a terminal Job verdict or cancellation.
+
+The saved declared-suite list and unique Job/key/spec bindings must remain complete
+on reconnect. Empty, truncated or inconsistent records fail before dispatch or
+aggregate PASS; retain the original specs and keys for inspection rather than
+silently rebuilding a request.
 
 ## Deferred external request routing
 
@@ -182,7 +193,7 @@ Machine error codes and their exits are listed under [JSON envelopes and exit co
 
 ## Implemented artifact, retention and help surface (TASK-012)
 
-`haepari help --json` reads no controller and emits `haepari.help/v1` inside the ordinary envelope. It lists implemented commands and their flags, supported schemas, outcome/state enums, error/verdict exits, canonicalization, cursor behavior and current default bounds. `capabilities` and Unix hello share the same six implemented protocol capabilities; compiled command support remains distinct from backend qualification. Existing managed commands serve implemented local and automatic development VM Jobs; VM resource removal, manual, doctor and release commands remain planned.
+`haepari help --json` reads no controller and emits `haepari.help/v1` inside the ordinary envelope. It lists implemented commands and their flags, supported schemas, outcome/state enums, error/verdict exits, canonicalization, cursor behavior and current default bounds. `capabilities` and Unix hello share the same six implemented protocol capabilities; compiled command support remains distinct from backend qualification. Existing managed commands serve implemented local and automatic development VM Jobs; selected-resource doctor is implemented. VM resource removal, manual and release commands remain planned.
 
 `haepari export <job-id> --to <absolute-directory> [--json]` writes verified retained evidence to a fresh explicit destination. Its success receipt identifies Job, destination and file count. `haepari purge <job-id> --expected-revision <n> --json` returns `haepari.purge-receipt/v1` with original admission and `complete`; repeat the saved revision after an interrupted deletion. Inspect the current Job receipt before the first purge. No implicit overwrite, export location or expiry is selected. See [delivery and retention](artifact-and-profile.md#implemented-delivery-and-retention-task-012).
 

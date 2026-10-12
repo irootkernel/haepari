@@ -39,15 +39,16 @@ type runtimeServer struct {
 	workers      sync.WaitGroup
 	recoveryKey  [32]byte
 	// Serialize finished evidence reads/deletion and sealing through admission.
-	evidenceMu      sync.RWMutex
-	backendEvidence func(kind, id string) (evidenceBackend, error)
-	sshCommand      utm.SSHRunner
-	vmLeases        func() (io.ReadCloser, error)       // nil selects the native macOS DHCP database
-	vmWrite         func(*os.File, []byte) (int, error) // nil is the ordinary durable collector; tests inject ENOSPC
-	vmSyncParents   func(string, string) error          // nil syncs the publication chain; tests inject sync failure
-	vmHostLimit     int                                 // zero defaults to one; bounded at two
-	vmTransport     bool
-	utmCommand      utm.CommandRunner // nil in production; the argv boundary is injectable for fake UTM
+	evidenceMu        sync.RWMutex
+	backendEvidence   func(kind, id string) (evidenceBackend, error)
+	sshCommand        utm.SSHRunner
+	vmLeases          func() (io.ReadCloser, error)       // nil selects the native macOS DHCP database
+	doctorHostSession func(context.Context) error         // nil observes the current user's Aqua domain
+	vmWrite           func(*os.File, []byte) (int, error) // nil is the ordinary durable collector; tests inject ENOSPC
+	vmSyncParents     func(string, string) error          // nil syncs the publication chain; tests inject sync failure
+	vmHostLimit       int                                 // zero defaults to one; bounded at two
+	vmTransport       bool
+	utmCommand        utm.CommandRunner // nil in production; the argv boundary is injectable for fake UTM
 	// Test barrier after a replay miss, before observing readiness. Nil in production.
 	beforeAvailabilityObservation func()
 	beforeWaitRead                func() // nil in production; subscribe/read race barrier
@@ -166,6 +167,7 @@ func (s *runtimeServer) routes() http.Handler {
 	mux.HandleFunc("POST /v1/jobs/{id}/recover", s.jobRecovery)
 	mux.HandleFunc("POST /v1/resources/{id}/{action}", s.resourceAvailability)
 	mux.HandleFunc("GET /v1/resources/{id}", s.resourceInspect)
+	mux.HandleFunc("GET /v1/resources/{id}/doctor", s.resourceDoctor)
 	mux.HandleFunc("POST /v1/jobs", s.submit)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.inspect)
 	mux.HandleFunc("GET /v1/jobs/{id}/wait", s.wait)

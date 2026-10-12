@@ -174,7 +174,7 @@ func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease 
 	if recovery {
 		bootstrap = guestRecoveryBootstrap
 	}
-	args := []string{"-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + pin.Name(), "-o", "GlobalKnownHostsFile=/dev/null", "-o", "HostKeyAlias=" + HostAlias(spec.VM.UTMVMUUID), "-o", "HostKeyAlgorithms=ssh-ed25519", "-o", "UpdateHostKeys=no", "-o", "VerifyHostKeyDNS=no", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "IdentityAgent=none", "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no", "-o", "NumberOfPasswordPrompts=0", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", "-i", mapping.IdentityFile, "-p", strconv.Itoa(mapping.Port), "-l", mapping.User, "--", lease.Address.String(), bootstrap}
+	args := pinnedSSHArguments(mapping, pin.Name(), spec.VM.UTMVMUUID, lease.Address.String(), bootstrap)
 	data, err := json.Marshal(q)
 	if err != nil || len(data) > runner.GuestWireLimit {
 		return reply, ErrUnavailable
@@ -272,6 +272,10 @@ func (s SSH) exchangeWire(ctx context.Context, spec managed.ResourceSpec, lease 
 }
 
 var guestRecoveryBootstrap = strings.Replace(guestBootstrap, "runner guest --stdio", "runner guest-recovery --stdio", 1)
+
+func pinnedSSHArguments(mapping SSHMapping, pin, uuid, address, command string) []string {
+	return []string{"-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + pin, "-o", "GlobalKnownHostsFile=/dev/null", "-o", "HostKeyAlias=" + HostAlias(uuid), "-o", "HostKeyAlgorithms=ssh-ed25519", "-o", "UpdateHostKeys=no", "-o", "VerifyHostKeyDNS=no", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "IdentityAgent=none", "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no", "-o", "NumberOfPasswordPrompts=0", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", "-i", mapping.IdentityFile, "-p", strconv.Itoa(mapping.Port), "-l", mapping.User, "--", address, command}
+}
 
 func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Lease, q runner.GuestRequest) (runner.GuestReply, error) {
 	var reply runner.GuestReply

@@ -12,21 +12,23 @@ Consume the accepted EPIC-009 core VM and isolated caller outcomes without anoth
 
 Requirement coverage: `HP-REQ-032`, `HP-REQ-033`, `HP-REQ-034`.
 
+Implementation and observation boundary: [TASK-017 record](../records/TASK-017-project-integration.md).
+
 #### Implement
-- [ ] Provide one small synthetic project’s host `make test-vm` wrapper, distinct guest entrypoint, sealed selected-file bundle and saved-key submit/wait/result reporting. Default the sample to regression; auto/manual is independent of suite. Optional all dispatch uses only consumer-declared suites.
+- [x] Provide one small synthetic project’s host `make test-vm` wrapper, distinct guest entrypoint, sealed selected-file bundle and saved-key submit/wait/result reporting. Default the sample to regression; auto/manual is independent of suite. Optional all dispatch uses only consumer-declared suites.
 
 #### Do not
-- [ ] Do not install candidates on the host, duplicate UTM control, require install/migration suites, create a mandatory integration repository or enqueue from the guest.
+- [x] Do not install candidates on the host, duplicate UTM control, require install/migration suites, create a mandatory integration repository or enqueue from the guest.
 
 #### Verify
-- [ ] Exercise the sample with local resources and the fake/native guest fixture: success, meaningful failure, same-key replay, changed queued source, truthful aggregate results and host refusal of the guest entrypoint. Implement the lightweight running-VM path for TASK-027 with read-only running/session/SSH preflight and actionable prerequisite failures, without power controls or automatic environment repair; no live campaign is required to complete this task.
-- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
+- [x] Exercise the sample with local resources and the fake/native guest fixture: success, meaningful failure, same-key replay, changed queued source, truthful aggregate results and host refusal of the guest entrypoint. Implement the lightweight running-VM path for TASK-027 with read-only running/session/SSH preflight and actionable prerequisite failures, without power controls or automatic environment repair; no live campaign is required to complete this task.
+- [x] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-018
 

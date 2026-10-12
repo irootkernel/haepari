@@ -8,13 +8,13 @@ The supported default is the same user’s local machine and already-running reg
 
 VM power/reboot, host logout/network experiments, host installation, installed-service replacement, evidence disposal, providers and publication remain distinct effects. Routine validation does not initiate them. If the VM/session/SSH prerequisite is unavailable, report that precise gap and continue independent local development; do not run an environment experiment to manufacture readiness. Existing product power/recovery semantics remain unchanged and are not implicitly authorized by this scope.
 
-The planned TASK-017 lightweight `make test-vm` path performs the core loop on the already-running VM. Until delivered, use native public CLI commands under the same scope. The current `make test-utm` is optional full-campaign tooling and keeps its exact manifest/authority inputs. It is not required for every task or first release. DF-001–004 are optional hardening; no TASK-027 deadline remains. See [ADR-0020](architecture-decision-records/0020-local-development-scope.md).
+The runnable project-owned `make test-vm` target in `examples/project-test` uses the same public CLI scope and read-only selected-resource prerequisites for an already-running VM. The current `make test-utm` is optional full-campaign tooling and keeps its exact manifest/authority inputs. It is not required for every task or first release. DF-001–004 are optional hardening; no TASK-027 deadline remains. See [ADR-0020](architecture-decision-records/0020-local-development-scope.md).
 
 ## Provision the controller
 
-Install the verified Haepari release and its complete `use-haepari` tree through an explicit installation action. Select a private local state root. Run version/capabilities and read-only doctor. Start the daemon through the approved foreground or user-service path. Do not initialize by copying another user's state database.
+Install the verified Haepari release and its complete `use-haepari` tree through an explicit installation action. Select a private local state root. Run version/capabilities. Start the daemon through the approved foreground or user-service path. Do not initialize by copying another user's state database.
 
-Register a local command resource first and execute harmless deterministic work. Verify submit, wait, output collection, cancellation, and restart before registering a VM resource. The local resource runs commands on the host and is not a sandbox.
+Register a local command resource first, then run `haepari doctor --resource <registered-id> --json` against that running controller. A doctor report checks the selected registered resource; it is not a pre-installation or daemon-start step. Execute harmless deterministic work only within the approved scope. Verify submit, wait, output collection, cancellation, and restart before registering a VM resource. The local resource runs commands on the host and is not a sandbox.
 
 ## Current local controller recovery limit
 
@@ -64,7 +64,7 @@ A terminal INCOMPLETE Job with retained evidence leaves its VM quarantined. The 
 
 ## Run a project test
 
-The project-owned `make test-vm` wrapper is planned under TASK-017 and is not implemented yet. Until delivered, submit and wait through the native public CLI under the established development scope. The planned wrapper freezes candidate/test input, displays its identity, submits once, and prints the job ID. It waits on the same ID. Continue host development without installing that candidate into the stable host toolchain.
+The [runnable project-owned wrapper](../examples/project-test/README.md) freezes selected candidate/test/profile/scenario files, saves exact specs and keys before submission, and prints the private run directory and Job IDs. Select `HAEPARI` and `RESOURCE` explicitly. Reconnect using the same `RUN_DIR`, resource, suite and mode; it reuses saved keys and observes the original Jobs. Read-only `doctor --resource <id> --json` checks current prerequisites without power or repair. Continue host development without installing the candidate into the stable host toolchain. Manual controller execution remains TASK-019 work.
 
 To inspect a dropped session, use `inspect`, `events`, or `wait` on the original job. Do not submit a replacement merely because the caller lost its result. An explicit new run after a settled failure uses a new key and retains the link to the old result.
 
@@ -139,7 +139,7 @@ Running local jobs survive the restart and are reattached.
 
 **Changing resources.** Use `resource update`, `pause`, `resume` and `remove` with expected revisions.
 
-**Queue deadlines on a capacity-one VM resource.** Set `queue_seconds` to at least (jobs ahead + 1) × the maximum job duration. `haepari doctor` warns when a default queue deadline is too short.
+**Queue deadlines on a capacity-one VM resource.** Set `queue_seconds` to at least (jobs ahead + 1) × the maximum job duration. The project must choose that budget before admission; `haepari doctor` observes resource prerequisites and does not calculate queue budgets.
 
 Queue deadlines use persisted UTC instants; after sleep/wake/restart, queue expiry is evaluated before reservation. Running/manual deadlines request cancellation and reconciliation, never automatic release. Cleanup deadline leaves quarantine if cleanup is unproven. A CLI wait timeout does not change a Job. See the [transition table](contracts/managed-transitions.md).
 

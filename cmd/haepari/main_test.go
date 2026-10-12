@@ -7,8 +7,56 @@ import (
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	"os"
+	"path/filepath"
 	"strings"
 )
+
+var _ = ginkgo.Describe("Task017DoctorCLI", ginkgo.Label("unit"), func() {
+	ginkgo.It("validates usage and exposes missing-controller failure without creating state", func() {
+		t := ginkgo.GinkgoT()
+		parent, err := os.MkdirTemp("/tmp", "hp-doctor-")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer os.RemoveAll(parent)
+		root := filepath.Join(parent, "state")
+		t.Setenv("HAEPARI_HOME", root)
+		for _, args := range [][]string{
+			{"doctor"}, {"doctor", "--resource", "local-a"},
+			{"doctor", "--resource", "../unsafe", "--json"},
+			{"doctor", "--resource", "local-a", "--json", "extra"},
+		} {
+			var out, diag bytes.Buffer
+			gomega.Expect(run(args, &out, &diag)).To(gomega.Equal(2))
+			gomega.Expect(diag.String()).To(gomega.ContainSubstring("usage: haepari doctor"))
+		}
+		var out, diag bytes.Buffer
+		gomega.Expect(run([]string{"doctor", "--resource", "local-a", "--json"}, &out, &diag)).To(gomega.Equal(2))
+		gomega.Expect(diag.String()).To(gomega.BeEmpty())
+		var response client.Envelope
+		gomega.Expect(json.Unmarshal(out.Bytes(), &response)).To(gomega.Succeed())
+		gomega.Expect(response.Schema).To(gomega.Equal("haepari.envelope/v1"))
+		gomega.Expect(response.Operation).To(gomega.Equal("doctor"))
+		gomega.Expect(response.OK).To(gomega.BeFalse())
+		gomega.Expect(response.Error.Code).To(gomega.Equal("PREREQUISITE_UNAVAILABLE"))
+		gomega.Expect(response.Error.Message).To(gomega.ContainSubstring("HAEPARI_HOME"))
+		_, err = os.Stat(root)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+	})
+
+	ginkgo.It("advertises the implemented doctor command and diagnostic schema", func() {
+		var out, diag bytes.Buffer
+		gomega.Expect(run([]string{"help", "--json"}, &out, &diag)).To(gomega.Equal(0))
+		var response client.Envelope
+		gomega.Expect(json.Unmarshal(out.Bytes(), &response)).To(gomega.Succeed())
+		var help struct {
+			Commands []commandHelp `json:"commands"`
+			Schemas  []string      `json:"schemas"`
+		}
+		gomega.Expect(json.Unmarshal(response.Data, &help)).To(gomega.Succeed())
+		gomega.Expect(help.Commands).To(gomega.ContainElement(commandHelp{"doctor", "doctor --resource <id> --json"}))
+		gomega.Expect(help.Schemas).To(gomega.ContainElement("haepari.doctor/v1"))
+	})
+})
 
 var _ = ginkgo.Describe("VersionIdentity", ginkgo.Label("unit"), func() {
 	ginkgo.It("VersionIdentity", func() {

@@ -1,0 +1,67 @@
+# Small project caller
+
+This runnable reference project uses the public Haepari CLI. Its default suite
+checks a small candidate input. The host submits and observes; the managed runner
+executes `tests/vm/run.sh` in its sealed workspace. The wrapper performs no UTM
+power operation, host installation or environment repair.
+
+Select an explicitly authorized local or already-running registered VM resource
+and a compatible Haepari CLI:
+
+```sh
+make test
+make test-vm HAEPARI=/absolute/path/to/haepari RESOURCE=selected-resource
+```
+
+`make test` checks only this project's local source. It needs neither a controller
+nor a VM. `make test-vm-guest` refuses direct host execution without the managed
+runner's Job/lease context. The guest script uses macOS's built-in `plutil` to
+read that context and never submits another Job.
+
+The host prints the private run directory before submission and saves every
+request key and exact spec before using it. Reconnect with the printed directory:
+
+```sh
+make test-vm HAEPARI=/absolute/path/to/haepari RESOURCE=selected-resource \
+    RUN_DIR=/absolute/path/to/the/printed/run-directory
+```
+
+Keep the original resource, suite and mode. The saved installation ID prevents
+replay into a different controller installation. The bundle retains selected
+candidate/test/profile/scenario bytes even when the project's source changes.
+A lost reply or wait timeout keeps the same request key and Job; it never starts
+a replacement. A new run after a known failure requires a new run directory.
+Default `.haepari-runs/` directories remain for inspection and are ignored by the example's tracked `.gitignore`. Keep explicitly selected `RUN_DIR` destinations outside version control. A caller-created run directory must be owned by the current user with mode `0700`.
+The saved declared-suite list must match every saved Job entry. Empty, truncated
+or inconsistent run records are refused before another submission or aggregate
+PASS. Retain the original directory and inspect its keys and specs when refused.
+
+`project.json` declares the suites and their argv, outputs and optional non-secret
+environment. `SUITE=all` runs only those declared suites, serially, on the same
+frozen bundle and reports skipped suites after a non-passing result. The sample
+declares only `regression`; installation and migration recipes are not required.
+`MODE=auto|manual` is independent of the suite. Manual spec preparation is
+available here; end-to-end manual execution is delivered by TASK-019. Until then,
+the existing controller refuses manual admission rather than reporting PASS.
+
+`doctor --resource <id> --json` observes the selected installation and resource.
+For a VM it checks the Aqua domain, existing running identity, individual DHCP
+lease and pinned SSH access with a read-only guest probe. It transfers no runner
+and stages no Job files. A missing prerequisite returns an actionable gap and
+exit 2. This observation is not a lease or cleanup proof; normal admission,
+dispatch and recovery still enforce the resource's current fences.
+
+The wrapper reports Haepari's final verdict and native workload exit separately.
+PASS/FAIL/INCOMPLETE/CANCELLED use exits 0/1/3/4; wait expiry uses 5 and leaves the
+Job alive. A non-verdict observation error uses aggregate `UNKNOWN` and preserves
+its nonzero CLI exit; it never claims an INCOMPLETE terminal verdict. Outputs and logs remain available through normal `inspect`, `logs`
+and `export`. These are the Python wrapper's exits; Make reports a recipe failure
+with its own nonzero exit. This example's finite queue/prepare/run/collect/cleanup budgets are
+30/10/10/5/5 seconds; manual specs use 60 seconds instead of the run budget.
+Each caller wait is 15 seconds. A larger inspection budget must be chosen before
+admission, not silently extended while reconnecting.
+
+Profile bytes are consumer data, not an installation inventory. The example
+hashes its selected `profile.json` into the existing environment reference.
+Only declared files and environment are copied; no ambient credentials or host
+installation tree is collected.

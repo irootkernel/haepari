@@ -21,6 +21,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 	}
 	commands := []commandHelp{
 		{"help", "help --json"}, {"version", "version --json"}, {"capabilities", "capabilities --json"},
+		{"doctor", "doctor --resource <id> --json"},
 		{"daemon run", "daemon run [--backend local] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]"},
 		{"service plan", "service plan --instance <id> --binary <absolute-path> --root <private-root> [--global-limit <positive-integer>] [--host-macos-guest-limit 1|2] --json"},
 		{"service install", "service install --plan-file <json> --json"},
@@ -78,7 +79,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		Canonicalization string                    `json:"canonicalization"`
 	}{
 		Schema: "haepari.help/v1", Protocol: "managed-execution/v1", Commands: commands,
-		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1"},
+		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.doctor/v1"},
 		ErrorExits: errors, VerdictExits: map[managed.Verdict]int{managed.Pass: 0, managed.Fail: 1, managed.Incomplete: 3, managed.Cancelled: 4},
 		Enums: map[string][]string{
 			"job_state":             {"queued", "preparing", "ready", "running", "awaiting_manual", "cancelling", "collecting", "cleaning", "settling", "reconciling", "finished"},

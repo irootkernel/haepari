@@ -1,6 +1,6 @@
 # Single-VM operational campaign
 
-Design Revision 3.5: this is optional full-campaign tooling with its existing manifest/authority interface, not the ordinary development or first-release gate. Accepted TASK-038 observations remain historical. Use [ADR-0020](../../docs/architecture-decision-records/0020-local-development-scope.md) for the small supported running-VM loop and reusable development scope. TASK-017 owns the future lightweight `make test-vm` target; it is not implemented yet. DF-001–004 and product-specific skill/migration qualification are optional.
+Design Revision 3.5: this is optional full-campaign tooling with its existing manifest/authority interface, not the ordinary development or first-release gate. Accepted TASK-038 observations remain historical. Use [ADR-0020](../../docs/architecture-decision-records/0020-local-development-scope.md) for the small supported running-VM loop and reusable development scope. The runnable project-owned lightweight `make test-vm` target lives in `examples/project-test`; its local/fake-native checks belong to the ordinary gate. DF-001–004 and product-specific skill/migration qualification are optional.
 
 `utm_campaign.py` is the TASK-038 observation driver. It uses public Haepari
 commands against one existing registered UTM macOS VM and an exact installed

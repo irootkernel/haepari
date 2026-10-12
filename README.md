@@ -4,7 +4,7 @@ Haepari is an independent Go CLI and local controller for managed command jobs a
 
 ## Supported development scope
 
-The first release targets one macOS arm64 machine, one user and one already-running registered persistent UTM VM, with general automatic/manual tests. Haepari owns input transfer, execution, results and Job cleanup; product-specific skill and migration assertions are optional consumer recipes. Ordinary approved development work reuses its scope without per-Job approval files. Power/logout/network experiments and separate long campaigns are optional. See [the scope decision](docs/architecture-decision-records/0020-local-development-scope.md) and [operator guidance](docs/operations.md#ordinary-development-scope). Manual and lightweight project-wrapper delivery remain planned, not shipped claims.
+The first release targets one macOS arm64 machine, one user and one already-running registered persistent UTM VM, with general automatic/manual tests. Haepari owns input transfer, execution, results and Job cleanup; product-specific skill and migration assertions are optional consumer recipes. Ordinary approved development work reuses its scope without per-Job approval files. Power/logout/network experiments and separate long campaigns are optional. See [the scope decision](docs/architecture-decision-records/0020-local-development-scope.md) and [operator guidance](docs/operations.md#ordinary-development-scope). The [runnable project wrapper](examples/project-test/README.md) provides automatic local/fake-guest integration and read-only VM prerequisites; manual execution remains TASK-019 work.
 
 ## Build and check
 
@@ -18,7 +18,7 @@ make test
 
 `make test` is the serial prepare, unit, integration, and isolated local CLI E2E gate; `make check` is its alias. E2E automatically syncs the pinned pytest harness and may contact the Python package index on first use. Prepare formats Go source, so review any unrelated dirty Go files before running it. [TESTING.md](TESTING.md) documents every stage, the private E2E state root, and failure behavior.
 
-`make test-macos-supervision` is the separate macOS arm64 host probe for the bounded TASK-004 decisions recorded in [its evidence](docs/records/TASK-004-macos-supervision.md). `make test-utm` is the optional full single-VM campaign, requiring its reviewed manifest/authority inputs. TASK-017 will provide the lightweight `make test-vm` wrapper; it is not implemented yet. The common gate does not run either host/VM gate or install a host service.
+`make test-macos-supervision` is the separate macOS arm64 host probe for the bounded TASK-004 decisions recorded in [its evidence](docs/records/TASK-004-macos-supervision.md). `make test-utm` is the optional full single-VM campaign, requiring its reviewed manifest/authority inputs. Use the project-owned `make test-vm` target in [examples/project-test](examples/project-test/README.md) with an explicit CLI and resource. The common gate does not run either host/VM gate or install a host service.
 
 ## Isolated foreground controller
 

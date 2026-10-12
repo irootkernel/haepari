@@ -2,6 +2,30 @@
 
 This document owns small follow-up checks intentionally postponed from current work. Entries do not allocate roadmap tasks or change lifecycle status; [the roadmap](roadmap.md) remains the sole lifecycle authority.
 
+## DF-005: Shared diagnostic connection and lease-source policy
+
+- **Disposition:** Small independent maintenance follow-up under the EPIC-005 delegated candidate; no current correctness or release obligation is deferred.
+- **Owner:** Haepari maintainer, with TASK-017 owning the current selected-resource diagnostic behavior.
+- **Reason:** Doctor deliberately uses a finite connection deadline and an actionable JSON prerequisite envelope, while existing CLI commands retain their current connection/error policy. All still use the same native client transport. Native DHCP selection in doctor, VM dispatch and guest attestation currently uses the same injected source or read-only no-follow file open. These small repeated policy boundaries agree today; changing only one later can cause drift.
+- **Re-entry condition:** Before changing common CLI connection/context handling, the native DHCP path/open guards or shared Aqua/lean pinned-SSH diagnostic policy, consider one shared policy helper and qualify every caller. No new roadmap identity, loader policy, host effect or compatibility surface is adopted by this entry.
+- **Verification if selected:** Preserve direct doctor usage/error/gap exits and actionable envelopes, existing CLI context errors and timeout semantics, no-follow lease reads, dispatch/attestation identity guards and no-effect diagnostic observations. Run affected CLI, UTM and controller fixtures; no live VM campaign is implied.
+
+## DF-006: Diagnostic stage naming and residual coverage
+
+- **Disposition:** Independent future maintenance; current doctor behavior and required observations are not deferred.
+- **Owner:** Haepari maintainer.
+- **Reason:** UTM prerequisite stage strings and controller messages currently agree. Future renaming can degrade a specific diagnostic to the safe generic fallback. The unused invalid-spec and rare temporary-storage/fallback paths merit coordinated coverage when their producers change.
+- **Re-entry condition:** Before changing prerequisite stage producers, gap mappings or supported diagnostic paths, consider shared named constants and qualify every affected caller. Current status-read and lease-read failures have focused fixtures; source inspection does not claim execution of every generic fallback.
+- **Verification if selected:** Preserve unchanged dispatch errors, actionable bounded gap messages, no private diagnostic disclosure and read-only ledger/power behavior. Use isolated unit/controller fault fixtures.
+
+## DF-007: Reusing the trusted Make example
+
+- **Disposition:** Independent future template hardening outside the current same-user caller scope; no current acceptance or security obligation is deferred.
+- **Owner:** Haepari maintainer and any consumer adopting a broader invocation model.
+- **Reason:** The small Make recipe interpolates caller-owned variables into shell text. The same user already owns the shell and recipes; this is not a multi-user or untrusted-CI guarantee.
+- **Re-entry condition:** Before deriving Make variables from lower-trust or machine-supplied input, define the supported literal-value/escaping contract and consider passing values through exported environment variables. This entry adopts no CI service or new backend scope.
+- **Verification if selected:** Exercise unusual literal path/variable characters as data without unintended shell evaluation, preserving the public CLI flow and original keys. Continue selecting the documented explicit absolute CLI path.
+
 Master approved the original TASK-016 deferrals on 2026-10-05. On 2026-10-12, Design Revision 3.5 removed DF-001–003 from TASK-027 obligations and kept DF-004 optional under [ADR-0020](architecture-decision-records/0020-local-development-scope.md). All four are unobserved optional hardening, not passing evidence or v0.1.0 blockers. Their historical TASK-016 acceptance and uncertainty are unchanged.
 
 ## DF-001: Real DHCP lease-expiry rejection

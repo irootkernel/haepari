@@ -38,7 +38,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari help --json | version --json | capabilities --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel | export | purge")
+		fmt.Fprintln(stderr, "usage: haepari help --json | version --json | capabilities --json | doctor --resource <id> --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel | export | purge")
 		return 2
 	}
 	switch args[0] {
@@ -159,6 +159,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exportJob(args[1:], stdout, stderr)
 	case "purge":
 		return purgeJob(args[1:], stdout, stderr)
+	case "doctor":
+		return doctorCommand(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unsupported command %q\n", args[0])
 		return 2

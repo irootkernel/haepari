@@ -130,20 +130,35 @@ type IdentityVerifier func(context.Context, Lease, string, string) (GuestIdentit
 // the currently started VM, pinned key, registered MAC, boot and supplied nonce.
 // TASK-014 supplies the authenticated transport; no fallback discovery is used.
 func (c Control) ResolveGuest(ctx context.Context, reader io.Reader, uuid, mac, hostKey, nonce string, now func() time.Time, verify IdentityVerifier) (Lease, GuestIdentity, error) {
+	return c.resolveGuest(ctx, reader, uuid, mac, hostKey, nonce, now, verify, nil)
+}
+
+// check is used only by read-only prerequisite diagnostics. The ordinary
+// transport keeps the same observation order, error and identity fences.
+func (c Control) resolveGuest(ctx context.Context, reader io.Reader, uuid, mac, hostKey, nonce string, now func() time.Time, verify IdentityVerifier, check *string) (Lease, GuestIdentity, error) {
+	mark := func(value string) {
+		if check != nil {
+			*check = value
+		}
+	}
 	if now == nil || verify == nil || hostKey == "" || nonce == "" {
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
+	mark("vm_state")
 	state, err := c.Status(ctx, uuid)
 	if err != nil {
 		return Lease{}, GuestIdentity{}, err
 	}
 	if state != "started" {
+		mark("running_vm")
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
+	mark("dhcp_lease")
 	lease, err := ReadLease(reader, mac, now())
 	if err != nil {
 		return Lease{}, GuestIdentity{}, err
 	}
+	mark("guest_identity")
 	identity, err := verify(ctx, lease, strings.ToLower(uuid), nonce)
 	identityMAC, macErr := normalizeMAC(identity.MAC)
 	if err != nil || macErr != nil || !strings.EqualFold(identity.VMUUID, uuid) || identityMAC != lease.MAC ||
@@ -151,11 +166,17 @@ func (c Control) ResolveGuest(ctx context.Context, reader io.Reader, uuid, mac, 
 		identity.Nonce != nonce || identity.OS != "darwin" || identity.Arch != "arm64" || !lease.Expires.After(now()) {
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
+	mark("vm_state")
 	state, err = c.Status(ctx, uuid)
 	if err != nil {
 		return Lease{}, GuestIdentity{}, err
 	}
 	if state != "started" || !lease.Expires.After(now()) {
+		if state != "started" {
+			mark("running_vm")
+		} else {
+			mark("dhcp_lease")
+		}
 		return Lease{}, GuestIdentity{}, ErrUnavailable
 	}
 	return lease, identity, nil

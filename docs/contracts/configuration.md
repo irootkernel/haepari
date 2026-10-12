@@ -57,7 +57,7 @@ A queued job on a capacity-one resource waits for every job ahead of it.
 - **Rule:** set `queue_seconds` to at least (jobs ahead + 1) × the resource's maximum job duration. "Jobs ahead" includes the job currently running.
 - **Maximum job duration:** prepare + run + collect + cleanup for automatic jobs. For manual jobs use the manual deadline in place of the run budget; a manual job ahead can hold the resource far longer than the example below.
 - **Example:** the [VM job example](../examples/job-vm.template.json) uses 14,400 seconds. That leaves room for one automatic job ahead with a 95-minute maximum duration.
-- **Warning:** `haepari doctor` warns when a resource's default queue deadline is shorter than one maximum job duration.
+- **Budget responsibility:** The consumer chooses a queue deadline before admission. The implemented selected-resource `doctor` does not calculate queue budgets; configuration-aware warning policy remains TASK-023 work.
 
 ## Changes
 
@@ -100,4 +100,4 @@ produces `haepari.development-service-plan/v2`, binding both positive global and
 bounded host limits into the exact plist argv. A v1 plan keeps its original argv
 and refuses new fields, including null values. Install/uninstall reverify the
 saved plan; neither replaces a running service or changes limits by implication.
-The general configuration loader, doctor and operator policy remain TASK-023.
+The general configuration loader, configuration-aware diagnostic policy and operator policy remain TASK-023. TASK-017 implements the bounded selected-resource prerequisite doctor.
