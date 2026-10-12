@@ -164,8 +164,8 @@
     },
     {
       "path": "architecture-decision-records/README.md",
-      "bytes": 3571,
-      "sha256": "0685a3ac72ef37e813224d8c128ad0cf0a3837926caf7c852c38866add715a00"
+      "bytes": 3620,
+      "sha256": "62c8c160ec218b0b6b0f52a8176148b0069b8524c3a0a62d9afe6d282ba3cc7d"
     },
     {
       "path": "architecture.md",
@@ -214,8 +214,8 @@
     },
     {
       "path": "deferred-feedback.md",
-      "bytes": 7897,
-      "sha256": "52980345a737a408127518b79deddf2c3c340f7af40e826c96b075b81a4a5496"
+      "bytes": 8367,
+      "sha256": "d82e9520512467fa0485ded231647f24633b3b4019db4c86f33b6e10e2b653bf"
     },
     {
       "path": "examples/Makefile.example",
