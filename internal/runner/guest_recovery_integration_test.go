@@ -4,6 +4,8 @@ package runner
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -57,10 +59,15 @@ func retainedNativeGuestWithLogLimit(limit int64) (GuestRecoveryRequest, string)
 }
 
 func retainedNativeGuestWithProtocol(limit int64, schema string) (GuestRecoveryRequest, string) {
+	return retainedNativeGuestWithEnvironment(limit, schema, nil)
+}
+
+func retainedNativeGuestWithEnvironment(limit int64, schema string, environment []string) (GuestRecoveryRequest, string) {
 	guest, parent := guestFixture("printf once > count.txt; printf native-log")
 	guest.Schema = schema
 	guest.Request.LogLimitBytes = limit
 	guest.Request.Environment = append(guest.Request.Environment, "GORACE=atexit_sleep_ms=0")
+	guest.Request.Environment = append(guest.Request.Environment, environment...)
 	envelope, err := nativeGuestProtocol(guest, false, "")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	var prepared GuestReply
@@ -106,6 +113,43 @@ func retainedNativeGuestWithProtocol(limit int64, schema string) (GuestRecoveryR
 }
 
 var _ = ginkgo.Describe("GuestRecoveryNative", ginkgo.Label("integration"), func() {
+	ginkgo.It("collects bounded v2 attested file envelopes with large request metadata", func() {
+		q, parent := retainedNativeGuestWithEnvironment(0, "haepari.guest-request/v2", []string{"LARGE=" + strings.Repeat("e", 128<<10)})
+		defer os.RemoveAll(parent)
+		envelope, err := nativeGuestProtocol(q, true, "")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var attested GuestRecoveryReply
+		gomega.Expect(json.Unmarshal(envelope.Data, &attested)).To(gomega.Succeed())
+		q.Attestation, q.Operation, q.Guest.Path = attested.Attestation, "file", "large.bin"
+		payload := append(bytes.Repeat([]byte("bounded!"), 128<<10), []byte("tail")...)
+		gomega.Expect(os.WriteFile(filepath.Join(parent, q.Guest.Request.Identity.JobID, "workspace/large.bin"), payload, 0600)).To(gomega.Succeed())
+		var collected []byte
+		for q.Guest.Offset < int64(len(payload)) {
+			envelope, err := nativeGuestProtocol(q, true, "")
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			var wire bytes.Buffer
+			gomega.Expect(json.NewEncoder(&wire).Encode(envelope)).To(gomega.Succeed())
+			gomega.Expect(wire.Len()).To(gomega.BeNumerically("<=", 1<<20))
+			reply, err := DecodeGuestRecoveryReply(envelope.Data)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(reply.Attestation).To(gomega.Equal(q.Attestation))
+			gomega.Expect(reply.Basis).To(gomega.Equal(q.Basis))
+			gomega.Expect(reply.Guest.Output).NotTo(gomega.BeEmpty())
+			gomega.Expect(len(reply.Guest.Output)).To(gomega.BeNumerically("<=", 512<<10))
+			gomega.Expect(reply.Guest.NextOffset).To(gomega.Equal(q.Guest.Offset + int64(len(reply.Guest.Output))))
+			if q.Guest.Offset == 0 {
+				gomega.Expect(len(reply.Guest.Output)).To(gomega.BeNumerically("<", 512<<10))
+			} else {
+				gomega.Expect(reply.Guest.File).To(gomega.Equal(q.Guest.ExpectedFile))
+			}
+			collected = append(collected, reply.Guest.Output...)
+			q.Guest.ExpectedFile, q.Guest.Offset = reply.Guest.File, reply.Guest.NextOffset
+		}
+		gomega.Expect(collected).To(gomega.Equal(payload))
+		sum := sha256.Sum256(collected)
+		gomega.Expect(q.Guest.ExpectedFile.SHA256).To(gomega.Equal(hex.EncodeToString(sum[:])))
+	})
+
 	ginkgo.It("enforces original and historical default log bounds without an optional exit checksum", func() {
 		for _, limit := range []int64{8, 0} {
 			q, parent := retainedNativeGuestWithLogLimit(limit)

@@ -2,9 +2,9 @@
 
 Make ordinary managed VM work usable before expanding project, skill and manual integration. A recoverable failure must have a bounded route back to observation, settlement and reuse; unknown execution must retain its fences and occupancy.
 
-Identity, status, order and actual prerequisites belong to the [canonical roadmap](../roadmap.md). These unchecked criteria define planned work, not implementation or qualification.
+Identity, status, order and actual prerequisites belong to the [canonical roadmap](../roadmap.md). Checked criteria record acceptance of the owner-approved core scope; excluded experiments are not asserted passed.
 
-Detailed SOT: [VM operational readiness execution dossier](../TODO-VM-OPERATIONAL-READINESS.md).
+Canonical Outcomes: [owned runner and collection contract](../architecture-decision-records/0019-owned-runner-transport.md), [core VM operating observations](../records/TASK-038-operating-campaign.md), and [small caller e2e and TASK-017 handoff](../records/TASK-039-small-e2e.md). The [shared feedback dossier](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) remains for later active consumers.
 
 ## TASK-036
 
@@ -78,67 +78,67 @@ Why: one immediate readiness check does not cover a cold VM boot. Each guest exc
 
 Requirement coverage: HP-REQ-011, HP-REQ-018, HP-REQ-019, HP-REQ-020, HP-REQ-021, HP-REQ-022, HP-REQ-023, HP-REQ-024, HP-REQ-025, HP-REQ-026, HP-REQ-027, HP-REQ-028, HP-REQ-029, HP-REQ-030, HP-REQ-031, HP-REQ-050, HP-REQ-051, HP-REQ-059, HP-REQ-062.
 
-Why: TASK-016's bounded historical campaign does not qualify the later corrected HEAD, a cold start, large output or the two-VM/global-three profile. The tracked real-UTM entrypoint is still a stub.
+Why: TASK-016's bounded historical campaign does not qualify the later corrected candidate, large output or repeated failure/recovery on the existing VM. The tracked public-CLI observation driver is implemented; bounded installed-candidate Job observations are recorded in the [campaign record](../records/TASK-038-operating-campaign.md), under the accepted reduced core scope. Master revised this campaign on 2026-10-10 to reuse one registered VM; [DF-004](../deferred-feedback.md#df-004-two-vm-and-local-concurrency) owns later two-VM/global-three qualification outside this Epic's acceptance. Master removed VM power-on/off, cold-start, guest-reboot and power-intent scenario qualification on 2026-10-12; this task reuses the already-running VM. That removal is a scope decision, not a claim that those scenarios passed. The same-machine, same-user, owner-started VM scope also excludes separate adversarial identity-refusal experiments and transport/network benchmarking. Reproducibility means a tracked runnable core e2e command, not a second live VM campaign.
 
 #### Implement
 
-- [ ] Replace the real-UTM stub with a repository-owned public-CLI campaign and explicit preflight, selected-candidate, resource, authority and finite-budget inputs.
-- [ ] Execute the dossier campaign matrix on the exact installed development-service candidate and authorized registered resources; retain original keys/results after interruption.
-- [ ] Record per-phase and per-call times, transfer bytes/calls, output sizes, host runner storage, occupancy and post-cleanup reuse. Bind source/executable/runner identities.
+- [x] Replace the real-UTM stub with a repository-owned public-CLI campaign and explicit preflight, selected-candidate, resource, authority and finite-budget inputs.
+- [x] Execute the required dossier campaign matrix on the exact installed development-service candidate and one existing authorized registered VM at global limit one and host guest limit one; retain original keys/results after interruption.
+- [x] Record core Job outcomes, complete collected output/log evidence, verified cleanup and successor reuse with the selected executable/runner. Retain already-observed timing/transfer/storage data as supporting measurements; no separate network benchmark is required.
 
 #### Do not
 
-- [ ] Do not treat missing resources as a successful skip, fall back to the host, use a private helper as the only reproducibility source, or change VMs/services without live authority.
-- [ ] Do not relabel the host-logout deferral as guest reboot or claim DF-001–003 passed from this campaign.
+- [x] Do not treat missing resources as a successful skip, substitute host results for VM execution, or change VMs/services without live authority. Keep the core e2e command and public caller recipe in the repository.
+- [x] Do not relabel the host-logout deferral as guest reboot or claim DF-001–003 passed from this campaign.
 
 #### Verify
 
-- [ ] Observe cold start, success/reuse, missing output, failure, cancellation, SSH interruption, controller restart, guest reboot and power-intent recovery.
-- [ ] Collect and verify a 50 MiB log, complete a bounded 30-Job soak with failure/recovery interleaving, and run two VM Jobs plus independent local work at global limit three.
-- [ ] Demonstrate wrong-key/identity refusal, no duplicate workload, no lost capacity and safe recovery from an interrupted campaign.
+- [x] Observe success/reuse, missing and uncollected output, failure, cancellation, timeout, SSH interruption and controller restart on the already-running VM. Do not run VM start/stop/reboot or power-intent scenario qualification.
+- [x] Collect and verify a 50 MiB log and complete a bounded 30-Job soak with failure/recovery interleaving and sequential reuse of the same VM. Two-VM/local concurrency remains unobserved under DF-004 and is not a required campaign row.
+- [x] Demonstrate no duplicate workload and no lost capacity across saved-key replay and successor reuse. Preserve the implemented VM/Job identity checks; separate wrong-key/lease/incarnation fault experiments are outside this Epic acceptance.
 
 #### Done when
 
-- [ ] Required real scenarios are observed against the same candidate and accepted decisions; a missing environment or observation leaves this task incomplete.
-- [ ] A maintainer can reproduce the campaign using tracked instructions and public commands without copied private runtime state.
-- [ ] Measured results and limits are recorded, F1/F2 changes are reviewed, and TASK-016 history and DF-001–003 remain intact.
+- [x] Required real scenarios are observed against the same candidate and accepted decisions; a missing environment or observation leaves this task incomplete.
+- [x] A maintainer can run the tracked small core e2e command and inspect its public-CLI assertions without copied private runtime state. No separate live-campaign reproduction experiment is required.
+- [x] Observed core results and their limits are recorded, F1/F2 changes are reviewed, and TASK-016 history and DF-001–003 remain intact. Optional transport data must not become a new completion gate.
 
 ## TASK-039
 
-### Demonstrate one real project through the development service
+### Demonstrate a small isolated e2e caller cycle
 
 Requirement coverage: HP-REQ-009, HP-REQ-010, HP-REQ-011, HP-REQ-014, HP-REQ-015, HP-REQ-018, HP-REQ-019, HP-REQ-021, HP-REQ-022, HP-REQ-032, HP-REQ-034, HP-REQ-035, HP-REQ-059, HP-REQ-062.
 
-Why: integration fixtures alone cannot show that an ordinary project can freeze inputs, submit, obtain useful evidence and run again after a failure. That feedback must precede the wider consumer contract in TASK-017–020.
+Why: the public caller path must freeze selected inputs, submit, obtain useful evidence and run again after a failure before the wider consumer contract in TASK-017–020. Master revised this task on 2026-10-12 to use a small repository-owned isolated e2e test; no external real-project selection or adoption is required. Its actual CLI/controller/runner observations are recorded in the [small e2e record](../records/TASK-039-small-e2e.md).
 
 #### Implement
 
-- [ ] Provide minimal digest/spec submission helpers and an executable development quickstart using sealed selected files, saved keys and truthful wait/result handling.
-- [ ] Select one real project and bounded offline recipe under the dossier selection gate; exercise the approved development service without editing another repository by implication.
-- [ ] Run success, meaningful failure, recovery/reuse and queued-input-change cases, recording usability gaps and minimum required fields.
-- [ ] Hand off consumer-contract lessons to TASK-017 and external alignment requests to their owning repositories.
+- [x] Reuse minimal test-owned digest/spec submission helpers and provide a runnable small e2e quickstart using sealed selected files, saved keys and truthful wait/result handling.
+- [x] Use a bounded offline shell recipe with an isolated foreground controller and owned local resource. Do not require another project or change the installed service or VM.
+- [x] Run success, meaningful failure, recovery/reuse and queued-input-change cases, recording usability gaps and minimum required fields.
+- [x] Hand off caller-contract lessons and explicit local-e2e limits to TASK-017; external adoption and alignment remain with their consumer owners.
 
 #### Do not
 
-- [ ] Do not invent the full Make/environment-lock/manual integration ahead of EPIC-005 or equate a candidate pilot with release or Aquarium adoption.
-- [ ] Do not install the candidate on the production host, invoke live providers, weaken verdicts or duplicate a Job after a lost reply.
+- [x] Do not invent the full Make/environment-lock/manual integration ahead of EPIC-005 or equate a candidate pilot with release or Aquarium adoption.
+- [x] Do not install the candidate on the production host, invoke live providers, weaken verdicts or duplicate a Job after a lost reply.
 
 #### Verify
 
-- [ ] The real project runs through the public Haepari surface; evidence binds sealed candidate/test inputs and the qualified controller/runner.
-- [ ] A caller can recover its saved key, inspect the actual failure and execute a distinct authorized successor after verified cleanup/recovery.
-- [ ] Helpers reject invalid inputs and report missing observations without a false aggregate pass; ordinary local tests remain VM-independent.
+- [x] The small test runs the actual product CLI/controller/runner through the public surface; evidence binds the executable and sealed test inputs. Local e2e is not real-VM qualification.
+- [x] A caller can recover its saved key, inspect the actual failure and execute a distinct authorized successor after verified cleanup/recovery.
+- [x] Helpers reject invalid inputs and report missing observations without a false aggregate pass; ordinary local tests remain VM-independent.
 
 #### Done when
 
-- [ ] The observed project cycle proves useful evidence, once-only execution, bounded failure handling and resource reuse.
-- [ ] TASK-017 receives the pilot's exact limitations and contract inputs; remaining work has a named owner.
-- [ ] The dossier and canonical documentation distinguish implementation checks, real qualification, project observations and release/adoption.
+- [x] The observed small e2e cycle proves useful evidence, once-only execution, bounded failure handling and resource reuse.
+- [x] TASK-017 receives the small caller cycle's exact limitations and contract inputs; remaining work has a named owner.
+- [x] The dossier and canonical documentation distinguish implementation checks, real qualification, project observations and release/adoption.
 
 ## Epic acceptance
 
-- [ ] TASK-036–039 meet their individual criteria and the dossier acceptance matrix on the final candidate.
-- [ ] Original admissions, evidence, frozen runner bindings and terminal results remain protected; uncertainty never authorizes duplicate execution or speculative release.
-- [ ] Required contract decisions, measured operating bounds and current runbooks are promoted to their canonical owners.
-- [ ] The qualified project cycle precedes EPIC-005; deferred release checks and consumer-owned work retain their own acceptance.
-- [ ] Explicit Epic acceptance updates the canonical roadmap. Prepare dossier closeout only after promoting durable outcomes and checking all remaining references.
+- [x] TASK-036–039 meet their individual criteria and the dossier acceptance matrix on the final candidate.
+- [x] Original admissions, evidence, frozen runner bindings and terminal results remain protected; uncertainty never authorizes duplicate execution or speculative release.
+- [x] Required contract decisions, measured operating bounds and current runbooks are promoted to their canonical owners.
+- [x] The qualified small caller cycle precedes EPIC-005; external project adoption, deferred release checks and consumer-owned work retain their own acceptance.
+- [x] Explicit Epic acceptance updates the canonical roadmap. Prepare dossier closeout only after promoting durable outcomes and checking all remaining references.

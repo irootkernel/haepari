@@ -156,6 +156,14 @@ func GuestCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 	reply, err := Guest(q)
+	var encoded []byte
+	if err == nil {
+		if q.Schema == "haepari.guest-request/v2" && q.Operation == "file" {
+			encoded, err = marshalGuestFileReply("runner.guest", &reply, &reply)
+		} else {
+			encoded, _ = json.Marshal(reply)
+		}
+	}
 	response := managed.Envelope{Schema: "haepari.envelope/v1", Operation: "runner.guest", OK: err == nil}
 	if err != nil {
 		response.Error = runnerError(err)
@@ -164,7 +172,7 @@ func GuestCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		_, _ = io.WriteString(stderr, DiagnosticCause(err)+"\n")
 	} else {
-		response.Data, _ = json.Marshal(reply)
+		response.Data = encoded
 	}
 	if json.NewEncoder(stdout).Encode(response) != nil {
 		return 6

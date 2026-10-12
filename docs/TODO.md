@@ -4,7 +4,7 @@ The structural entries below are independent follow-up candidates for the manage
 
 ## Adopted execution dossiers
 
-- [VM operational readiness](TODO-VM-OPERATIONAL-READINESS.md): the Detailed SOT for [EPIC-009](roadmap/EPIC-009.md), TASK-036–039. It owns the integration map, decisions, task handoffs and campaign acceptance; current lifecycle remains in the roadmap. Preserve it during execution and promote durable outcomes before approved closeout.
+- [VM operational feedback](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition): shared later-owner feedback retained for active EPIC-006/007. [EPIC-009](roadmap/EPIC-009.md), TASK-036–039 are Accepted under their reduced core scope; the roadmap links their canonical outcomes. Retaining this dossier does not reopen excluded experiments or create another Epic acceptance gate.
 
 ## Structural TODO candidates
 

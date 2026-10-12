@@ -43,6 +43,44 @@ type GuestFile struct {
 	ModifiedSeconds int64  `json:"modified_seconds"`
 	ModifiedNanos   int64  `json:"modified_nanos"`
 }
+
+// GuestFilePageBytes selects the maximum decoded file payload. V2 command
+// encoders additionally budget the complete response through marshalGuestFileReply;
+// v1 file collection and live output retain their original 64 KiB bound.
+func GuestFilePageBytes(schema string) int {
+	if schema == "haepari.guest-request/v2" {
+		return 512 << 10
+	}
+	return 64 << 10
+}
+
+// marshalGuestFileReply budgets the complete response, including the native
+// request copies and the ordinary, owned or attested wrapper. Shorter pages
+// retain their original file metadata; the next request resumes at the bytes
+// actually returned. The caller selects this only for v2 file responses.
+func marshalGuestFileReply(operation string, data any, reply *GuestReply) ([]byte, error) {
+	for {
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return nil, err
+		}
+		wire, err := json.Marshal(managed.Envelope{Schema: "haepari.envelope/v1", Operation: operation, OK: true, Data: raw})
+		if err != nil {
+			return nil, err
+		}
+		// json.Encoder appends one newline to this envelope.
+		if len(wire) < 1<<20 {
+			return raw, nil
+		}
+		if len(reply.Output) <= 1 {
+			return nil, ErrInvalid
+		}
+		n := len(reply.Output) / 2
+		reply.NextOffset -= int64(len(reply.Output) - n)
+		reply.Output = reply.Output[:n]
+	}
+}
+
 type guestControlFile struct {
 	file  *os.File
 	value GuestControl
@@ -426,7 +464,7 @@ func readGuestFile(f *os.File, q GuestRequest, reply GuestReply) (GuestReply, er
 		}
 		metadata.SHA256 = hex.EncodeToString(h.Sum(nil))
 	}
-	data := make([]byte, 64<<10)
+	data := make([]byte, GuestFilePageBytes(q.Schema))
 	n, e := f.ReadAt(data, q.Offset)
 	if e != nil && e != io.EOF {
 		return reply, e

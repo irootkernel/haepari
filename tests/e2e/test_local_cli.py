@@ -201,6 +201,90 @@ def _restart_job_fixture(parent: Path, env: dict[str, str], resource_id: str = "
     return path, marker
 
 
+def test_small_offline_caller_cycle():
+    """Four tiny public-CLI Jobs; no installed service or consumer project."""
+    with _controller() as (parent, env, owned_jobs, _):
+        job_path, marker = _restart_job_fixture(parent, env, "small-e2e")
+        selected = parent / "input/source/input.txt"
+        job = json.loads(job_path.read_text())
+        job["schema"] = "haepari.job/v2"
+        job["workload"]["argv"] = ["/bin/sh", "-c", """
+set -eu
+mkdir -p ../results
+cat input.txt > ../results/out.txt
+printf x >> "$COUNT_PATH"
+printf 'small-e2e input: '
+cat input.txt
+if [ "$(cat input.txt)" != ready ]; then
+    printf 'expected ready input\n' >&2
+    exit 7
+fi
+"""]
+        job["workload"]["environment"] = {"COUNT_PATH": str(marker)}
+        job["deadlines"] = {"queue_seconds": 30, "prepare_seconds": 10,
+                            "run_seconds": 10, "collect_seconds": 5, "cleanup_seconds": 5}
+        job["effects"]["authorization_reference"] = "isolated-small-e2e"
+        job["provenance"]["candidate_digest"] = hashlib.sha256(BINARY.read_bytes()).hexdigest()
+        job["provenance"]["tests_digest"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+        def submit(key: str, content: bytes) -> dict:
+            selected.write_bytes(content)
+            job["suite"] = key
+            job["input"]["inventory_digest"] = _tree_digest("source/input.txt", content)
+            job_path.write_text(json.dumps(job))
+            receipt = _response(_run(BINARY, env, "submit", "--spec", str(job_path),
+                                     "--request-key", key, "--json"))["data"]
+            owned_jobs.append(receipt["job_id"])
+            return receipt
+
+        def collect(receipt: dict, content: bytes, expected_exit: int) -> dict:
+            job_id = receipt["job_id"]
+            result = _response(_run(BINARY, env, "wait", job_id, "--timeout", "15s",
+                                    "--json", timeout=20), expected_exit)["data"]
+            assert result["final_verdict"] == ("FAIL" if expected_exit else "PASS")
+            assert result["native_exit_code"] == (7 if expected_exit else 0)
+            assert result["evidence_completeness"] == "complete"
+            assert result["cleanup_outcome"] == "verified"
+            output = next(a for a in result["artifacts"] if a["path"] == "results/out.txt")
+            assert output["size_bytes"] == len(content)
+            assert output["sha256"] == hashlib.sha256(content).hexdigest()
+            destination = parent / (receipt["admission"]["request_key"] + "-export")
+            _response(_run(BINARY, env, "export", job_id, "--to", str(destination), "--json"))
+            assert (destination / "artifacts/results/out.txt").read_bytes() == content
+            assert json.loads((destination / "result.json").read_text()) == result
+            if expected_exit:
+                assert b"expected ready input" in (destination / "output.log").read_bytes()
+            return result
+
+        for key, content, expected_exit in (("small-success", b"ready\n", 0),
+                                             ("small-failure", b"wrong\n", 1),
+                                             ("small-successor", b"ready\n", 0)):
+            receipt = submit(key, content)
+            collect(receipt, content, expected_exit)
+            replay = _response(_run(BINARY, env, "submit", "--spec", str(job_path),
+                                    "--request-key", key, "--json"))["data"]
+            assert replay["job_id"] == receipt["job_id"]
+        assert marker.read_bytes() == b"xxx"
+
+        paused = _response(_run(BINARY, env, "resource", "pause", "small-e2e",
+                                "--expected-revision", "1", "--request-key", "small-pause",
+                                "--json"))["data"]
+        queued = submit("small-sealed-input", b"ready\n")
+        assert queued["job_state"] == "queued"
+        selected.write_bytes(b"changed after admission\n")
+        _response(_run(BINARY, env, "resource", "resume", "small-e2e",
+                       "--expected-revision", str(paused["availability_revision"]),
+                       "--request-key", "small-resume", "--json"))
+        collect(queued, b"ready\n", 0)
+        assert selected.read_bytes() == b"changed after admission\n"
+        assert marker.read_bytes() == b"xxxx"
+        resource = _response(_run(BINARY, env, "resource", "inspect", "small-e2e", "--json"))["data"]
+        assert resource["availability"] == "available" and resource["occupancy"] == 0
+        history = _response(_run(BINARY, env, "jobs", "list", "--resource", "small-e2e", "--json"))["data"]
+        assert not history["more"] and len(history["jobs"]) == 4
+        assert all(item["receipt"]["job_state"] == "finished" for item in history["jobs"])
+
+
 def test_controller_crash_and_graceful_restart_reattach_without_rerun():
     with _controller() as (parent, env, owned_jobs, restart):
         job_path, marker = _restart_job_fixture(parent, env)

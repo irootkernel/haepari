@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/runner"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -84,6 +85,42 @@ func freshSSHLeases() *strings.Reader {
 }
 
 var _ = ginkgo.Describe("Task014SSHBoundary", ginkgo.Label("unit"), func() {
+	ginkgo.DescribeTable("bounds authenticated file and live-output pages by their admitted protocol", func(schema, operation string, bytes int, accepted bool) {
+		s, spec, q := sshFixture()
+		q.Schema, q.Operation, q.Path = schema, operation, "output.log"
+		calls := 0
+		s.Run = func(_ context.Context, _ string, _ []string, input []byte) (CommandResult, error) {
+			request := decodeSSHInput(input)
+			calls++
+			r := runner.GuestReply{Schema: runner.GuestReplySchema(request), ProtocolDigest: runner.GuestProtocolDigest(request), VMUUID: request.VMUUID, MAC: request.MAC, Challenge: request.Challenge, BootID: vmID, OS: "darwin", Arch: "arm64"}
+			if request.Operation != "identity" {
+				r.Request, r.Observation = &request.Request, &runner.Observation{State: "prepared"}
+				r.Output, r.NextOffset = make([]byte, bytes), int64(bytes)
+				if operation == "file" {
+					controlSchema := "haepari.guest-control/v1"
+					if schema == "haepari.guest-request/v2" {
+						controlSchema = "haepari.guest-control/v2"
+					}
+					r.Control = &runner.GuestControl{Schema: controlSchema, Request: request, Owner: platform.ProcessIdentity{PID: 1, BootID: request.BootID, StartedSeconds: 1}, Phase: "file", Complete: true, Stopped: true}
+					r.File = &runner.GuestFile{Path: q.Path, Inode: 1, Size: int64(bytes), SHA256: strings.Repeat("0", 64)}
+				}
+			}
+			return encodedSSHReply(r), nil
+		}
+		_, err := s.Call(context.Background(), spec, freshSSHLeases(), q)
+		if accepted {
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		} else {
+			gomega.Expect(err).To(gomega.HaveOccurred())
+		}
+		gomega.Expect(calls).To(gomega.Equal(2))
+	}, ginkgo.Entry("v1 file at 64 KiB", "haepari.guest-request/v1", "file", 64<<10, true),
+		ginkgo.Entry("v1 file above 64 KiB", "haepari.guest-request/v1", "file", (64<<10)+1, false),
+		ginkgo.Entry("v2 file at 512 KiB", "haepari.guest-request/v2", "file", 512<<10, true),
+		ginkgo.Entry("v2 file above 512 KiB", "haepari.guest-request/v2", "file", (512<<10)+1, false),
+		ginkgo.Entry("v2 live output at 64 KiB", "haepari.guest-request/v2", "output", 64<<10, true),
+		ginkgo.Entry("v2 live output above 64 KiB", "haepari.guest-request/v2", "output", (64<<10)+1, false))
+
 	ginkgo.It("uses fixed remote argv and encoded requests with one pinned identity and no ambient authentication", func() {
 		s, spec, q := sshFixture()
 		calls := 0

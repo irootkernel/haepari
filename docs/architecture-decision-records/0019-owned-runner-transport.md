@@ -1,8 +1,25 @@
 # ADR-0019: Reuse an immutable per-Job runner for bounded SSH exchanges
 
-Status: Implemented and fixture-verified for TASK-037 under the approved EPIC-009 envelope; real-VM qualification remains TASK-038.
+Status: Implemented and fixture-verified for TASK-037 under the approved EPIC-009 envelope; corrected-candidate core VM observations are recorded by TASK-038.
 
 ## Measured basis
+
+TASK-038's single-VM observation on 2026-10-11 found that a 50 MiB native
+log exhausted its original 900-second collection budget (901,493 ms). The
+captured event stream contains 570 file and 576 identity SSH exchanges. The
+workload exited 0, but incomplete collection retained the guest evidence and
+quarantined the resource. These are candidate-bound native observations;
+packet/protocol overhead was not measured. The later implementation correction
+uses 512 KiB internal file pages for guest v2, reducing a complete 50 MiB file
+from 800 to 100 file requests without removing each request's authenticated
+identity proof. Guest v1 and live/public output keep their 64 KiB limits.
+The 1 MiB encoded SSH response limit, file identity/hash checks and original
+deadlines remain unchanged. The guest schema shape is unchanged, and the
+digest-bound host/owned-runner pairing prevents selecting newer runner bytes
+for an older frozen Job. The corrected candidate completed the 50 MiB log
+collection within its admitted budget, as recorded in the
+[TASK-038 operating campaign](../records/TASK-038-operating-campaign.md). This
+does not turn compact-transport fixture results into native throughput claims.
 
 Before protocol changes, the existing SSHRunner seam was exercised with three
 `inspect` calls and a 20,040,352-byte product executable. The scripted transport
@@ -28,7 +45,12 @@ executable, permanent guest service, SSH fallback or second issued effect exists
 
 Retain both authenticated exchanges, individual lease expiry, challenge, host-key
 pin, original boot/run/lease/configuration identity and original phase deadline.
-Reads remain bounded to 64 KiB with their existing file-incarnation checks.
+The original decision bounded reads to 64 KiB. The later v2 file-page correction
+above permits at most 512 KiB while retaining the existing file-incarnation
+checks. Ordinary, owned and attested file replies budget their complete encoded
+envelope, including repeated native requests and the final newline, against
+1 MiB; a larger metadata footprint selects a shorter page with an exact next
+offset. V1 file and live/public output bounds remain 64 KiB.
 A new immutable admission marker selects this capability before preparation.
 Uncertain capable preparation retains its full new bootstrap; historical Jobs
 without that marker keep the full original bootstrap against their old binary. Loss of compact transport never reissues a workload.
@@ -55,9 +77,10 @@ default-one arguments. General configuration loading remains TASK-023.
 Compare the same actual archive seam before and after, including bounded file
 reads, changed root/runner/file refusal and interrupted transfer. Exercise safe
 finished purge, protected active/unresolved runners and post-purge health with
-different verifier bytes. TASK-038 must measure real network/protocol overhead
-and elapsed campaign behavior for an explicitly approved installed candidate;
-fixture archive savings cannot establish that result.
+different verifier bytes. TASK-038 records core execution, full collection and
+reuse on the approved installed candidate. Existing elapsed/application-byte
+observations are supporting data; packet/protocol benchmarks are outside this
+Epic completion gate. Fixture archive savings do not establish native throughput.
 
 
 ## Candidate fixture comparison and operating handoff
@@ -72,9 +95,11 @@ response bytes; neither result measures SSH framing or network speed. Actual
 native bootstrap tests independently verify execution, bounded file reads and
 changed-incarnation refusal rather than treating this mock reply as native proof.
 
-For TASK-038 use the documented explicit global-three/host-two startup or v2
-service plan, finite admitted phase budgets, permanent request keys, public
-phase timings and bounded exchange-pair records. Collect incomplete-pair/detail-
-limit gaps before purge and measure packet overhead separately. The operating
+For the revised single-VM TASK-038 campaign use the documented explicit
+global-one/host-one startup or v2 service plan, finite admitted phase budgets,
+permanent request keys, public phase timings and bounded exchange-pair records.
+Real global-three/host-two qualification is deferred to DF-004. Collect incomplete-pair/detail-
+limit gaps before purge. Packet overhead remains unobserved optional data, not
+a completion condition. The operating
 controls and exact-candidate live authority boundary are in
 [operations](../operations.md#task-037-operating-controls-and-task-038-handoff).

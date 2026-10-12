@@ -23,13 +23,23 @@ import (
 )
 
 var _ = ginkgo.Describe("Task014NativeSSHProtocol", ginkgo.Label("integration"), func() {
-	for _, owned := range []bool{false, true} {
+	for _, scenario := range []struct {
+		owned  bool
+		schema string
+		large  bool
+	}{{false, "haepari.guest-request/v1", false}, {true, "haepari.guest-request/v1", false}, {true, "haepari.guest-request/v2", false}, {false, "haepari.guest-request/v2", true}, {true, "haepari.guest-request/v2", true}} {
+		owned := scenario.owned
 		name := "runs the exact bootstrap against the product binary and reconnects after its transport subprocess exits"
 		if owned {
 			name = "Task037 reuses the owned runner through the exact bootstrap and refuses replaced incarnations"
 		}
+		name += " " + scenario.schema
+		if scenario.large {
+			name += " with large request metadata"
+		}
 		ginkgo.It(name, func() {
 			s, spec, q := sshFixture()
+			q.Schema = scenario.schema
 			s.Transport = owned
 			if owned {
 				s.RecordPrepared = func(b runner.GuestTransportBinding) error { s.Binding = &b; return nil }
@@ -78,6 +88,10 @@ var _ = ginkgo.Describe("Task014NativeSSHProtocol", ginkgo.Label("integration"),
 			q.Request.WorkDir = filepath.Join(root, q.Request.Identity.JobID, "workspace")
 			q.Request.LogDevice, q.Request.LogInode = 0, 0
 			q.Request.Argv = []string{"/bin/sh", "-c", "printf 'literal $HOME; quote\n'; printf x >> count.txt; while :; do sleep .05; done"}
+			if scenario.large {
+				q.Request.Argv = append(q.Request.Argv, strings.Repeat("a", 64<<10))
+				q.Request.Environment = append(q.Request.Environment, "LARGE="+strings.Repeat("e", 64<<10))
+			}
 			q.Request.Deadline = time.Now().Add(30 * time.Second).UTC()
 			q.Request.RunSeconds = 30
 			source := filepath.Join(root, "source")
@@ -158,30 +172,53 @@ var _ = ginkgo.Describe("Task014NativeSSHProtocol", ginkgo.Label("integration"),
 			cancelled, err := call("cancel")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(cancelled.Observation.Exit.TerminationProven).To(gomega.BeTrue())
-			if owned {
+			if owned || scenario.large {
 				filePath := filepath.Join(root, q.Request.Identity.JobID, "workspace/large.bin")
 				payload := bytes.Repeat([]byte("bounded!"), 20<<10)
+				pageBytes := 64 << 10
+				if q.Schema == "haepari.guest-request/v2" {
+					payload = bytes.Repeat([]byte("bounded!"), (128<<10)+1)
+					pageBytes = 512 << 10
+				}
 				gomega.Expect(os.WriteFile(filePath, payload, 0600)).To(gomega.Succeed())
 				q.Path, q.Offset = "large.bin", 0
 				chunk, e := call("file")
 				gomega.Expect(e).NotTo(gomega.HaveOccurred())
-				gomega.Expect(chunk.Output).To(gomega.Equal(payload[:64<<10]))
+				if scenario.large {
+					gomega.Expect(len(chunk.Output)).To(gomega.BeNumerically("<", pageBytes))
+				} else {
+					gomega.Expect(chunk.Output).To(gomega.Equal(payload[:pageBytes]))
+				}
+				gomega.Expect(chunk.Output).NotTo(gomega.BeEmpty())
 				q.ExpectedFile, q.Offset = chunk.File, chunk.NextOffset
 				collected := append([]byte(nil), chunk.Output...)
+				fileCalls := 1
 				for q.Offset < int64(len(payload)) {
 					chunk, e = call("file")
 					gomega.Expect(e).NotTo(gomega.HaveOccurred())
-					gomega.Expect(len(chunk.Output)).To(gomega.BeNumerically("<=", 64<<10))
+					gomega.Expect(len(chunk.Output)).To(gomega.BeNumerically("<=", pageBytes))
+					gomega.Expect(chunk.NextOffset).To(gomega.Equal(q.Offset + int64(len(chunk.Output))))
+					gomega.Expect(chunk.Output).NotTo(gomega.BeEmpty())
 					collected = append(collected, chunk.Output...)
 					q.Offset = chunk.NextOffset
+					fileCalls++
 				}
 				gomega.Expect(collected).To(gomega.Equal(payload))
+				sum := sha256.Sum256(collected)
+				gomega.Expect(chunk.File.SHA256).To(gomega.Equal(hex.EncodeToString(sum[:])))
+				if scenario.large {
+					gomega.Expect(fileCalls).To(gomega.BeNumerically(">", 3))
+				} else {
+					gomega.Expect(fileCalls).To(gomega.Equal(3))
+				}
 				gomega.Expect(os.Rename(filePath, filePath+".original")).To(gomega.Succeed())
 				gomega.Expect(os.WriteFile(filePath, payload, 0600)).To(gomega.Succeed())
 				q.Offset = 0
 				_, e = call("file")
 				gomega.Expect(e).To(gomega.HaveOccurred())
 				q.ExpectedFile, q.Path, q.Offset = nil, "", 0
+			}
+			if owned {
 				runnerPath := filepath.Join(root, q.Request.Identity.JobID, "haepari")
 				// Same-inode growth exceeds the bootstrap's bounded runner copy.
 				gomega.Expect(os.Truncate(runnerPath, (64<<20)+1)).To(gomega.Succeed())

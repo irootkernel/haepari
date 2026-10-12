@@ -1,4 +1,4 @@
-.PHONY: build test test-prepare test-unit test-int test-e2e lint test-integration check test-macos-supervision test-utm
+.PHONY: build test test-prepare test-unit test-int test-e2e lint test-integration check test-macos-supervision test-utm test-qualification
 
 GO ?= go
 OUTPUT ?= bin/haepari
@@ -24,6 +24,10 @@ test-prepare:
 
 test-unit:
 	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --fail-on-pending --label-filter=unit ./cmd/haepari ./internal/client ./internal/managed ./internal/platform ./internal/runner ./internal/snapshot ./internal/state ./internal/utm
+	+$(MAKE) test-qualification
+
+test-qualification:
+	uv run --locked --group dev python -m pytest -q tests/qualification/test_utm_campaign.py
 
 test-int:
 	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration ./cmd/haepari ./internal/controller ./internal/managed ./internal/runner ./internal/store/sqlite ./internal/utm
@@ -50,5 +54,7 @@ test-macos-supervision:
 	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --label-filter=integration --focus=OwnedBackgroundGroupIsStopped ./internal/controller
 
 test-utm:
-	@echo 'Real UTM qualification belongs to TASK-016' >&2
-	@exit 2
+	@python3 tests/qualification/utm_campaign.py "$${HAEPARI_UTM_MODE:-run}" \
+		--campaign-file "$${HAEPARI_UTM_CAMPAIGN:?Set the exact private campaign file}" \
+		--authority-file "$${HAEPARI_UTM_AUTHORITY:?Set the approved authority file}" \
+		--evidence-root "$${HAEPARI_UTM_EVIDENCE:?Set the private campaign evidence directory}"

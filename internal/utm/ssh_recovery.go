@@ -145,7 +145,7 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		}
 		return reply, nil
 	}
-	if q.Operation == "file" && (g.File == nil || g.File.Path != guest.Path || g.File.Inode == 0 || len(g.Output) > 64<<10 || g.NextOffset != guest.Offset+int64(len(g.Output)) || g.File.Size < g.NextOffset || g.File.Size > 1<<30 || len(g.File.SHA256) != 64) {
+	if q.Operation == "file" && (g.File == nil || g.File.Path != guest.Path || g.File.Inode == 0 || len(g.Output) > runner.GuestFilePageBytes(guest.Schema) || g.NextOffset != guest.Offset+int64(len(g.Output)) || g.File.Size < g.NextOffset || g.File.Size > 1<<30 || len(g.File.SHA256) != 64) {
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	return reply, nil

@@ -110,6 +110,14 @@ func GuestRecoveryCommand(in io.Reader, out, stderr io.Writer) int {
 		return 2
 	}
 	reply, err := GuestRecovery(q)
+	var encoded []byte
+	if err == nil {
+		if q.Guest.Schema == "haepari.guest-request/v2" && q.Operation == "file" {
+			encoded, err = marshalGuestFileReply("runner.guest-recovery", &reply, &reply.Guest)
+		} else {
+			encoded, _ = json.Marshal(reply)
+		}
+	}
 	envelope := managed.Envelope{Schema: "haepari.envelope/v1", Operation: "runner.guest-recovery", OK: err == nil}
 	if err != nil {
 		envelope.Error = runnerError(err)
@@ -118,7 +126,7 @@ func GuestRecoveryCommand(in io.Reader, out, stderr io.Writer) int {
 			_, _ = io.WriteString(stderr, DiagnosticCause(err)+"\n")
 		}
 	} else {
-		envelope.Data, _ = json.Marshal(reply)
+		envelope.Data = encoded
 	}
 	if json.NewEncoder(out).Encode(envelope) != nil {
 		return 6

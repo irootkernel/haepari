@@ -218,6 +218,14 @@ func GuestTransportCommand(in io.Reader, out, stderr io.Writer) int {
 		return 2
 	}
 	r, err := GuestTransport(q)
+	var encoded []byte
+	if err == nil {
+		if q.Guest.Schema == "haepari.guest-request/v2" && q.Guest.Operation == "file" && q.Recovery == nil {
+			encoded, err = marshalGuestFileReply("runner.guest-transport", &r, &r.Guest)
+		} else {
+			encoded, _ = json.Marshal(r)
+		}
+	}
 	e := managed.Envelope{Schema: "haepari.envelope/v1", Operation: "runner.guest-transport", OK: err == nil}
 	code := 0
 	if err != nil {
@@ -226,7 +234,7 @@ func GuestTransportCommand(in io.Reader, out, stderr io.Writer) int {
 		code, _ = managed.ExitCode(e.Error.Code)
 		_, _ = io.WriteString(stderr, DiagnosticCause(err)+"\n")
 	} else {
-		e.Data, _ = json.Marshal(r)
+		e.Data = encoded
 	}
 	if json.NewEncoder(out).Encode(e) != nil {
 		return 6

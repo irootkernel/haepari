@@ -198,13 +198,15 @@ After an unsuccessful recovery/v2 plan or apply, inspect the retained Job's boun
 
 ## TASK-037 operating controls and TASK-038 handoff
 
-For an isolated foreground instance, select `daemon run --global-limit 3
---host-macos-guest-limit 2` to admit two distinct capacity-one VM resources and
-independent local work. The defaults remain one for each limit. For a development
-service, prepare a fresh private `service plan --instance <id> --binary
-<absolute-candidate> --root <private-root> --global-limit 3
---host-macos-guest-limit 2 --json`; save the complete v2 plan before requesting
-installation authority. Existing plans and running services do not change.
+For TASK-038, reuse one existing registered capacity-one VM with `daemon run
+--global-limit 1 --host-macos-guest-limit 1`. For a development service, prepare a
+fresh private `service plan --instance <id> --binary <absolute-candidate>
+--root <private-root> --global-limit 1 --host-macos-guest-limit 1 --json`; save the
+complete v2 plan before requesting installation authority. The defaults remain
+one for each limit. Existing plans and running services do not change. The
+implemented `--global-limit 3 --host-macos-guest-limit 2` profile supports two
+distinct capacity-one VM resources plus independent local work, but its real
+qualification is deferred to [DF-004](deferred-feedback.md#df-004-two-vm-and-local-concurrency).
 
 Set finite queue/prepare/run/collect/cleanup budgets in each Job before admission.
 Cold readiness consumes prepare time; safe observation and compact collection
@@ -217,12 +219,25 @@ Purge preserves permanent keys and required receipts. Do not remove payloads
 manually to cure an uncertain Job.
 
 TASK-038 must bind exact source/executable/guest-runner identities, the approved
-service plan and two registered UUID/MAC/pin mappings before live execution.
+service plan and the existing registered VM UUID/MAC/pin mapping before live execution.
 Record public phase timings and versioned SSH exchange start/completion facts
 before any event-prefix purge. Keep incomplete pairs and the detail-limit gap
-visible. Measure actual network/protocol overhead separately from application
-archive bytes. Record log/output sizes and hashes, occupancy and runner storage
+visible. If optional network/protocol measurements are recorded, distinguish them
+from application archive bytes. No separate network benchmark or identity-refusal
+fault experiment is required for the same-machine, same-user EPIC-009 scope.
+Record log/output sizes and hashes, occupancy and runner storage
 before/after explicit purge and successor reuse. Readiness, 50 MiB collection,
-30-Job soak, reboot and fault injection need their separately approved finite
-campaign and restoration plan. The fixture measurements in ADR-0019 establish
+30-Job soak and permitted observation fault injection need their separately
+approved finite campaign and restoration plan. Master excluded VM power-on/off,
+cold-start, reboot and power-intent scenario qualification from EPIC-009 on
+2026-10-12; reuse the already-running VM without switching its power. The fixture measurements in ADR-0019 establish
 transport behavior only; TASK-016 history and DF-001–003 remain unchanged.
+
+Use the tracked [single-VM campaign instructions](../tests/qualification/README.md)
+for private manifest/authority inputs and `make test-utm` preflight/run/resume/report.
+Preflight makes read-only public observations and binds the actual running
+controller; it grants no service replacement or VM effect authority. Preserve
+the frozen spec bytes and original keys/deadlines when resuming. An uncertain
+control return blocks reissue and requires the disclosed restoration. The driver
+collects observations; the owning workflow assesses the native matrix before
+TASK-038 acceptance.

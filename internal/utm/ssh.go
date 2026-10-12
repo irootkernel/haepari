@@ -462,7 +462,11 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	if q.Operation == "cancel" && (reply.Observation.Exit == nil || !reply.Observation.Exit.TerminationProven) {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
-	if (q.Operation == "output" || q.Operation == "file") && (len(reply.Output) > 64<<10 || reply.NextOffset != q.Offset+int64(len(reply.Output))) {
+	pageBytes := 64 << 10
+	if q.Operation == "file" {
+		pageBytes = runner.GuestFilePageBytes(q.Schema)
+	}
+	if (q.Operation == "output" || q.Operation == "file") && (len(reply.Output) > pageBytes || reply.NextOffset != q.Offset+int64(len(reply.Output))) {
 		return runner.GuestReply{}, ErrUnavailable
 	}
 	if reply.Absent {
