@@ -113,3 +113,8 @@ and choosing a new empty run directory; keep the refused run for inspection.
 Standalone `capture_inputs` callers must provide a trusted, caller-owned private
 bundle parent. The wrapper supplies its locked 0700 run directory. Credential
 name guards apply to selected inputs; generated outputs may use such names.
+
+The [F3 decision](../../docs/records/TASK-020-consumer-freeze.md) records the host,
+guest, saved-input and manual-result conventions demonstrated by this project.
+It takes effect with canonical TASK-020 acceptance; the sample does not define
+a separate lifecycle or require a richer consumer installation inventory.

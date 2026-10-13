@@ -18,7 +18,7 @@ import (
 	"github.com/onsi/gomega"
 )
 
-var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission", ginkgo.Label("integration"), func() {
+var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission Task020CombinedConsumer", ginkgo.Label("integration"), func() {
 	ginkgo.It("runs the actual project caller and guest script through the fake/native guest", func() {
 		t := ginkgo.GinkgoT()
 		f := nativeVMFixture(t, "unused")
@@ -52,6 +52,16 @@ var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission", gi
 			}
 			gomega.Expect(os.WriteFile(path, data, mode)).To(gomega.Succeed())
 		}
+		counter := filepath.Join(root, "executions")
+		configPath := filepath.Join(project, "project.json")
+		configBytes, err := os.ReadFile(configPath)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var config map[string]any
+		gomega.Expect(json.Unmarshal(configBytes, &config)).To(gomega.Succeed())
+		config["suites"].(map[string]any)["regression"].(map[string]any)["environment"] = map[string]string{"COUNT_PATH": counter}
+		configBytes, err = json.Marshal(config)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(os.WriteFile(configPath, configBytes, 0600)).To(gomega.Succeed())
 		binary := filepath.Join(root, "haepari")
 		build := exec.Command("go", "build", "-o", binary, "./cmd/haepari")
 		build.Dir = "../.."
@@ -61,11 +71,14 @@ var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission", gi
 		done := make(chan struct{})
 		go func() { defer close(done); f.s.schedule(ctx) }()
 		defer func() { cancel(); <-done; f.s.workers.Wait() }()
-		run := func(name string, expected int) string {
+		run := func(name string, expected int, modes ...string) string {
 			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()
 			command := exec.CommandContext(ctx, "make", "test-vm", "HAEPARI="+binary,
 				"RESOURCE="+f.spec.ID, "RUN_DIR="+filepath.Join(root, name))
+			if len(modes) > 0 {
+				command.Args = append(command.Args, "MODE="+modes[0])
+			}
 			command.Dir = project
 			command.Env = append(os.Environ(), "HAEPARI_HOME="+f.s.root.Path)
 			out, err := command.CombinedOutput()
@@ -125,14 +138,63 @@ var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission", gi
 		gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("verified")))
 		gomega.Expect(run("native-failure", 2)).To(gomega.Equal(failed))
 		gomega.Expect(run("native-success", 0)).To(gomega.Equal(first))
+
+		gomega.Expect(os.WriteFile(filepath.Join(project, "source/input.txt"), []byte("ready\n"), 0600)).To(gomega.Succeed())
+		manual := run("native-manual", 2, "manual")
+		ready, _, err := c.Inspect(context.Background(), manual)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(ready.Receipt.JobState).To(gomega.Equal("awaiting_manual"))
+		gomega.Expect(ready.Receipt.ResourceOccupancy).To(gomega.Equal(1))
+		gomega.Expect(os.ReadFile(counter)).To(gomega.Equal([]byte("xxx")))
+		_, err = f.s.ledger.Result(manual)
+		gomega.Expect(err).To(gomega.MatchError(managed.ErrBusy))
+		gomega.Expect(os.ReadFile(filepath.Join(f.guest, manual, "workspace/results/out.txt"))).To(gomega.Equal([]byte("ready\n")))
+		raw, err := os.ReadFile(filepath.Join(root, "native-manual", "spec-0.json"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		spec, err := managed.DecodeJob(raw)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(spec.Mode).To(gomega.Equal("manual"))
+		// A scripted fixture assertion, never an actual human product pass.
+		record := managed.ManualResult{Schema: "haepari.manual-result/v1", JobID: manual, InstallationID: f.s.installationID(), ProfileID: spec.Environment.ProfileID, ProfileDigest: spec.Environment.ProfileDigest, ExpectedRevision: ready.Receipt.JobRevision, Observer: "synthetic-combined-project", Scenarios: []managed.ManualScenario{{ID: "expected-output", Status: "pass", EvidenceReferences: []string{"fixture:combined-project-output"}}}}
+		receipt, _, err := c.CompleteManual(context.Background(), manual, json.RawMessage(mustJSONScheduling(record)), record.ExpectedRevision)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(run("native-manual", 0, "manual")).To(gomega.Equal(manual))
+		gomega.Expect(os.ReadFile(counter)).To(gomega.Equal([]byte("xxx")))
+		replay, _, err := c.CompleteManual(context.Background(), manual, json.RawMessage(mustJSONScheduling(record)), record.ExpectedRevision)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(replay).To(gomega.Equal(receipt))
+		manualResult, err := f.s.ledger.Result(manual)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(manualResult.FinalVerdict).To(gomega.Equal(managed.Pass))
+		gomega.Expect(manualResult.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("verified")))
+		gomega.Expect(manualResult.NativeExitCode).To(gomega.BeNil())
+		gomega.Expect(manualResult.Artifacts).To(gomega.ContainElement(gomega.HaveField("Path", "results/out.txt")))
+		next := run("native-next", 0)
+		successorResult, err := f.s.ledger.Result(next)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(successorResult.FinalVerdict).To(gomega.Equal(managed.Pass))
+		gomega.Expect(successorResult.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("verified")))
+		gomega.Expect(successorResult.Artifacts).To(gomega.ContainElement(gomega.HaveField("Path", "results/out.txt")))
+		gomega.Expect(os.ReadFile(counter)).To(gomega.Equal([]byte("xxxx")))
+		for _, job := range []string{manual, next} {
+			destination := filepath.Join(root, "export-"+job)
+			command := exec.Command(binary, "export", job, "--to", destination, "--json")
+			command.Env = append(os.Environ(), "HAEPARI_HOME="+f.s.root.Path)
+			out, err := command.CombinedOutput()
+			gomega.Expect(err).NotTo(gomega.HaveOccurred(), "%s", out)
+			gomega.Expect(os.ReadFile(filepath.Join(destination, "artifacts/results/out.txt"))).To(gomega.Equal([]byte("ready\n")))
+		}
+		current, _, err := c.InspectResource(context.Background(), f.spec.ID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(current.Occupancy).To(gomega.BeZero())
 		gomega.Expect(f.control.effects).To(gomega.BeEmpty())
 		entries, err := os.ReadDir(f.guest)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(entries).To(gomega.HaveLen(2))
+		gomega.Expect(entries).To(gomega.HaveLen(4))
 		for _, entry := range entries {
 			// Fenced control metadata deliberately survives owned Job cleanup.
 			gomega.Expect(entry.IsDir()).To(gomega.BeFalse())
-			gomega.Expect(entry.Name()).To(gomega.BeElementOf(".haepari-control-"+first+".json", ".haepari-control-"+failed+".json"))
+			gomega.Expect(entry.Name()).To(gomega.BeElementOf(".haepari-control-"+first+".json", ".haepari-control-"+failed+".json", ".haepari-control-"+manual+".json", ".haepari-control-"+next+".json"))
 		}
 	})
 })

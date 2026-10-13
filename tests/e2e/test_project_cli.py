@@ -115,6 +115,38 @@ def test_reference_project_success_failure_replay_and_aggregate(project_root):
         assert result.returncode == 1
         assert counter.read_bytes() == b"xxx"
 
+        manual = project_root / "combined-manual"
+        result = host(project_root, env, manual, mode="manual")
+        assert result.returncode == 5 and json.loads(result.stdout.splitlines()[-1])["status"] == "PENDING"
+        saved = jobs(manual, owned)
+        job_id = saved["jobs"][0]["job_id"]
+        ready = _response(_run(BINARY, env, "inspect", job_id, "--json"))["data"]["receipt"]
+        assert ready["job_state"] == "awaiting_manual" and ready["resource_occupancy"] == 1
+        assert counter.read_bytes() == b"xxxx"
+        finish_synthetic_manual(parent, env, owned, manual)
+        assert host(project_root, env, manual, mode="manual").returncode == 0
+        assert jobs(manual, owned)["jobs"][0]["request_key"] == saved["jobs"][0]["request_key"]
+        assert jobs(manual, owned)["jobs"][0]["job_id"] == job_id
+        assert counter.read_bytes() == b"xxxx"
+        manual_result = jobs(manual, owned)["jobs"][0]["observation"]["data"]
+        assert manual_result["final_verdict"] == "PASS" and manual_result["cleanup_outcome"] == "verified"
+        assert any(artifact["path"] == "results/out.txt" for artifact in manual_result["artifacts"])
+        destination = project_root / "combined-manual-export"
+        _response(_run(BINARY, env, "export", job_id, "--to", str(destination), "--json"))
+        assert (destination / "artifacts/results/out.txt").read_bytes() == b"ready\n"
+        successor = project_root / "combined-successor"
+        result = host(project_root, env, successor)
+        assert result.returncode == 0
+        observed = jobs(successor, owned)["jobs"][0]["observation"]["data"]
+        assert observed["final_verdict"] == "PASS" and observed["cleanup_outcome"] == "verified"
+        assert any(artifact["path"] == "results/out.txt" for artifact in observed["artifacts"])
+        destination = project_root / "combined-successor-export"
+        successor_id = jobs(successor, owned)["jobs"][0]["job_id"]
+        _response(_run(BINARY, env, "export", successor_id, "--to", str(destination), "--json"))
+        assert (destination / "artifacts/results/out.txt").read_bytes() == b"ready\n"
+        assert counter.read_bytes() == b"xxxxx"
+        assert _response(_run(BINARY, env, "resource", "inspect", "project-local", "--json"))["data"]["occupancy"] == 0
+
 
 def test_reference_project_freezes_queued_source_and_refuses_host_guest_entrypoint(project_root):
     project = project_root / "project"

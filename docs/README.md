@@ -38,7 +38,7 @@ TASK-017 adds the [runnable project caller](../examples/project-test/README.md),
 - An optional consumer migration scenario creates state with the old version and preserves it while applying the candidate. Haepari never resets the VM; recipes set up and clean up their own state.
 - Haepari schedules and records manual verification but does not infer a human pass or act as an LLM evaluator.
 - Existing `aquarium-dev` state is retired through a staged consumer rollout, never by deleting its root before dependents are detached.
-- The generic consumer contract freezes at gate F1 (managed core, TASK-012), gate F2 (VM fields, TASK-016) and gate F3 (consumer integration, TASK-020); TASK-002 is provisional.
+- The generic consumer contract freezes at gate F1 (managed core, TASK-012), gate F2 (VM fields, TASK-016) and gate F3 (consumer integration, TASK-020); TASK-002 is provisional. The [F3 decision](records/TASK-020-consumer-freeze.md) defines the implemented surface and takes effect with canonical TASK-020 acceptance.
 - The macOS controller runs as a `gui/<uid>` LaunchAgent in the Aqua session with `AbandonProcessGroup=true`; runners use their own session; darwin SQLite uses `fullfsync` and `checkpoint_fullfsync`. No signing identity is required: an ad-hoc-signed LaunchAgent controls UTM through `utmctl` without an Automation prompt (TASK-034).
 - Each `utm-macos` resource is one persistent VM that Haepari never clones or resets (ADR-0018); the guest runner travels with each job. `host_macos_guest_limit` bounds registered running and pending/uncertain starts. Automatic capacity-driven stop requires explicit operator permission on an eligible resource, and pause protects maintenance.
 

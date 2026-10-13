@@ -72,7 +72,7 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-017](roadmap/EPIC-005.md#task-017) | Publish the project Make and guest integration contract | TASK-008, TASK-012, TASK-015, TASK-039 | Active | Accepted |
 | [TASK-018](roadmap/EPIC-005.md#task-018) | Implement generic candidate and environment input helpers | TASK-017 | Active | Accepted |
 | [TASK-019](roadmap/EPIC-005.md#task-019) | Implement general manual jobs and recorded observations | TASK-018, TASK-010 | Active | Accepted |
-| [TASK-020](roadmap/EPIC-005.md#task-020) | Validate the generic consumer loop; freeze the integration contract | TASK-018, TASK-019 | Active | Planned |
+| [TASK-020](roadmap/EPIC-005.md#task-020) | Validate the generic consumer loop; freeze the integration contract | TASK-018, TASK-019 | Active | Accepted |
 | [TASK-021](roadmap/EPIC-006.md#task-021) | Complete concurrency and crash qualification | TASK-011, TASK-019, TASK-035 | Active | Planned |
 | [TASK-022](roadmap/EPIC-006.md#task-022) | Harden trust, privacy and external-effect boundaries | TASK-021 | Active | Planned |
 | [TASK-023](roadmap/EPIC-006.md#task-023) | Measure bounds and qualify supported platforms | TASK-021 | Active | Planned |
@@ -94,7 +94,7 @@ TASK-002 defines provisional schemas; it does not freeze them. Three gates freez
 
 - **F1, managed core contract (TASK-012).** Covers job, resource, result, event and envelope schemas; lifecycle/outcome enums; error codes; CLI exit codes; canonicalization; cursor semantics; and the advisory lock contract. It freezes after local failure and crash evidence (TASK-010, TASK-011, TASK-012), as defined in the [F1 decision record](records/TASK-012-managed-core-freeze.md); canonical TASK-012 acceptance makes that decision effective. TASK-017 builds the project Make contract on F1.
 - **F2, VM contract fields (TASK-016).** Covers `utm-macos` resource fields, guest runner protocol, host-session identity fields and the VM-specific job and result fields. The [F2 decision record](records/TASK-016-vm-contract-freeze.md) defines the candidate inventory and qualified scope, including the owner-approved later checks in [deferred feedback](deferred-feedback.md). Canonical TASK-016 acceptance makes the freeze effective.
-- **F3, consumer integration contract (TASK-020).** Covers the project Make and guest entrypoint conventions, immutable consumer environment references and the general manual result format. Rich installation locks, installed-skill evaluation and migration evidence are optional consumer material outside F3. It freezes after TASK-017 through TASK-020.
+- **F3, consumer integration contract (TASK-020).** Covers the project Make and guest entrypoint conventions, immutable consumer environment references and the general manual result format. The [F3 decision record](records/TASK-020-consumer-freeze.md) defines the implemented surface; canonical TASK-020 acceptance makes that decision effective after TASK-017 through TASK-020. Rich installation locks, installed-skill evaluation and migration evidence are optional consumer material outside F3.
 
 F3 follows the real-VM qualification and isolated caller cycle in TASK-038–039 through TASK-017. EPIC-009 must resolve its affected F1/F2 contract decisions and version changes before implementing the new semantics; it neither reopens historical acceptance by implication nor grants a blanket additive-change waiver. TASK-020 uses the pilot lessons before freezing the consumer integration contract.
 

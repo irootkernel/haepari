@@ -235,3 +235,28 @@ or human observations. Supplementary downgraded-layout tests remain separate.
 The integration gate emits a Ginkgo progress report for a test that runs longer
 than one minute, then once per minute. Reports add diagnostic stacks to retained
 check evidence; they do not alter test deadlines, runtime guards or acceptance.
+
+## Combined consumer loop and F3
+
+`Task020CombinedConsumer` extends the existing native guest project fixture
+through automatic success, native exit-7 failure, occupied manual preparation,
+synthetic completion and exact saved-key replay before a successful next Job.
+It checks retained manual and successor output after cleanup, zero final
+occupancy and no VM power effect. Both this fixture and the local public-CLI
+project test count actual executions to refuse repeated preparation on replay.
+
+```sh
+go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration \
+  --fail-on-empty --fail-on-pending --label-filter=integration \
+  --focus=Task020CombinedConsumer ./internal/controller
+make build
+uv run --locked --group dev python -m pytest -q tests/e2e/test_project_cli.py
+```
+
+These checks are enrolled in `make test`. They qualify the small synthetic
+project through the local controller and fake SSH/native guest execution,
+including saved original admission after profile and resource changes.
+They do not observe a human product pass or qualify a live or installed VM.
+TASK-027 retains that packaged running-VM release check; TASK-038 is not repeated.
+The [F3 decision](docs/records/TASK-020-consumer-freeze.md) binds the surface
+only when TASK-020 becomes Accepted in the canonical roadmap.

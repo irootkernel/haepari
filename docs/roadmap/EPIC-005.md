@@ -81,20 +81,20 @@ Requirement coverage: `HP-REQ-040`, `HP-REQ-041`.
 Requirement coverage: `HP-REQ-062` (freeze gate F3).
 
 #### Implement
-- [ ] Combine the small automatic/manual project flow and freeze F3: host wrapper, separate guest entrypoint, immutable consumer environment reference and general manual-result format. Record the accepted surface and evidence. Rich installation locks, skill inventories and migration schemas remain optional consumer design, outside F3.
+- [x] Combine the small automatic/manual project flow and freeze F3: host wrapper, separate guest entrypoint, immutable consumer environment reference and general manual-result format. Record the accepted surface and evidence. Rich installation locks, skill inventories and migration schemas remain optional consumer design, outside F3.
 
 #### Do not
-- [ ] Do not make prior-product installation, migration interruption, installed-skill behavior or external-project adoption prerequisites of this freeze.
+- [x] Do not make prior-product installation, migration interruption, installed-skill behavior or external-project adoption prerequisites of this freeze.
 
 #### Verify
-- [ ] Run the small combined local/fake-guest flow through success, meaningful failure, manual completion, saved-key recovery and next-job readiness. TASK-027 checks its running-VM release path; do not repeat accepted TASK-038 qualification.
-- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
+- [x] Run the small combined local/fake-guest flow through success, meaningful failure, manual completion, saved-key recovery and next-job readiness. TASK-027 checks its running-VM release path; do not repeat accepted TASK-038 qualification.
+- [x] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## Epic acceptance
 

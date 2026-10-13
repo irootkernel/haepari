@@ -1,16 +1,16 @@
 # Contract examples
 
-These examples are design fixtures, not runnable installation scripts. Values in angle brackets are unresolved placeholders and must be rejected at admission. JSON parsing alone does not make a spec executable. The implemented CLI schemas become authoritative once frozen at gate F1 (TASK-012) for the managed core, gate F2 (TASK-016) for VM fields and gate F3 (TASK-020) for the consumer integration contract, including the environment lock.
+These examples are design fixtures, not runnable installation scripts. Values in angle brackets are unresolved placeholders and must be rejected at admission. JSON parsing alone does not make a spec executable. The implemented CLI schemas become authoritative once frozen at gate F1 (TASK-012) for the managed core and gate F2 (TASK-016) for VM fields. F3 (TASK-020) freezes the project wrapper, guest entrypoint, immutable consumer environment reference and general manual results. Rich environment locks remain optional consumer input outside F3.
 
 The resource definition is operator-owned and separate from a project job. The environment lock is consumer-owned test input, not host inventory. Examples omit private local VM package paths, real SSH identity material, credentials and actual release hashes.
 
-A host Make wrapper should prepare its immutable bundle and resolved JSON before calling `haepari run`. The guest entrypoint is different and must reject execution without verified guest/job lease context. The Make example deliberately refers to project-owned packaging code that the adopting producer must implement.
+The implemented host wrapper saves its immutable bundle, exact specs and request keys before `haepari submit`, then records the returned Job IDs before `haepari wait`. `haepari run` remains the one-shot CLI operation. The guest entrypoint is different and must reject execution without verified guest/job lease context. `Makefile.example` is a non-normative sketch that requires producer-owned packaging code; its `SUITE=all` default and install/migration guest branches are optional designs outside the runnable F3 sample.
 
 ## Deferred external execution templates
 
 `resource-external.template.json` declares a generic caller-executed resource. `lease-request.template.json` and `lease-continuation.template.json` contain bounded non-secret intent metadata. Request keys and private owner-file material are deliberately not included. Replace placeholders and resolve native capabilities before use. These preserve the R2 proposal for post-v0.1.0 re-entry, subject to B1/B2. They are not v0.1.0 examples, CLI support or release tests. See [external leases](../contracts/external-leases.md) and [Mulgae recovery](../integrations/mulgae-review.md).
 
-The [local Job](job-local.template.json) and [local resource](resource-local.template.json) illustrate managed execution. All examples are provisional design fixtures until the consumer contract freeze.
+The [local Job](job-local.template.json) and [local resource](resource-local.template.json) illustrate managed execution. Their F1 schema authority, and the VM fields' F2 authority, follow the accepted canonical roadmap tasks. These templates remain illustrative placeholders. F3 applies to the implemented wrapper, guest entrypoint, opaque environment reference and manual-result convention; it does not make every design fixture authoritative or executable.
 
 The [controller configuration](config.template.json) demonstrates every field of the closed `haepari.config/v1` shape defined by the [configuration contract](../contracts/configuration.md), including the default global limit of one and host macOS guest limit of one. Resources are registered separately. Placeholder paths and identities are not executable defaults.
 
