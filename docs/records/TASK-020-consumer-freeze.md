@@ -19,3 +19,18 @@ Managed execution remains the supported v0.1.0 request family; external-mode req
 The candidate must demonstrate one combined project loop through automatic success, meaningful native exit failure, occupied manual preparation, explicit synthetic completion, original saved-key replay and verified cleanup before a successor Job. Local public-CLI and fake SSH/native guest fixtures own that evidence; reproducible commands belong in [TESTING.md](../../TESTING.md).
 
 The fake guest is an isolated native execution fixture. Scripted scenario records are synthetic assertions, not observed human product tests. No live VM, installed service, provider workload, host installation or release is qualified here. TASK-027 owns the exact packaged candidate's ordinary running-VM acceptance; accepted TASK-038 qualification is not repeated.
+
+## EPIC-005 follow-up verification
+
+On 2026-10-14, the corrected combined native caller and public CLI help unit
+suites passed with the race detector, followed by the complete `make test`
+gate. The native caller checks aggregate PASS/FAIL/PENDING, underlying CLI
+exits 0/1/5 and the original saved Job IDs independently of Make's recipe-failure
+exit 2. Ledger verdicts, occupancy, retained outputs, execution counts, cleanup
+and successor checks remain in place. Machine help and the CLI command-family
+contract now explicitly restrict resource removal to an idle advisory lock;
+local and VM removal remain unsupported. The documentation index distinguishes
+design fixtures from the runnable reference project, and the package-validation
+date agrees with the generated checks. These changes preserve the F3 surface
+and the live, installed-candidate and actual human observation limits above.
+Whole-Epic confirmation of the corrected committed bytes remains separate.

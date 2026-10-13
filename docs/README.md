@@ -48,7 +48,7 @@ Requirements own product obligations. The architecture and active managed contra
 
 The Aquarium repository's `docs/roadmap/README.md` owns Aquarium IDs and status. The adoption copy in this package is a handoff aid, not a second roadmap authority. The planned Aquarium epic is Aquarium:EPIC-019, with Aquarium:TASK-086 through Aquarium:TASK-102. Inside this package an unqualified EPIC or TASK ID is a Haepari ID; an ID from another repository is always qualified, as in Aquarium:TASK-092. [External requests](to-external.md) lists requested changes to other repositories; it is not their authority.
 
-Examples are illustrative design fixtures. They are not working scripts or production-ready configuration. Placeholder identities must be rejected by the implemented validators. No real credentials or current private runtime data are included.
+The templates in `docs/examples/` are illustrative design fixtures, not working scripts or production-ready configuration. The runnable reference caller is [examples/project-test](../examples/project-test/README.md). Placeholder identities must be rejected by the implemented validators. No real credentials or current private runtime data are included.
 
 External facts are identified in [sources](sources.md). Architecture choices and acceptance criteria remain target contracts; the implemented slices are described above, and the canonical roadmap records their lifecycle states. The package preserves the user's settled direction; any later material scope change needs a recorded decision.
 

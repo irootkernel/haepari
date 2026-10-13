@@ -97,6 +97,41 @@ var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission Task
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(json.Unmarshal(data, &saved)).To(gomega.Succeed())
 			gomega.Expect(saved.Jobs).To(gomega.HaveLen(1))
+			status, cliExit := "PASS", 0
+			if expected != 0 {
+				status, cliExit = "FAIL", 1
+				if len(modes) > 0 && modes[0] == "manual" {
+					status, cliExit = "PENDING", 5
+				}
+			}
+			// Make reports any recipe failure as exit 2. Check the caller's
+			// JSON independently so UNKNOWN/refusal cannot satisfy FAIL/PENDING.
+			aggregates, results := 0, 0
+			for _, line := range strings.Split(string(out), "\n") {
+				if !strings.HasPrefix(line, "{") {
+					continue
+				}
+				var event struct {
+					Kind    string   `json:"kind"`
+					Status  string   `json:"status"`
+					JobIDs  []string `json:"job_ids"`
+					JobID   string   `json:"job_id"`
+					CLIExit int      `json:"cli_exit"`
+				}
+				gomega.Expect(json.Unmarshal([]byte(line), &event)).To(gomega.Succeed(), "%s", out)
+				switch event.Kind {
+				case "aggregate":
+					aggregates++
+					gomega.Expect(event.Status).To(gomega.Equal(status), "%s", out)
+					gomega.Expect(event.JobIDs).To(gomega.Equal([]string{saved.Jobs[0].JobID}))
+				case "result":
+					results++
+					gomega.Expect(event.CLIExit).To(gomega.Equal(cliExit), "%s", out)
+					gomega.Expect(event.JobID).To(gomega.Equal(saved.Jobs[0].JobID))
+				}
+			}
+			gomega.Expect(aggregates).To(gomega.Equal(1), "%s", out)
+			gomega.Expect(results).To(gomega.Equal(1), "%s", out)
 			return saved.Jobs[0].JobID
 		}
 		first := run("native-success", 0)

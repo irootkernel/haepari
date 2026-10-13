@@ -39,8 +39,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 14291,
-      "sha256": "b61b5b53a2fc3adc6df8a7938e3437fd3e653c9b7056566218564fe5c0388f2e"
+      "bytes": 14401,
+      "sha256": "2f22299245d308fe049d07a88bcfb6e3690a6abd2f9bbb35d795a9bfa0a95635"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -175,7 +175,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "22136c1dcb9848da3f79fcc6ebbd4729cf1339869c7176cceecbebb8de46b40b"
+      "sha256": "2c3837c5f22fb999c2934adec3c5174b99c364722410142efafd3be4c93b9091"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -184,8 +184,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 48894,
-      "sha256": "62403e3161f1f5c32055557cd3d5d3eb137c956757df769355fbf208cf89fa79"
+      "bytes": 48945,
+      "sha256": "7a281e8dbb8fde8961e12ca25bc94efd85b43fd7bf92139e6901472b1d3576a5"
     },
     {
       "path": "contracts/configuration.md",
@@ -320,7 +320,7 @@
     {
       "path": "package-validation.md",
       "bytes": 8635,
-      "sha256": "38c929b3b0f894c1deb97224824f75c6d9f0fbf24ccf8d8e235a136346972d64"
+      "sha256": "b52dd007ffd11a89ad71794feb3b2b79dafd6cebc4a0794d333baf1427bc0273"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -369,8 +369,8 @@
     },
     {
       "path": "records/TASK-020-consumer-freeze.md",
-      "bytes": 3590,
-      "sha256": "b8f8ca942e56308ebee4192786aea7dcc1180c362d7df7899e042f2309888266"
+      "bytes": 4558,
+      "sha256": "c494de2c902cd9e32c341664313351799deaf2ce109f7a4f7350cafc076794f5"
     },
     {
       "path": "records/TASK-034-utm-probe.md",

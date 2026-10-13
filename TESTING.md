@@ -243,7 +243,7 @@ check evidence; they do not alter test deadlines, runtime guards or acceptance.
 `Task020CombinedConsumer` extends the existing native guest project fixture
 through automatic success, native exit-7 failure, occupied manual preparation,
 synthetic completion and exact saved-key replay before a successful next Job.
-It checks retained manual and successor output after cleanup, zero final
+It checks caller aggregate PASS/FAIL/PENDING, the corresponding CLI exits and original Job IDs independently of Make’s recipe-failure exit 2; retained manual and successor output after cleanup, zero final
 occupancy and no VM power effect. Both this fixture and the local public-CLI
 project test count actual executions to refuse repeated preparation on replay.
 
