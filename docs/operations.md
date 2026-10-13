@@ -137,7 +137,7 @@ The [configuration contract](contracts/configuration.md) owns the paths, precede
 
 Running local jobs survive the restart and are reattached.
 
-**Changing resources.** Use `resource update`, `pause`, `resume` and `remove` with expected revisions.
+**Changing resources.** Use `resource update` for a lock or VM, and `pause`/`resume` with expected revisions. Use `resource remove` only for an advisory lock with no queued or granted requests; local and VM removal remain unsupported.
 
 **Queue deadlines on a capacity-one VM resource.** Set `queue_seconds` to at least (jobs ahead + 1) × the maximum job duration. The project must choose that budget before admission; `haepari doctor` observes resource prerequisites and does not calculate queue budgets.
 
