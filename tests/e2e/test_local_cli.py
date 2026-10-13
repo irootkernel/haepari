@@ -756,3 +756,26 @@ def test_explicit_evidence_recovery_keeps_original_result(action):
         # Supplementary resolution and separate observed health establish safe
         # fixture cleanup without replacing the immutable failed cleanup fact.
         owned_jobs.remove(job_id)
+
+
+
+def test_external_resource_execution_mode_is_unsupported_without_registration():
+    with _controller() as (parent, env, _, _restart):
+        before = _response(_run(BINARY, env, "resources", "list", "--json"))["data"]
+        path = parent / "external-resource.json"
+        path.write_text(json.dumps({
+            "schema": "haepari.resource/v1", "id": "reserved-external",
+            "kind": "local", "execution_mode": "external",
+            "capacity": 1, "revision": 1,
+            "adapter": {"qualification_reference": "isolated-contract"},
+            "cleanup": {"policy_reference": "owned-workspace"},
+        }))
+        path.chmod(0o600)
+        refused = _response(_run(BINARY, env, "resource", "register",
+                                 "--file", str(path), "--json"), 2)
+        assert not refused["ok"] and refused["error"]["code"] == "UNSUPPORTED"
+        after = _response(_run(BINARY, env, "resources", "list", "--json"))["data"]
+        assert after["resources"] == before["resources"]
+        absent = _response(_run(BINARY, env, "resource", "inspect",
+                                "reserved-external", "--json"), 2)
+        assert not absent["ok"] and absent["error"]["code"] == "NOT_FOUND"

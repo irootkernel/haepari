@@ -250,7 +250,7 @@ func DecodeResource(data []byte) (ResourceSpec, error) {
 			return r, ErrInvalid
 		}
 	}
-	if r.Schema != "haepari.resource/v1" || (r.ExecutionMode != "managed" && r.ExecutionMode != "external") || r.Kind == "external" {
+	if r.Schema != "haepari.resource/v1" || r.ExecutionMode != "managed" || r.Kind == "external" {
 		return r, fmt.Errorf("%w: resource schema or execution mode", ErrUnsupported)
 	}
 	if !identifier.MatchString(r.ID) || r.Capacity <= 0 || r.Revision <= 0 || r.ExecutionMode != "managed" || r.Adapter.QualificationReference == "" {

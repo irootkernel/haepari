@@ -134,7 +134,7 @@ var _ = ginkgo.Describe("ManualAndResourceValidation", ginkgo.Label("unit"), fun
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		r.ExecutionMode = "external"
-		if _, err := DecodeResource(encode(t, r)); !errors.Is(err, ErrInvalid) {
+		if _, err := DecodeResource(encode(t, r)); !errors.Is(err, ErrUnsupported) {
 			t.Fatalf("external: %v", err)
 		}
 		r = validResource()
@@ -147,6 +147,11 @@ var _ = ginkgo.Describe("ManualAndResourceValidation", ginkgo.Label("unit"), fun
 		if _, err := DecodeResource(encode(t, r)); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
+		r.ExecutionMode = "external"
+		if _, err := DecodeResource(encode(t, r)); !errors.Is(err, ErrUnsupported) {
+			t.Fatalf("external VM mode: %v", err)
+		}
+		r.ExecutionMode = "managed"
 		r.VM.MACAddress = "bad"
 		if _, err := DecodeResource(encode(t, r)); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("bad MAC: %v", err)
