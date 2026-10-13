@@ -4,9 +4,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +39,87 @@ var _ = ginkgo.Describe("Task017ResourceDoctor", ginkgo.Label("integration"), fu
 		gomega.Expect(after).To(gomega.Equal(before))
 		m, e := availabilityCounts(db)
 		gomega.Expect([]int{m, e}).To(gomega.Equal([]int{mutations, events}))
+	})
+
+	ginkgo.It("observes a ready running VM and bounds stalled probes without mutation", func() {
+		f := nativeVMFixture(ginkgo.GinkgoT(), "unused")
+		c, err := client.Connect(context.Background(), f.s.root)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer c.Close()
+		before, err := f.s.ledger.ResourceStatus(f.spec.ID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		jobBefore, err := f.s.ledger.Snapshot("queued-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		guestBefore, err := os.ReadDir(f.guest)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		f.s.doctorHostSession = func(context.Context) error { return nil }
+		probes := 0
+		readyProbe := func(ctx context.Context, _ string, args []string, input []byte) (utm.CommandResult, error) {
+			probes++
+			deadline, bounded := ctx.Deadline()
+			if !bounded || time.Until(deadline) > 15*time.Second || !strings.Contains(args[len(args)-1], "/sbin/ifconfig -a") {
+				return utm.CommandResult{}, errors.New("unexpected unbounded or staging probe")
+			}
+			fields := strings.Split(string(input), "\n")
+			if len(fields) != 3 || len(fields[0]) != 32 || fields[1] != strings.ToLower(f.spec.VM.MACAddress) {
+				return utm.CommandResult{}, errors.New("unexpected challenge or MAC")
+			}
+			return utm.CommandResult{Stdout: f.spec.VM.UTMVMUUID + "\nDarwin\narm64\n" + fields[0] + "\n" + fields[1] + "\n"}, nil
+		}
+		f.s.sshCommand = readyProbe
+		report, _, err := c.DoctorResource(context.Background(), f.spec.ID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(report.Ready).To(gomega.BeTrue())
+		gomega.Expect(report.Gaps).To(gomega.BeEmpty())
+		gomega.Expect(report.Resource).NotTo(gomega.BeNil())
+		gomega.Expect(*report.Resource).To(gomega.Equal(before))
+		gomega.Expect(probes).To(gomega.Equal(1))
+		stall := func(ctx context.Context) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+				return errors.New("caller deadline did not reach probe")
+			}
+		}
+		for _, stage := range []string{"aqua_session_unavailable", "guest_identity_unavailable"} {
+			f.s.doctorHostSession = func(context.Context) error { return nil }
+			f.s.sshCommand = readyProbe
+			if stage == "aqua_session_unavailable" {
+				f.s.doctorHostSession = stall
+			} else {
+				f.s.sshCommand = func(ctx context.Context, _ string, _ []string, _ []byte) (utm.CommandResult, error) {
+					return utm.CommandResult{}, stall(ctx)
+				}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			request := httptest.NewRequest("GET", "/doctor/"+f.spec.ID, nil).WithContext(ctx)
+			request.SetPathValue("id", f.spec.ID)
+			response := httptest.NewRecorder()
+			started := time.Now()
+			f.s.resourceDoctor(response, request)
+			cancel()
+			gomega.Expect(time.Since(started)).To(gomega.BeNumerically("<", 500*time.Millisecond))
+			gomega.Expect(response.Code).To(gomega.Equal(200))
+			var envelope client.Envelope
+			gomega.Expect(json.Unmarshal(response.Body.Bytes(), &envelope)).To(gomega.Succeed())
+			gomega.Expect(envelope.OK).To(gomega.BeTrue())
+			gomega.Expect(json.Unmarshal(envelope.Data, &report)).To(gomega.Succeed())
+			gomega.Expect(report.Ready).To(gomega.BeFalse())
+			gomega.Expect(report.Gaps).To(gomega.HaveLen(1))
+			gomega.Expect(report.Gaps[0].Code).To(gomega.Equal(stage))
+			gomega.Expect(report.Gaps[0].Message).To(gomega.ContainSubstring("No VM or environment repair was performed."))
+		}
+		after, err := f.s.ledger.ResourceStatus(f.spec.ID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(after).To(gomega.Equal(before))
+		jobAfter, err := f.s.ledger.Snapshot("queued-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(jobAfter).To(gomega.Equal(jobBefore))
+		guestAfter, err := os.ReadDir(f.guest)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(guestAfter).To(gomega.Equal(guestBefore))
+		gomega.Expect(f.control.effects).To(gomega.BeEmpty())
 	})
 
 	ginkgo.It("refuses unavailable Aqua and private mapping without guest or power effects", func() {

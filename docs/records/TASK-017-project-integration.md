@@ -62,3 +62,15 @@ No real VM, installed service, host installation, power experiment, provider
 workload or release observation was performed. TASK-027 owns the exact packaged
 candidate's running-VM loop. This record and task checkboxes do not independently
 accept lifecycle; [the roadmap](../roadmap.md) alone owns that decision.
+
+## EPIC-005 follow-up coverage
+
+On 2026-10-14, the focused `Task017ResourceDoctor` integration suite passed with
+the race detector, fail-on-empty and fail-on-pending enabled. Its registered
+running-VM fixture now asserts a ready report with no gaps after the fresh
+challenge/MAC and Darwin arm64 probe. Stalled Aqua and SSH observations return
+within the inherited caller deadline and retain the no-repair explanation. The
+resource and queued Job snapshots, guest directory and VM power-effect list
+remain unchanged. These are isolated fake/native checks, not a live VM or
+installed-candidate observation. Whole-Epic confirmation of the correction is
+separate from this focused result.
