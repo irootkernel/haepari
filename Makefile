@@ -30,7 +30,7 @@ test-qualification:
 	uv run --locked --group dev python -m pytest -q tests/qualification
 
 test-int:
-	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration ./cmd/haepari ./internal/controller ./internal/managed ./internal/runner ./internal/store/sqlite ./internal/utm
+	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration --poll-progress-after=1m --poll-progress-interval=1m ./cmd/haepari ./internal/controller ./internal/managed ./internal/runner ./internal/store/sqlite ./internal/utm
 
 test-e2e:
 	+$(MAKE) build

@@ -60,6 +60,27 @@ def jobs(run, owned):
     return record
 
 
+def finish_synthetic_manual(parent, env, owned, run):
+    # Declared fixture observations; this is not a real human/VM observation.
+    from test_manual_cli import awaiting
+    saved = jobs(run, owned)
+    for index, entry in enumerate(saved["jobs"]):
+        ready = awaiting(env, entry["job_id"])
+        spec = json.loads((run / f"spec-{index}.json").read_text())
+        installation = _response(_run(BINARY, env, "doctor", "--resource", "project-local", "--json"))["data"]["installation_id"]
+        result = {"schema": "haepari.manual-result/v1", "job_id": ready["job_id"],
+                  "installation_id": installation, "profile_id": spec["environment"]["profile_id"],
+                  "profile_digest": spec["environment"]["profile_digest"], "expected_revision": ready["job_revision"],
+                  "observer": "synthetic-project-fixture", "scenarios": [
+                      {"id": name, "status": "pass", "evidence_references": ["fixture:project-check"]}
+                      for name in spec["manual"]["required_scenarios"]]}
+        path = parent / "project-manual-result.json"
+        path.write_text(json.dumps(result))
+        _response(_run(BINARY, env, "manual", "complete", ready["job_id"], "--input", str(path),
+                       "--expected-revision", str(ready["job_revision"]), "--json"))
+        _response(_run(BINARY, env, "wait", ready["job_id"], "--timeout", "10s", "--json"))
+
+
 def test_reference_project_success_failure_replay_and_aggregate(project_root):
     project = project_root / "project"
     counter = project_root / "executions"
@@ -203,7 +224,7 @@ def test_reference_project_manual_spec_and_direct_doctor_contract(project_root):
         assert unavailable["data"]["gaps"][0]["code"] == "resource_not_found"
         run = project_root / "manual"
         result = host(project_root, env, run, mode="manual")
-        assert result.returncode == 2 and "submission refused" in result.stderr and "UNSUPPORTED" in result.stderr
+        assert result.returncode == 5 and '"status": "PENDING"' in result.stdout
         assert '"status": "PASS"' not in result.stdout
         spec = json.loads((run / "spec-0.json").read_text())
         assert spec["suite"] == "regression" and spec["mode"] == "manual"
@@ -212,8 +233,9 @@ def test_reference_project_manual_spec_and_direct_doctor_contract(project_root):
         record = jobs(run, owned)
         key = record["jobs"][0]["request_key"]
         result = host(project_root, env, run, mode="manual")
-        assert result.returncode == 2 and jobs(run, owned)["jobs"][0]["request_key"] == key
-        assert _response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"] == []
+        assert result.returncode == 5 and jobs(run, owned)["jobs"][0]["request_key"] == key
+        finish_synthetic_manual(parent, env, owned, run)
+        assert host(project_root, env, run, mode="manual").returncode == 0
 
 
 def test_reference_project_refuses_tampering_and_another_installation(project_root):
@@ -392,11 +414,13 @@ sys.exit(r.returncode)
         assert len(listed) == 1
         manual = project_root / "make manual"
         result = make(env, manual, BINARY, "SUITE=all", "MODE=manual")
-        assert result.returncode == 2 and "UNSUPPORTED" in result.stderr
+        assert result.returncode == 2 and '"status": "PENDING"' in result.stdout
         saved = json.loads((manual / "run.json").read_text())
         assert saved["suite"] == "all" and saved["mode"] == "manual"
         assert json.loads((manual / "spec-0.json").read_text())["mode"] == "manual"
-        assert len(_response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"]) == 1
+        assert len(_response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"]) == 2
+        finish_synthetic_manual(parent, env, owned, manual)
+        assert make(env, manual, BINARY, "SUITE=all", "MODE=manual").returncode == 0
 
 
 def test_reference_project_malformed_config_and_peer_refuse_without_false_fail(project_root):

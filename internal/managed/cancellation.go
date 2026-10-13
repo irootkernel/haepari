@@ -522,11 +522,23 @@ func (l *Ledger) recordPreparationStop(q LocalPreparationStopRequest, expectedKi
 		if err != nil {
 			return Receipt{}, err
 		}
+		// Only an actually bound manual VM session changes the generic
+		// no-start classification; automatic and pre-bind paths stay intact.
+		manual, manualErr := manualSessionTx(tx, q.Identity.JobID)
+		if manualErr != nil && !errors.Is(manualErr, ErrNotFound) {
+			return Receipt{}, manualErr
+		}
+		boundManual := manualErr == nil && kind == "utm-macos" && !manual.Legacy
+		if boundManual && (manual.Identity != q.Identity || manual.Backend != kind || manual.Outcome != nil) {
+			return Receipt{}, ErrBlocked
+		}
 		outcome := LocalOutcome{WorkloadOutcome: "inconclusive"}
 		if status.Requested && status.BeforeOutcome {
 			outcome.WorkloadOutcome = "cancelled"
 		} else if q.Reason == "cancel_before_start" {
 			return Receipt{}, ErrConflict
+		} else if boundManual && q.Reason == "prepare_deadline" {
+			outcome.WorkloadOutcome = "timed_out"
 		}
 		identity, _ := json.Marshal(q.Identity)
 		data, _ := json.Marshal(outcome)
@@ -540,6 +552,18 @@ func (l *Ledger) recordPreparationStop(q LocalPreparationStopRequest, expectedKi
 		}
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state=?,revision=revision+1 WHERE id=?`, next, q.Identity.JobID); err != nil {
 			return Receipt{}, err
+		}
+		if boundManual {
+			manual.Stopped = true
+			manual.Preparation = &outcome
+			manual.Outcome = &outcome
+			manual.AbortReason = q.Reason
+			if outcome.WorkloadOutcome == "cancelled" {
+				manual.AbortReason = "cancel_before_start"
+			}
+			if err := saveManualSessionTx(tx, manual); err != nil {
+				return Receipt{}, err
+			}
 		}
 		cursor, err := addEvent(tx, q.Identity.JobID, "preparation_stopped", map[string]any{"reason": q.Reason, "outcome": outcome, "no_owned_effect": q.NoOwnedEffect, "identity": q.Identity})
 		if err != nil {
@@ -626,7 +650,25 @@ func validateLocalOutcomeTx(tx *sql.Tx, jobID string, result Result) error {
 		return ErrInvalid
 	}
 	if noStartResult(result) && out.Started {
-		return ErrInvalid
+		// A manual preparation timeout can follow an actually started smoke.
+		// Its private native proof must remain distinct from a no-start stop.
+		job, err := manualJobTx(tx, result.JobID)
+		m, sessionErr := manualSessionTx(tx, result.JobID)
+		if err != nil || sessionErr != nil || m.Legacy || m.Preparation == nil || !m.Preparation.Started || m.Outcome == nil ||
+			result.Reason != "prepare_deadline" || m.AbortReason != result.Reason || out.WorkloadOutcome != "timed_out" || !m.Stopped {
+			return ErrInvalid
+		}
+		if result.EvidenceCompleteness == "complete" {
+			present := map[string]bool{}
+			for _, artifact := range result.Artifacts {
+				present[artifact.Path] = true
+			}
+			for _, required := range job.Workload.RequiredOutputs {
+				if !present[required] {
+					return ErrInvalid
+				}
+			}
+		}
 	}
 	if result.Reason == "cancel_before_start" && (out.Started || out.WorkloadOutcome != "cancelled" || out.NativeExitCode != nil || out.NativeSignal != "") {
 		return ErrInvalid

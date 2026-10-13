@@ -574,7 +574,7 @@ var _ = ginkgo.Describe("AdvisoryLocks", ginkgo.Label("integration"), func() {
 			gomega.Expect(err).To(gomega.HaveOccurred())
 			var version int
 			gomega.Expect(other.db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-			gomega.Expect(version).To(gomega.Equal(9))
+			gomega.Expect(version).To(gomega.Equal(10))
 		}
 	})
 	ginkgo.It("replays a newly granted waiter with its queued receipt and original policy, then expires at maximum hold", func() {
@@ -682,7 +682,7 @@ var _ = ginkgo.Describe("AdvisoryLocks", ginkgo.Label("integration"), func() {
 		gomega.Expect(f.ledger.RegisterResource(encode(ginkgo.GinkgoT(), validResource()))).To(gomega.Succeed())
 		job, err := f.ledger.Admit(encode(ginkgo.GinkgoT(), validJob()), digest, "old-job-key", "old-job")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = f.db.Exec(`DELETE FROM managed_resources WHERE kind='lock'; DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities; DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DELETE FROM schema_migrations WHERE version=9; DROP TABLE managed_runner_receipts; DELETE FROM schema_migrations WHERE version=8; DELETE FROM schema_migrations WHERE version=7; PRAGMA user_version=6`)
+		_, err = f.db.Exec(`DELETE FROM managed_resources WHERE kind='lock'; DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities; DROP TABLE managed_manual_sessions; DELETE FROM schema_migrations WHERE version=10; DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DELETE FROM schema_migrations WHERE version=9; DROP TABLE managed_runner_receipts; DELETE FROM schema_migrations WHERE version=8; DELETE FROM schema_migrations WHERE version=7; PRAGMA user_version=6`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		l, err := NewLedger(f.db, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

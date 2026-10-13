@@ -313,6 +313,9 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 		if err := validateRecoveryProvenanceTx(tx, jobID, result); err != nil {
 			return Receipt{}, err
 		}
+		if err := validateManualResultTx(tx, spec, result); err != nil {
+			return Receipt{}, err
+		}
 		if err := validateLocalOutcomeTx(tx, jobID, result); err != nil {
 			return Receipt{}, err
 		}

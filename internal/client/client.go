@@ -199,3 +199,13 @@ func (c *Client) InspectResource(ctx context.Context, id string) (managed.Resour
 	envelope, err := c.call(ctx, "GET", "/v1/resources/"+url.PathEscape(id), nil, &result)
 	return result, envelope, err
 }
+
+func (c *Client) CompleteManual(ctx context.Context, jobID string, result json.RawMessage, revision int64) (managed.Receipt, Envelope, error) {
+	var receipt managed.Receipt
+	input := struct {
+		Result           json.RawMessage `json:"result"`
+		ExpectedRevision int64           `json:"expected_revision"`
+	}{result, revision}
+	envelope, err := c.call(ctx, "POST", "/v1/jobs/"+url.PathEscape(jobID)+"/manual/complete", input, &receipt)
+	return receipt, envelope, err
+}

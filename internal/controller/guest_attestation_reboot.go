@@ -262,6 +262,11 @@ func (s *runtimeServer) settleRebootRetained(c *localRunControl, job managed.Job
 			if phase.name == "collect" {
 				completion.EvidenceCompleteness = "partial"
 				completion.EvidenceGaps = []managed.EvidenceGap{{Path: "workspace", Reason: "guest_reboot_evidence_retained"}}
+				var err error
+				completion, err = s.manualCollectionPhase(job, c.identity.JobID, completion)
+				if err != nil {
+					return err
+				}
 			}
 			if err := s.endPhase(c, phase.name, completion); err != nil {
 				return err

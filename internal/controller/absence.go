@@ -22,6 +22,8 @@ func collectionAllowsCleanup(job managed.JobSpec, p managed.LocalPhase) bool {
 	if len(p.ProtectedEvidence) != 0 {
 		return false
 	}
+	p = physicalCollectionPhase(job, p)
+
 	if p.EvidenceCompleteness == "complete" {
 		return p.Outcome == "complete"
 	}

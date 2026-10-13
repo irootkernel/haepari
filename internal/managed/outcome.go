@@ -261,34 +261,39 @@ func noStartResult(result Result) bool {
 func DecodeManualResult(data []byte, required []string) (ManualResult, error) {
 	var result ManualResult
 	if err := decodeClosed(data, &result); err != nil {
-		return result, err
+		return result, manualDocumentError(err)
 	}
 	if result.Schema != "haepari.manual-result/v1" {
-		return result, ErrUnsupported
+		return result, &ManualResultValidationError{Field: "schema", Reason: "must be haepari.manual-result/v1", unsupported: true}
 	}
-	if !identifier.MatchString(result.JobID) || !identifier.MatchString(result.InstallationID) ||
-		!identifier.MatchString(result.ProfileID) || !validDigest(result.ProfileDigest) || result.ExpectedRevision <= 0 ||
-		result.Observer == "" || len(result.Observer) > 256 || len(result.Scenarios) != len(required) {
-		return result, ErrInvalid
+	for _, field := range []struct {
+		name  string
+		valid bool
+	}{
+		{"job_id", identifier.MatchString(result.JobID)}, {"installation_id", identifier.MatchString(result.InstallationID)}, {"profile_id", identifier.MatchString(result.ProfileID)}, {"profile_digest", validDigest(result.ProfileDigest)}, {"expected_revision", result.ExpectedRevision > 0}, {"observer", result.Observer != "" && len(result.Observer) <= 256}, {"scenarios", len(result.Scenarios) == len(required)},
+	} {
+		if !field.valid {
+			return result, manualResultInvalid(field.name, "has an invalid format, bound or required membership")
+		}
 	}
 	seen := map[string]bool{}
-	for _, scenario := range result.Scenarios {
+	for index, scenario := range result.Scenarios {
 		if !oneOf(scenario.Status, "pass", "fail", "unobserved") || seen[scenario.ID] || !identifier.MatchString(scenario.ID) {
-			return result, ErrInvalid
+			return result, manualResultInvalid(fmt.Sprintf("scenarios[%d].id/status", index), "must be a unique required ID with pass, fail or unobserved status")
 		}
 		seen[scenario.ID] = true
 		if scenario.Status != "unobserved" && len(scenario.EvidenceReferences) == 0 {
-			return result, ErrInvalid
+			return result, manualResultInvalid(fmt.Sprintf("scenarios[%d].evidence_references", index), "must include a reference for an observed pass or fail")
 		}
 		for _, reference := range scenario.EvidenceReferences {
 			if reference == "" || len(reference) > 512 {
-				return result, ErrInvalid
+				return result, manualResultInvalid(fmt.Sprintf("scenarios[%d].evidence_references", index), "must contain nonempty references no longer than 512 bytes")
 			}
 		}
 	}
 	for _, id := range required {
 		if !seen[id] {
-			return result, ErrInvalid
+			return result, manualResultInvalid("scenarios", "must contain every required scenario ID exactly once")
 		}
 	}
 	return result, nil

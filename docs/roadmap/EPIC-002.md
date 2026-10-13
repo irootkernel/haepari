@@ -114,6 +114,8 @@ Implementation/test baseline: commit `ea1e18ffc4fb98288579ed5918545fb9766fdddd`;
 
 Requirement coverage: `HP-REQ-011`, `HP-REQ-012`, `HP-REQ-013`.
 
+The completed checklist and implementation notes below describe the TASK-007 checkpoint. Current public manual admission and completion are defined by [CLI and Jobs](../contracts/cli-and-jobs.md#manual-completion) and the [TASK-019 record](../records/TASK-019-manual-jobs.md); later delivery does not change this historical qualification.
+
 #### Implement
 - [x] Reserve resource and global capacity for managed preparation, running, manual, cleanup and uncertain work; do not implement public external grants.
 - [x] Implement FIFO per-resource heads, capacities, global active limit, revisions/generations, pause/resume and quarantine. Lease all effectful phases atomically before adapter execution.

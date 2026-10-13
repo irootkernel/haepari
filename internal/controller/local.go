@@ -47,6 +47,11 @@ func (s *runtimeServer) executeLocal(receipt managed.Receipt, job managed.JobSpe
 func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.JobSpec, objectID string, prepareDeadline time.Time) error {
 	jobRoot := filepath.Join(s.root.Path, "jobs", c.identity.JobID)
 	workspace := filepath.Join(jobRoot, "workspace")
+	if c.manual {
+		if err := s.claimManualLocal(c, prepareDeadline); err != nil {
+			return err
+		}
+	}
 	if err := s.beginPhase(c, "prepare", job.Deadlines.PrepareSeconds, prepareDeadline); err != nil {
 		return err
 	}
@@ -61,6 +66,9 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		c.mu.Unlock()
 		if err := s.endPhase(c, "prepare", managed.LocalPhase{Outcome: "not_needed"}); err != nil {
 			return err
+		}
+		if c.manual {
+			return s.manualPreparationFailure(c, job, jobRoot, workspace, "manual_cancelled")
 		}
 		return s.settleCancelledPreparation(c, job, jobRoot, workspace)
 	}
@@ -84,7 +92,7 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		c.mu.Lock()
 		c.ownsJobRoot = true
 		c.mu.Unlock()
-		if err := writeReceipt(jobRoot, "input.json", map[string]any{"identity": c.identity, "snapshot_object_id": objectID}); err != nil {
+		if err := writeReceipt(jobRoot, "input.json", map[string]any{"identity": func() managed.LocalIdentity { id := c.identity; id.RunID = ""; return id }(), "snapshot_object_id": objectID}); err != nil {
 			return err
 		}
 		if c.beforeInputCopy != nil {
@@ -108,6 +116,9 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		}
 		return nil
 	})
+	if c.manual && prepareErr == nil {
+		return s.executeManualLocal(c, job, jobRoot, workspace, prepareDeadline)
+	}
 	prepareOutcome := "complete"
 	if errors.Is(prepareErr, errPrepareUnproven) {
 		prepareOutcome = "unproven"
@@ -126,6 +137,9 @@ func (s *runtimeServer) executeLocalControlled(c *localRunControl, job managed.J
 		reason := "prepare_failed"
 		if errors.Is(prepareErr, context.DeadlineExceeded) {
 			reason = "prepare_deadline"
+		}
+		if c.manual {
+			return s.manualPreparationFailure(c, job, jobRoot, workspace, reason)
 		}
 		return s.finishPreparation(c, job, jobRoot, workspace, reason)
 	}

@@ -176,6 +176,18 @@ func (s *runtimeServer) recoverInterrupted(jobID string, automatic bool, attesta
 			return managed.ErrStale
 		}
 	}
+	if snapshot.Spec.Mode == "manual" {
+		m, err := s.ledger.ManualSession(jobID)
+		if err == nil && m.Outcome == nil && attestation == nil && snapshot.Attestation == nil {
+			return s.recoverManual(snapshot, m, automatic)
+		}
+		if err != nil && !errors.Is(err, managed.ErrNotFound) {
+			return err
+		}
+		if err != nil && snapshot.InterruptedFrom == "awaiting_manual" {
+			return managed.ErrBlocked
+		}
+	}
 	if snapshot.Resource.Kind == "utm-macos" {
 		return s.recoverVMInterrupted(snapshot, automatic, attestation, plan, key, clientDigest)
 	}

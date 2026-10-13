@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -136,7 +137,7 @@ var _ = ginkgo.Describe("Task008CancellationLedger", ginkgo.Label("integration")
 			_, err := db.Exec("DROP TABLE " + name)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
-		_, err = db.Exec(`DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities; DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DELETE FROM schema_migrations WHERE version=9; DROP TABLE managed_runner_receipts; DELETE FROM schema_migrations WHERE version=8; DELETE FROM schema_migrations WHERE version=7; DELETE FROM schema_migrations WHERE version=6; PRAGMA user_version=5`)
+		_, err = db.Exec(`DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities; DROP TABLE managed_manual_sessions; DELETE FROM schema_migrations WHERE version=10; DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DELETE FROM schema_migrations WHERE version=9; DROP TABLE managed_runner_receipts; DELETE FROM schema_migrations WHERE version=8; DELETE FROM schema_migrations WHERE version=7; DELETE FROM schema_migrations WHERE version=6; PRAGMA user_version=5`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		l, err = NewLedger(db, 2)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -383,4 +384,127 @@ var _ = ginkgo.Describe("Task008CancellationLedger", ginkgo.Label("integration")
 		_, err = l.SettleLocal(r.JobID, r.JobRevision, result)
 		gomega.Expect(errors.Is(err, ErrBlocked)).To(gomega.BeTrue())
 	})
+})
+
+func manualVMStopFixture(t ginkgo.GinkgoTInterface, reason string) (*sql.DB, *Ledger, LocalPreparationStopRequest) {
+	t.Helper()
+	db, l := openLedger(t, filepath.Join(t.TempDir(), "manual-stop.sqlite"), 1)
+	t.Cleanup(func() { _ = db.Close() })
+	vmScheduling(t, l, "manual-vm", 1, "started", false)
+	job := validJob()
+	job.ResourceID, job.Mode = "manual-vm", "manual"
+	job.Manual = &Manual{ScenarioDocument: "source/scenarios.txt", RequiredScenarios: []string{"check"}}
+	job.Input.SelectedFiles = []string{"source/scenarios.txt"}
+	job.Deadlines.RunSeconds, job.Deadlines.ManualSeconds = 0, 60
+	r, err := l.Admit(encode(t, job), digest, "manual-stop-key", "manual-stop-job")
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	r, err = reserveScheduling(l, r, vmGuard(t, db, 1))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	id, err := l.LocalIdentity(r.JobID)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	id.RunID = "manual-stop-run"
+	r, err = l.ClaimVMRun(id, r.JobRevision, json.RawMessage(`{}`))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(l.BindManualVM(id, time.Now().UTC().Add(10*time.Second), "manual-stop-install", "/var/haepari/jobs/manual-stop-job/workspace")).To(gomega.Succeed())
+	if reason == "cancel_before_start" {
+		ack, err := l.Cancel(CancelRequest{JobID: r.JobID, ExpectedRevision: r.JobRevision, MutationKey: "cancel-before-stop"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		r = ack.Receipt
+	}
+	return db, l, LocalPreparationStopRequest{Identity: id, ExpectedRevision: r.JobRevision, Reason: reason, NoOwnedEffect: true, MutationKey: "atomic-manual-stop"}
+}
+
+func expectManualVMStopUnchanged(db *sql.DB, l *Ledger, q LocalPreparationStopRequest, before Receipt, session ManualSession) {
+	current, err := l.Snapshot(q.Identity.JobID)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(current).To(gomega.Equal(before))
+	gomega.Expect(current.GlobalOccupancy).To(gomega.Equal(1))
+	stored, err := l.ManualSession(q.Identity.JobID)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(stored).To(gomega.Equal(session))
+	for _, query := range []string{
+		`SELECT COUNT(*) FROM managed_local_outcomes WHERE job_id=?`,
+		`SELECT COUNT(*) FROM managed_events WHERE job_id=? AND kind='preparation_stopped'`,
+	} {
+		var count int
+		gomega.Expect(db.QueryRow(query, q.Identity.JobID).Scan(&count)).To(gomega.Succeed())
+		gomega.Expect(count).To(gomega.BeZero())
+	}
+	var mutations int
+	gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_mutations WHERE mutation_key=?`, q.MutationKey).Scan(&mutations)).To(gomega.Succeed())
+	gomega.Expect(mutations).To(gomega.BeZero())
+}
+
+var _ = ginkgo.Describe("Task019AtomicManualVMPreparationStop", ginkgo.Label("integration"), func() {
+	for _, reason := range []string{"prepare_deadline", "cancel_before_start"} {
+		for _, fault := range []string{"session-update", "stop-event"} {
+			reason, fault := reason, fault
+			ginkgo.It("rolls back every stop write for "+reason+" at "+fault, func() {
+				db, l, q := manualVMStopFixture(ginkgo.GinkgoT(), reason)
+				before, err := l.Snapshot(q.Identity.JobID)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				session, err := l.ManualSession(q.Identity.JobID)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				trigger := `CREATE TEMP TRIGGER fail_manual_stop BEFORE UPDATE OF session_json ON managed_manual_sessions BEGIN SELECT RAISE(FAIL,'manual session stop fault'); END`
+				if fault == "stop-event" {
+					trigger = `CREATE TEMP TRIGGER fail_manual_stop BEFORE INSERT ON managed_events WHEN NEW.kind='preparation_stopped' BEGIN SELECT RAISE(FAIL,'manual stop event fault'); END`
+				}
+				_, err = db.Exec(trigger)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				_, err = l.RecordVMPreparationStop(q)
+				gomega.Expect(err).To(gomega.HaveOccurred())
+				expectManualVMStopUnchanged(db, l, q, before, session)
+				_, err = db.Exec(`DROP TRIGGER fail_manual_stop`)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				stopped, err := l.RecordVMPreparationStop(q)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				replay, err := l.RecordVMPreparationStop(q)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(replay).To(gomega.Equal(stopped))
+				stored, err := l.ManualSession(q.Identity.JobID)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(stored.Stopped).To(gomega.BeTrue())
+				gomega.Expect(stored.AbortReason).To(gomega.Equal(reason))
+				gomega.Expect(stored.Preparation).NotTo(gomega.BeNil())
+				gomega.Expect(stored.Outcome).To(gomega.Equal(stored.Preparation))
+				want := WorkloadOutcome("timed_out")
+				if reason == "cancel_before_start" {
+					want = "cancelled"
+				}
+				gomega.Expect(stored.Preparation.WorkloadOutcome).To(gomega.Equal(want))
+				gomega.Expect(stored.Preparation.Started).To(gomega.BeFalse())
+				gomega.Expect(stored.Preparation.NativeExitCode).To(gomega.BeNil())
+				gomega.Expect(stored.Preparation.NativeSignal).To(gomega.BeEmpty())
+				out, err := l.LocalOutcome(q.Identity.JobID)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(out).To(gomega.Equal(*stored.Outcome))
+				current, err := l.Snapshot(q.Identity.JobID)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(current.GlobalOccupancy).To(gomega.Equal(1))
+			})
+		}
+	}
+	for _, conflict := range []string{"identity", "backend", "outcome"} {
+		conflict := conflict
+		ginkgo.It("refuses a conflicting bound manual "+conflict+" without writes", func() {
+			db, l, q := manualVMStopFixture(ginkgo.GinkgoT(), "prepare_deadline")
+			session, err := l.ManualSession(q.Identity.JobID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			switch conflict {
+			case "identity":
+				session.Identity.RunID = "foreign-run"
+			case "backend":
+				session.Backend = "local"
+			case "outcome":
+				session.Outcome = &LocalOutcome{WorkloadOutcome: "pass"}
+			}
+			_, err = db.Exec(`UPDATE managed_manual_sessions SET session_json=? WHERE job_id=?`, encode(ginkgo.GinkgoT(), session), q.Identity.JobID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			before, err := l.Snapshot(q.Identity.JobID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			_, err = l.RecordVMPreparationStop(q)
+			gomega.Expect(errors.Is(err, ErrBlocked)).To(gomega.BeTrue())
+			expectManualVMStopUnchanged(db, l, q, before, session)
+		})
+	}
 })

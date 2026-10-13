@@ -59,20 +59,20 @@ Requirement coverage: `HP-REQ-035`, `HP-REQ-036`.
 Requirement coverage: `HP-REQ-040`, `HP-REQ-041`.
 
 #### Implement
-- [ ] Connect existing manual schema and capacity accounting to observed setup, awaiting_manual, revision-bound human completion, exact retry, collection/cleanup, cancellation and abandonment. Required scenarios and evidence references are consumer-declared; Haepari records pass/fail/unobserved without interpreting product behavior.
+- [x] Connect existing manual schema and capacity accounting to observed setup, awaiting_manual, revision-bound human completion, exact retry, collection/cleanup, cancellation and abandonment. Required scenarios and evidence references are consumer-declared; Haepari records pass/fail/unobserved without interpreting product behavior.
 
 #### Do not
-- [ ] Do not mark ready as PASS, synthesize observations, require installed-skill/session discovery or invoke model providers by default.
+- [x] Do not mark ready as PASS, synthesize observations, require installed-skill/session discovery or invoke model providers by default.
 
 #### Verify
-- [ ] Use small local manual sessions and fake/native guest fixtures to verify exact/conflicting completion, unobserved required checks, caller exit, timeout/cancel, cleanup and successor reuse. TASK-027 observes one ordinary manual scenario on the running VM without a provider.
-- [ ] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
+- [x] Use small local manual sessions and fake/native guest fixtures to verify exact/conflicting completion, unobserved required checks, caller exit, timeout/cancel, cleanup and successor reuse. TASK-027 observes one ordinary manual scenario on the running VM without a provider.
+- [x] Run focused unit/integration checks for changed behavior and relevant negative cases; record commands and results. Missing required observations are not passes.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-020
 

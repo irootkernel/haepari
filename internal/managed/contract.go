@@ -311,6 +311,17 @@ func decodeClosed(data []byte, target any) error {
 	return nil
 }
 
+// closedFieldError keeps field identity available to bounded operator diagnostics.
+type closedFieldError struct{ Field, Reason string }
+
+func (e *closedFieldError) Unwrap() error { return ErrInvalid }
+func (e *closedFieldError) Error() string {
+	if e.Reason == "is duplicated" {
+		return "duplicate object key"
+	}
+	return fmt.Sprintf("%s: noncanonical field %q", ErrInvalid, e.Field)
+}
+
 func decodeClosedWithin(data []byte, target any, maximum int) error {
 	if len(data) == 0 || len(data) > maximum {
 		return ErrInvalid
@@ -363,7 +374,7 @@ func rejectNoncanonicalKeys(data []byte, typ reflect.Type) error {
 		for name, raw := range object {
 			fieldType, ok := fields[name]
 			if !ok {
-				return fmt.Errorf("%w: noncanonical field %q", ErrInvalid, name)
+				return &closedFieldError{Field: name, Reason: "is not a declared field"}
 			}
 			if err := rejectNoncanonicalKeys(raw, fieldType); err != nil {
 				return err
@@ -397,7 +408,7 @@ func rejectDuplicateKeys(data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	if err := scanValue(decoder); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if _, err := decoder.Token(); err != io.EOF {
 		return ErrInvalid
@@ -428,7 +439,7 @@ func scanValue(decoder *json.Decoder) error {
 			}
 			key, ok := keyToken.(string)
 			if !ok || seen[key] {
-				return errors.New("duplicate object key")
+				return &closedFieldError{Field: key, Reason: "is duplicated"}
 			}
 			seen[key] = true
 			if err := scanValue(decoder); err != nil {

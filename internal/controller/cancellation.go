@@ -22,6 +22,8 @@ type localRunControl struct {
 	wake             chan struct{}
 	receipt          managed.Receipt
 	identity         managed.LocalIdentity
+	manual           bool
+	manualSteps      []managed.ResultStep
 	completionMu     sync.Mutex
 	completed        chan struct{}
 	completion       *nativeCompletion
@@ -66,6 +68,16 @@ func (s *runtimeServer) registerLocal(r managed.Receipt) (*localRunControl, erro
 		delete(s.localRuns, r.JobID)
 		return nil, managed.ErrStale
 	}
+	original, err := s.ledger.Request(current.Admission.RequestKey)
+	if err != nil || original.Receipt.JobID != r.JobID {
+		delete(s.localRuns, r.JobID)
+		if err != nil {
+			return nil, err
+		}
+		return nil, managed.ErrStale
+	}
+	// Mode comes from the immutable admission, before publishing this control.
+	c.manual = original.Spec.Mode == "manual"
 	c.receipt = current
 	id, err := s.ledger.LocalIdentity(r.JobID)
 	if err != nil {
@@ -168,7 +180,7 @@ func (c *localRunControl) nativeCompletion() *nativeCompletion {
 
 // Called with c.mu held. Native receipt import owns outcome publication.
 func (s *runtimeServer) observeLocalCompletion(c *localRunControl) error {
-	if c.observed {
+	if c.manual || c.observed {
 		return nil
 	}
 	if c.runnerRequest != "" {

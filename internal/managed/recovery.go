@@ -319,7 +319,7 @@ func (l *Ledger) ReplayJobRecovery(key, clientDigest string) (Receipt, bool, err
 // cancellation effect. Imported facts alone do not authorize starting work.
 func (l *Ledger) BeginJobRecovery(q JobRecoveryRequest) (Receipt, error) {
 	if !validRecoveryDigest(q.SnapshotDigest) || !q.Evidence.valid() || q.Automatic && q.Evidence.Source != "machine-observed" || !oneOf(q.Action, "reattach", "resume", "stopped", "no-start") ||
-		!oneOf(q.NextState, "running", "cancelling", "collecting", "cleaning", "settling") {
+		!oneOf(q.NextState, "running", "cancelling", "collecting", "cleaning", "settling", "preparing", "awaiting_manual") {
 		return Receipt{}, ErrInvalid
 	}
 	return l.mutate("job_recovery", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
@@ -336,8 +336,18 @@ func (l *Ledger) BeginJobRecovery(q JobRecoveryRequest) (Receipt, error) {
 		if len(s.AdapterIntents) != 0 {
 			return Receipt{}, ErrBlocked
 		}
+		manualResume := oneOf(q.NextState, "preparing", "awaiting_manual")
+		if manualResume {
+			m, err := manualSessionTx(tx, q.Identity.JobID)
+			if err != nil || s.Spec.Mode != "manual" || m.Legacy || m.Identity != q.Identity || m.Outcome != nil || q.Action != "reattach" {
+				return Receipt{}, ErrBlocked
+			}
+			if q.NextState == "awaiting_manual" && (!m.Stopped || m.Preparation == nil || m.Preparation.WorkloadOutcome != "pass" || m.Deadline.IsZero()) {
+				return Receipt{}, ErrBlocked
+			}
+		}
 		if q.Action == "reattach" {
-			if q.Evidence.Source != "machine-observed" || !oneOf(q.NextState, "running", "cancelling") || q.Identity.RunID == "" || q.Outcome != nil || q.NoOwnedEffect {
+			if q.Evidence.Source != "machine-observed" || (!oneOf(q.NextState, "running", "cancelling") && !manualResume) || q.Identity.RunID == "" || q.Outcome != nil || q.NoOwnedEffect {
 				return Receipt{}, ErrInvalid
 			}
 		} else if q.Action == "resume" {
@@ -472,7 +482,10 @@ func (l *Ledger) ResolveLocalPhase(q PhaseResolutionRequest) (Receipt, error) {
 			return Receipt{}, ErrStale
 		}
 		if !oneOf(r.JobState, "reconciling", "running", "cancelling", "collecting", "cleaning", "settling") {
-			return Receipt{}, ErrConflict
+			m, err := manualSessionTx(tx, r.JobID)
+			if r.JobState != "preparing" || q.Record.Phase != "prepare" || err != nil || m.Legacy || m.Identity != q.Record.Identity || m.Outcome != nil {
+				return Receipt{}, ErrConflict
+			}
 		}
 		phases, err := effectiveLocalPhasesTx(tx, r.JobID)
 		if err != nil {

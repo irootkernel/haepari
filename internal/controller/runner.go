@@ -207,7 +207,11 @@ func (s *runtimeServer) watchSupervisor(c *localRunControl, job managed.JobSpec,
 		}
 		if status.Requested || !time.Now().Before(deadline) {
 			if !status.Requested && c.receipt.JobState != "cancelling" {
-				c.receipt, err = s.ledger.BeginLocalDeadline(c.identity, c.receipt.JobRevision)
+				if c.manual {
+					c.receipt, err = s.ledger.ManualDeadline(c.identity, c.receipt.JobRevision, "prepare_deadline")
+				} else {
+					c.receipt, err = s.ledger.BeginLocalDeadline(c.identity, c.receipt.JobRevision)
+				}
 				if err != nil {
 					c.mu.Unlock()
 					return false, log, err
@@ -291,7 +295,7 @@ func (s *runtimeServer) importRunner(c *localRunControl) (runner.Observation, er
 			return view, err
 		}
 	}
-	if view.Outcome != nil {
+	if view.Outcome != nil && !c.manual {
 		out := view.Outcome.Outcome
 		c.publishCompletion(nativeCompletion{at: view.Outcome.ObservedAt, outcome: &out})
 	}

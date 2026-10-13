@@ -236,7 +236,7 @@ func (s *runtimeServer) importVMView(c *localRunControl, view runner.Observation
 			return err
 		}
 	}
-	if view.Outcome != nil {
+	if view.Outcome != nil && !c.manual {
 		out := view.Outcome.Outcome
 		c.publishCompletion(nativeCompletion{at: view.Outcome.ObservedAt, outcome: &out})
 	}
@@ -376,6 +376,15 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	q.InputDigest = snap.Manifest.TreeSHA256
 	q.ProfileDigest = "sha256:" + strings.TrimPrefix(job.Environment.ProfileDigest, "sha256:")
 	q.Request = runner.Request{Schema: managed.RunnerSchema("request"), Identity: id, BootID: identity.BootID, WorkDir: filepath.Join(root, "workspace", filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: vmEnvironment(job, chain), Deadline: prepareDeadline.Add(time.Duration(job.Deadlines.RunSeconds) * time.Second).UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds}
+	if c.manual {
+		argv, err := preparationArgv(job, filepath.Join(root, "haepari"))
+		if err != nil {
+			return err
+		}
+		q.Request.Argv = argv
+		q.Request.Deadline = prepareDeadline.UTC()
+		q.Request.RunSeconds = job.Deadlines.PrepareSeconds
+	}
 	q.Inventory = inventory
 	var payloadBytes int64
 	for _, entry := range snap.Manifest.Entries {
@@ -421,6 +430,11 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	c.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	if c.manual {
+		if err := s.ledger.BindManualVM(id, prepareDeadline, s.installationID(), filepath.Join(root, "workspace")); err != nil {
+			return err
+		}
 	}
 	if s.vmTransport {
 		raw, _ := json.Marshal(vmTransportAdmission{Schema: "haepari.vm-transport-admission/v1", Identity: id, RunnerDigest: q.RunnerDigest})
@@ -473,12 +487,19 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	c.mu.Lock()
 	c.vm = &q
 	c.mu.Unlock()
-	if err = s.endPhase(c, "prepare", managed.LocalPhase{Outcome: "complete", AdapterSteps: steps}); err != nil {
-		return err
+	if !c.manual {
+		if err = s.endPhase(c, "prepare", managed.LocalPhase{Outcome: "complete", AdapterSteps: steps}); err != nil {
+			return err
+		}
+	} else {
+		if err = s.ledger.RecordManualPreparationSteps(c.identity, steps); err != nil {
+			return err
+		}
+		c.manualSteps = steps
 	}
 	c.mu.Lock()
 	status, err = s.ledger.Cancellation(id.JobID)
-	if err == nil && !status.Requested {
+	if err == nil && !status.Requested && !c.manual {
 		r, err = s.ledger.AdvanceLocal(id.JobID, c.receipt.JobRevision, "preparing", "ready", "prepared-"+id.JobID)
 		if err == nil {
 			c.receipt = r
@@ -490,6 +511,27 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	}
 	if status.Requested {
 		return s.vmPreparationStopped(c, job, q, "cancel_before_start")
+	}
+	if c.manual {
+		if !time.Now().Before(prepareDeadline) {
+			return s.vmPreparationStopped(c, job, q, "prepare_deadline")
+		}
+		q.Operation = "start"
+		q.Deadline = prepareDeadline
+		started, err := s.vmCall(q)
+		if err != nil {
+			return err
+		}
+		if started.Observation == nil {
+			return managed.ErrBlocked
+		}
+		c.mu.Lock()
+		err = s.importVMView(c, *started.Observation)
+		c.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		return s.watchVM(c, job, q, prepareDeadline)
 	}
 	c.mu.Lock()
 	r, err = s.ledger.StartVM(id, c.receipt.JobRevision)
@@ -542,7 +584,13 @@ func (s *runtimeServer) watchVM(c *localRunControl, job managed.JobSpec, q runne
 		}
 		if !time.Now().Before(deadline) && !status.Requested && c.receipt.JobState != "cancelling" {
 			c.mu.Lock()
-			r, e := s.ledger.BeginLocalDeadline(c.identity, c.receipt.JobRevision)
+			var r managed.Receipt
+			var e error
+			if c.manual {
+				r, e = s.ledger.ManualDeadline(c.identity, c.receipt.JobRevision, "prepare_deadline")
+			} else {
+				r, e = s.ledger.BeginLocalDeadline(c.identity, c.receipt.JobRevision)
+			}
 			if e == nil {
 				c.receipt = r
 			}
@@ -566,6 +614,9 @@ func (s *runtimeServer) watchVM(c *localRunControl, job managed.JobSpec, q runne
 			return err
 		}
 		if reply.Observation.Exit != nil && reply.Observation.Exit.TerminationProven {
+			if c.manual {
+				return s.finishManualPreparation(c, job, filepath.Join(q.JobRoot, c.identity.JobID, "workspace"), reply.Observation.Exit.Outcome, &q, c.manualSteps)
+			}
 			c.mu.Lock()
 			r, e := s.ledger.CompleteLocalRun(managed.LocalTerminationRequest{Identity: c.identity, ExpectedRevision: c.receipt.JobRevision, MutationKey: "termination-" + c.identity.JobID})
 			if e == nil {
@@ -588,6 +639,15 @@ func (s *runtimeServer) watchVM(c *localRunControl, job managed.JobSpec, q runne
 	return runner.ErrUnproven
 }
 func (s *runtimeServer) vmPreparationStopped(c *localRunControl, job managed.JobSpec, q runner.GuestRequest, reason string) error {
+	if c.manual && !c.phases["prepare"].Completed {
+		outcome := "failed"
+		if reason == "prepare_deadline" {
+			outcome = "late"
+		}
+		if err := s.endPhase(c, "prepare", managed.LocalPhase{Outcome: outcome, AdapterSteps: c.manualSteps}); err != nil {
+			return err
+		}
+	}
 	if err := s.retireVM(c.identity, job, q); err != nil {
 		return err
 	}

@@ -12,8 +12,7 @@ type commandHelp struct {
 	Usage string `json:"usage"`
 }
 
-// This is the supported local operator surface. VM and manual commands are
-// enrolled by their later freeze gates rather than advertised prematurely.
+// This is the supported operator surface; private runner helpers are omitted.
 func helpCommand(args []string, stdout, stderr io.Writer) int {
 	if len(args) != 1 || args[0] != "--json" {
 		fmt.Fprintln(stderr, "usage: haepari help --json")
@@ -43,6 +42,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		{"submit", "submit --spec <json> --request-key <key> --json"},
 		{"run", "run --spec <json> --request-key <key> [--json]"},
 		{"inspect", "inspect <job-id> --json"},
+		{"manual complete", "manual complete <job-id> --input <json> --expected-revision <n> --json"},
 		{"wait", "wait <job-id> [--timeout <duration up to 24h>] --json"},
 		{"events", "events <job-id> [--after <cursor>] [--limit <1-1000>] [--follow] --json"},
 		{"logs", "logs <job-id> [--after <offset>] [--identity <id>] [--follow] [--json]"},
@@ -79,7 +79,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		Canonicalization string                    `json:"canonicalization"`
 	}{
 		Schema: "haepari.help/v1", Protocol: "managed-execution/v1", Commands: commands,
-		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.doctor/v1"},
+		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.doctor/v1", "haepari.manual-result/v1"},
 		ErrorExits: errors, VerdictExits: map[managed.Verdict]int{managed.Pass: 0, managed.Fail: 1, managed.Incomplete: 3, managed.Cancelled: 4},
 		Enums: map[string][]string{
 			"job_state":             {"queued", "preparing", "ready", "running", "awaiting_manual", "cancelling", "collecting", "cleaning", "settling", "reconciling", "finished"},

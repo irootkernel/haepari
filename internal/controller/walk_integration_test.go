@@ -115,13 +115,14 @@ var _ = ginkgo.Describe("LocalWalkingSkeleton", ginkgo.Label("integration"), fun
 		if _, _, err := c.Submit(context.Background(), absentSpec, "missing-source-key"); !errors.As(err, &issue) || issue.Code != "PREREQUISITE_UNAVAILABLE" {
 			t.Fatalf("missing source should reject admission as a prerequisite: %v", err)
 		}
+		unsealedManual := job
+		unsealedManual.Mode, unsealedManual.Manual = "manual", &managed.Manual{ScenarioDocument: "scenarios/check.md", RequiredScenarios: []string{"one"}}
+		unsealedManual.Deadlines.RunSeconds, unsealedManual.Deadlines.ManualSeconds = 0, 30
+		encodedManual, _ := json.Marshal(unsealedManual)
+		if _, _, err := c.Submit(context.Background(), encodedManual, "unsealed-manual-key"); !errors.As(err, &issue) || issue.Code != "INVALID_REQUEST" {
+			t.Fatalf("unsealed manual scenario should reject before admission: %v", err)
+		}
 		for _, unsupported := range []managed.JobSpec{
-			func() managed.JobSpec {
-				j := job
-				j.Mode, j.Manual = "manual", &managed.Manual{ScenarioDocument: "scenarios/check.md", RequiredScenarios: []string{"one"}}
-				j.Deadlines.RunSeconds, j.Deadlines.ManualSeconds = 0, 30
-				return j
-			}(),
 			func() managed.JobSpec { j := job; j.Provenance.EvidenceClass = "release-distribution"; return j }(),
 			func() managed.JobSpec { j := job; j.Input.SelectedFiles = nil; return j }(),
 		} {

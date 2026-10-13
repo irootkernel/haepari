@@ -198,3 +198,40 @@ service, operates no VM and edits no other project. Its local result does not
 replace TASK-038 real-VM qualification or release/adoption acceptance. See the
 [small e2e record](docs/records/TASK-039-small-e2e.md) for the bounded observation
 and TASK-017 handoff.
+
+## General manual Job checks
+
+TASK-019 uses `tests/e2e/test_manual_cli.py` against the actual local CLI and
+foreground controller, and `Task019NativeManual` integration fixtures against
+scripted SSH with the native guest runner. Records are synthetic consumer
+assertions, not observed human product passes. They cover setup/smoke separation,
+exclusive awaiting capacity, pass/fail/unobserved completion, exact and conflicting
+replay, invalid identity/scenario records, caller timeout, cancellation, original
+deadline, controller crash and successor reuse. TASK-027 owns real running-VM
+manual release observation. These tests are enrolled in `make test`.
+
+`Task019ManualDeadlineCommitRestart` submits a valid-format synthetic PASS record while the
+original worker is detached, before abandonment commits, and again after
+settlement. Both refuse without recording completion or renewing the deadline.
+`Task019ManualPhysicalEvidence` couples an unobserved assertion with actual native
+guest collection: known positive absence remains cleanup-eligible, uncollected
+bytes remain protected with failed cleanup and quarantine, and unproven collection
+holds occupancy until original-proof recovery. `Task019ManualGuestRecovery`
+refuses unknown, live-worker and partial-preparation observations, then restores
+the original guest response and resumes the same preparation and awaiting deadline
+without a second setup/smoke. These are isolated native/fake-transport faults.
+The public CLI also names unsealed scenario and unsupported result-schema fields
+without echoing their values, and an unsealed refusal leaves the request key free.
+The reusable input helper rejects a manual scenario outside its selected files
+before admission.
+
+`Task019ActualSchema9Migration` imports the SQL dump produced by the actual
+schema-9 binary built from `249c82dc4b9385f84962191b846cddce952526c4` (development
+build, not a packaged release). `internal/managed/testdata/schema9.json` binds its
+binary and SQL digests and original receipts. Migration preserves the original
+installation/admission/cancellation identities without fabricating preparation
+or human observations. Supplementary downgraded-layout tests remain separate.
+
+The integration gate emits a Ginkgo progress report for a test that runs longer
+than one minute, then once per minute. Reports add diagnostic stacks to retained
+check evidence; they do not alter test deadlines, runtime guards or acceptance.

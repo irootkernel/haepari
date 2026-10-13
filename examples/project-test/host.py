@@ -17,7 +17,7 @@ import uuid
 
 
 PROJECT = Path(__file__).resolve().parent
-from haepari_inputs import Refusal, capture_inputs, job_spec, regular_bytes, validate_recipe
+from haepari_inputs import Refusal, capture_inputs, job_spec, regular_bytes, validate_manual_selection, validate_recipe
 
 
 def save(path, value):
@@ -69,8 +69,11 @@ def prepare(run, args, installation):
     names = list(suites) if args.suite == "all" else [args.suite]
     if not names or any(name not in suites or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", name) for name in names):
         raise Refusal("select a consumer-declared suite; this project defaults to regression")
+    policy = config.get("inputs")
+    selected = policy.get("selected_files") if isinstance(policy, dict) else None
     for name in names:
         validate_recipe(suites[name], args.mode)
+        validate_manual_selection(suites[name], args.mode, selected)
     inputs = capture_inputs(PROJECT, run / "bundle", config.get("inputs"))
     inventory = inputs["input"]["inventory_digest"]
     run_id = uuid.uuid4().hex

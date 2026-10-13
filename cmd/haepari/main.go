@@ -38,12 +38,14 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari help --json | version --json | capabilities --json | doctor --resource <id> --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | submit | run | inspect | wait | events | logs | cancel | export | purge")
+		fmt.Fprintln(stderr, "usage: haepari help --json | version --json | capabilities --json | doctor --resource <id> --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | manual complete <job-id> --input <json> --expected-revision <n> --json | submit | run | inspect | wait | events | logs | cancel | export | purge")
 		return 2
 	}
 	switch args[0] {
 	case "help":
 		return helpCommand(args[1:], stdout, stderr)
+	case "manual":
+		return manualCommand(args[1:], stdout, stderr)
 	case "runner":
 		return runner.Command(args[1:], stdout, stderr)
 	case "service":

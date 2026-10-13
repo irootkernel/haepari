@@ -465,7 +465,7 @@ var _ = ginkgo.Describe("QuarantinePreservedAndCursorScoped", ginkgo.Label("inte
 func legacyCoreLayout(t ginkgo.GinkgoTInterface, db *sql.DB, version int) {
 	t.Helper()
 	for _, statement := range []string{
-		`DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DROP TABLE managed_runner_receipts; DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities`,
+		`DROP TABLE managed_manual_sessions; DELETE FROM schema_migrations WHERE version=10; DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DROP TABLE managed_runner_receipts; DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities`,
 		`DROP TABLE managed_installation; DROP TABLE managed_cancellations; DROP TABLE managed_cancel_edges; DROP TABLE managed_local_outcomes`,
 		`DROP TABLE managed_parent_context; DROP TABLE managed_parent_nonces; DROP TABLE managed_queue_blockers; DROP TABLE managed_vm_observations; DROP TABLE managed_power_progress; DROP TABLE managed_availability_receipts`,
 		`DROP TABLE managed_admissions; DROP TABLE managed_job_inputs; DROP TABLE managed_runs`,
@@ -507,7 +507,7 @@ var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			var current int
 			gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&current)).To(gomega.Succeed())
-			gomega.Expect(current).To(gomega.Equal(9))
+			gomega.Expect(current).To(gomega.Equal(10))
 			var retained []byte
 			gomega.Expect(db.QueryRow(`SELECT receipt_json FROM managed_mutations WHERE mutation_key='legacy-reserve'`).Scan(&retained)).To(gomega.Succeed())
 			gomega.Expect(retained).To(gomega.Equal(original))
@@ -616,7 +616,7 @@ var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration
 				gomega.Expect(after).To(gomega.Equal(before))
 				var version int
 				gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-				gomega.Expect(version).To(gomega.Equal(9))
+				gomega.Expect(version).To(gomega.Equal(10))
 			})
 		}
 	}
@@ -676,7 +676,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		path := filepath.Join(t.TempDir(), "state.sqlite")
 		db, l := openLedger(t, path, 1)
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 10 {
 			t.Fatalf("schema version %d: %v", version, err)
 		}
 		r := validResource()
@@ -695,7 +695,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		if err := l.RegisterResource(encode(t, r)); !errors.Is(err, ErrConflict) {
 			t.Fatalf("duplicate VM identity: %v", err)
 		}
-		if _, err := db.Exec(`PRAGMA user_version=10`); err != nil {
+		if _, err := db.Exec(`PRAGMA user_version=11`); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		if err := db.Close(); err != nil {
@@ -725,7 +725,7 @@ var _ = ginkgo.Describe("ProvisionalV1PowerTableMigration", ginkgo.Label("integr
 		db, l := openLedger(t, path, 1)
 		defer db.Close()
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 10 {
 			t.Fatalf("migrated version %d: %v", version, err)
 		}
 		var value int64

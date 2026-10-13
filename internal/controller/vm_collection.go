@@ -337,7 +337,12 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 			phaseOutcome = "unproven"
 			evidence = "partial"
 		}
-		if err = s.endPhase(c, "collect", managed.LocalPhase{Outcome: phaseOutcome, ProtectedEvidence: protected, Artifacts: collected.artifacts, Logs: logs, EvidenceGaps: gaps, EvidenceCompleteness: evidence}); err != nil {
+		phase, err := s.manualCollectionPhase(job, c.identity.JobID, managed.LocalPhase{Outcome: phaseOutcome, ProtectedEvidence: protected, Artifacts: collected.artifacts, Logs: logs, EvidenceGaps: gaps, EvidenceCompleteness: evidence})
+		if err != nil {
+			return err
+		}
+		evidence, gaps, phaseOutcome = phase.EvidenceCompleteness, phase.EvidenceGaps, phase.Outcome
+		if err = s.endPhase(c, "collect", phase); err != nil {
 			return err
 		}
 		if phaseOutcome == "unproven" {
@@ -398,6 +403,15 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 		result.Reason = "process_start_failed"
 		if out.WorkloadOutcome == "cancelled" {
 			result.Reason = "cancel_before_start"
+		}
+	}
+	if c.manual {
+		m, err := s.ledger.ManualSession(c.identity.JobID)
+		if err != nil {
+			return err
+		}
+		if m.AbortReason != "" {
+			result.Reason = m.AbortReason
 		}
 	}
 	if cleanup.Outcome != "complete" {

@@ -1,6 +1,6 @@
 # Haepari architecture
 
-Target: v0.1.0. This document specifies the intended system. TASK-001 provides identity reporting and the private foreground controller bootstrap. TASK-033 implements the first local auto-Job path: sealed admission, capacity-one scheduling, execution, collection, settlement and blocking wait. TASK-008 connects durable cancellation admission, bounded local termination, protocol negotiation and reconnectable observers. TASK-009 adds the independent local per-run supervisor and schema 8 receipt import. TASK-010 adds durable common phase settlement, path-sensitive evidence and result timings. TASK-011 implements local restart recovery and isolated installed development-service supervision. TASK-012 adds bounded evidence delivery and schema 9 retention. TASK-015 integrates automatic development VM execution and recovery; manual Jobs and real backend qualification remain with their later owning tasks.
+Target: v0.1.0. This document specifies the intended system. TASK-001 provides identity reporting and the private foreground controller bootstrap. TASK-033 implements the first local auto-Job path: sealed admission, capacity-one scheduling, execution, collection, settlement and blocking wait. TASK-008 connects durable cancellation admission, bounded local termination, protocol negotiation and reconnectable observers. TASK-009 adds the independent local per-run supervisor and schema 8 receipt import. TASK-010 adds durable common phase settlement, path-sensitive evidence and result timings. TASK-011 implements local restart recovery and isolated installed development-service supervision. TASK-012 adds bounded evidence delivery and schema 9 retention. TASK-015 integrates automatic development VM execution and recovery. The TASK-019 candidate adds private schema 10 durable manual sessions, with preparation receipts separated from human completion and an original persisted manual deadline. Exact completion replay survives collection, settlement and restart; unresolved ownership retains capacity. Real release manual observation remains TASK-027.
 
 ## Local development profile
 
@@ -72,7 +72,7 @@ Use SQLite with a pinned pure-Go driver, explicit transactions, foreign keys, a 
 | `events` | Monotonic cursor, job/resource ID, transition type, bounded structured data |
 | `artifacts` | Job ID, relative path, size, content digest, collection/completeness status |
 | `evidence_retention` | Job/run/resource identity, protected owned paths, gaps, reason, recovery reference and disposal/re-collection receipts |
-| `manual_results` | Job ID, expected revision, observation identity, scenario outcomes, evidence references |
+| `manual_sessions` | Private `managed_manual_sessions` projection: exact Job/install/backend identity, original prepare/await deadlines, preparation observations and adapter steps, stop/abort/legacy state, human completion and original receipt, terminal outcome |
 | `schema_migrations` | Applied schema version and migration identity |
 | `lock_requests` | Lock ID, request key, payload digest, holder label, requested queue seconds, FIFO sequence, state, queue deadline, and created, granted and ended timestamps |
 | `lock_grants` | Request ID, grant ID, slot generation, liveness deadline, maximum-hold deadline, and the release, cancellation, expiry or forced-release receipt |

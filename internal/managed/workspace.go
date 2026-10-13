@@ -15,7 +15,7 @@ type LocalWorkspaceBinding struct {
 // The prepared directory incarnation is journaled before workload delivery.
 // Workload renames cannot turn existing owned evidence into a positive absence.
 func (l *Ledger) BindLocalWorkspace(id LocalIdentity, root RetainedPath) error {
-	if id.RunID != "" || root.Path != "workspace" || !root.Directory || root.Inode == 0 {
+	if root.Path != "workspace" || !root.Directory || root.Inode == 0 {
 		return ErrInvalid
 	}
 	tx, err := l.db.BeginTx(context.Background(), nil)
@@ -26,6 +26,12 @@ func (l *Ledger) BindLocalWorkspace(id LocalIdentity, root RetainedPath) error {
 	if err = matchLocalIdentityTx(tx, id); err != nil {
 		return err
 	}
+	if id.RunID != "" {
+		manual, err := manualSessionTx(tx, id.JobID)
+		if err != nil || manual.Legacy || manual.Identity != id || manual.Preparation != nil {
+			return ErrInvalid
+		}
+	}
 	var kind string
 	if err = tx.QueryRow(`SELECT kind FROM managed_resources WHERE id=?`, id.ResourceID).Scan(&kind); err != nil {
 		return err
@@ -33,7 +39,9 @@ func (l *Ledger) BindLocalWorkspace(id LocalIdentity, root RetainedPath) error {
 	if kind != "local" {
 		return ErrInvalid
 	}
-	binding := LocalWorkspaceBinding{"haepari.local-workspace/v1", id, root}
+	original := id
+	original.RunID = ""
+	binding := LocalWorkspaceBinding{"haepari.local-workspace/v1", original, root}
 	var old []byte
 	if err = tx.QueryRow(`SELECT payload_json FROM managed_events WHERE job_id=? AND kind='local_workspace'`, id.JobID).Scan(&old); err == nil {
 		var saved LocalWorkspaceBinding

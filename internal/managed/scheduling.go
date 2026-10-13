@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -387,7 +388,23 @@ func (l *Ledger) HoldManualCapacity(q ManualHoldRequest) (Receipt, error) {
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='awaiting_manual',revision=revision+1 WHERE id=?`, q.JobID); err != nil {
 			return receipt, err
 		}
-		cursor, err := addEvent(tx, q.JobID, "awaiting_manual", map[string]any{"lease_generation": q.LeaseGeneration, "environment_digest": q.EnvironmentDigest, "readiness_digest": q.ReadinessDigest, "observation_reference": q.ObservationReference, "scenario_document": job.Manual.ScenarioDocument, "required_scenarios": job.Manual.RequiredScenarios, "manual_deadline": time.Now().UTC().Add(time.Duration(job.Deadlines.ManualSeconds) * time.Second).Format(time.RFC3339Nano)})
+		deadline := time.Now().UTC().Add(time.Duration(job.Deadlines.ManualSeconds) * time.Second)
+		session, sessionErr := manualSessionTx(tx, q.JobID)
+		if sessionErr == nil {
+			if session.Legacy || !session.Stopped || session.Preparation == nil || session.Preparation.WorkloadOutcome != "pass" || session.AbortReason != "" {
+				return receipt, ErrBlocked
+			}
+			if !session.Deadline.IsZero() {
+				return receipt, ErrConflict
+			}
+			session.Deadline = deadline
+			if err := saveManualSessionTx(tx, session); err != nil {
+				return receipt, err
+			}
+		} else if !errors.Is(sessionErr, ErrNotFound) {
+			return receipt, sessionErr
+		}
+		cursor, err := addEvent(tx, q.JobID, "awaiting_manual", map[string]any{"lease_generation": q.LeaseGeneration, "environment_digest": q.EnvironmentDigest, "readiness_digest": q.ReadinessDigest, "observation_reference": q.ObservationReference, "scenario_document": job.Manual.ScenarioDocument, "required_scenarios": job.Manual.RequiredScenarios, "manual_deadline": deadline.Format(time.RFC3339Nano)})
 		if err != nil {
 			return receipt, err
 		}

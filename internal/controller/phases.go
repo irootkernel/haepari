@@ -204,7 +204,12 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	if !collected.complete {
 		evidence = "partial"
 	}
-	if err := s.endPhase(c, "collect", managed.LocalPhase{Outcome: collectionOutcome, ProtectedEvidence: protected, Artifacts: collected.artifacts, Logs: logs, EvidenceGaps: gaps, EvidenceCompleteness: evidence}); err != nil {
+	phase, err := s.manualCollectionPhase(job, c.identity.JobID, managed.LocalPhase{Outcome: collectionOutcome, ProtectedEvidence: protected, Artifacts: collected.artifacts, Logs: logs, EvidenceGaps: gaps, EvidenceCompleteness: evidence})
+	if err != nil {
+		return err
+	}
+	evidence, gaps, collectionOutcome = phase.EvidenceCompleteness, phase.EvidenceGaps, phase.Outcome
+	if err := s.endPhase(c, "collect", phase); err != nil {
 		return err
 	}
 	if collectionStatus == phaseUnproven {

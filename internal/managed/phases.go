@@ -69,6 +69,9 @@ func (l *Ledger) RecordLocalPhase(q LocalPhaseRequest) (Receipt, error) {
 			"prepare": {"preparing", "ready", "collecting"}, "run": {"running", "cancelling", "collecting"},
 			"collect": {"collecting"}, "cleanup": {"cleaning"}, "verify": {"settling"},
 		}
+		if job.Mode == "manual" {
+			allowed["prepare"] = append(allowed["prepare"], "cancelling")
+		}
 		if !oneOf(current.JobState, allowed[p.Phase]...) {
 			return Receipt{}, ErrConflict
 		}

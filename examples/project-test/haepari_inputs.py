@@ -167,10 +167,17 @@ def validate_recipe(recipe, mode):
             raise Refusal("manual recipe requires unique identifier-shaped required_scenarios")
 
 
+def validate_manual_selection(recipe, mode, selected_files):
+    if mode == "manual" and (not isinstance(selected_files, list)
+                             or recipe["manual"]["scenario_document"] not in selected_files):
+        raise Refusal("manual.scenario_document must be included in input.selected_files")
+
+
 def job_spec(inputs, resource, suite, mode, recipe):
     if not valid_identifier(resource) or not valid_identifier(suite) or mode not in ("auto", "manual"):
         raise Refusal("Job requires identifier-shaped resource/suite and auto or manual mode")
     validate_recipe(recipe, mode)
+    validate_manual_selection(recipe, mode, inputs["input"]["selected_files"])
     cwd = recipe["cwd"]
     if not any(name.startswith(cwd + "/") for name in inputs["input"]["selected_files"]):
         raise Refusal(f"recipe cwd must name a directory containing selected files: {cwd!r}")

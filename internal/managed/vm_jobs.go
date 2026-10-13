@@ -271,7 +271,16 @@ func (l *Ledger) VMRetirementDeadline(id LocalIdentity, snapshotDigest string, d
 	if RecoveryDigest(snap) != snapshotDigest {
 		return time.Time{}, ErrStale
 	}
-	if !oneOf(snap.Receipt.JobState, "preparing", "ready", "reconciling") || deadline.IsZero() {
+	manualCancelledBeforeStart := false
+	if snap.Spec.Mode == "manual" && snap.Receipt.JobState == "collecting" && snap.Outcome == nil {
+		cancel, err := cancellationStatusTx(tx, id.JobID)
+		if err != nil {
+			return time.Time{}, err
+		}
+		manualCancelledBeforeStart = cancel.Requested && cancel.BeforeOutcome &&
+			len(snap.Runner["intent"]) == 0 && len(snap.Runner["start"]) == 0 && len(snap.Runner["outcome"]) == 0 && len(snap.Runner["exit"]) == 0
+	}
+	if (!oneOf(snap.Receipt.JobState, "preparing", "ready", "reconciling") && !manualCancelledBeforeStart) || deadline.IsZero() {
 		return time.Time{}, ErrBlocked
 	}
 	prior.Identity = id

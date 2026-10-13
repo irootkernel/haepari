@@ -55,6 +55,8 @@ var _ = ginkgo.Describe("Task017DoctorCLI", ginkgo.Label("unit"), func() {
 		gomega.Expect(json.Unmarshal(response.Data, &help)).To(gomega.Succeed())
 		gomega.Expect(help.Commands).To(gomega.ContainElement(commandHelp{"doctor", "doctor --resource <id> --json"}))
 		gomega.Expect(help.Schemas).To(gomega.ContainElement("haepari.doctor/v1"))
+		gomega.Expect(help.Commands).To(gomega.ContainElement(commandHelp{"manual complete", "manual complete <job-id> --input <json> --expected-revision <n> --json"}))
+		gomega.Expect(help.Schemas).To(gomega.ContainElement("haepari.manual-result/v1"))
 	})
 })
 

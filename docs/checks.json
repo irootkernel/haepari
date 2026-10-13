@@ -64,10 +64,10 @@
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 79,
+    "markdown_documents": 80,
     "json_templates": 12,
     "producer_request_drafts": 9,
-    "relative_links_checked": 669
+    "relative_links_checked": 675
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",

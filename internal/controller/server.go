@@ -140,6 +140,7 @@ func reject(w http.ResponseWriter, op string, err error) {
 		var availability *managed.AvailabilityRefusal
 		var readiness *localReadinessRefusal
 		var power *managed.PowerRecoverySelectionRefusal
+		var manual *managed.ManualCompletionRefusal
 		switch {
 		case errors.As(err, &availability):
 			message = availability.Error()
@@ -147,7 +148,16 @@ func reject(w http.ResponseWriter, op string, err error) {
 			message = readiness.Error()
 		case errors.As(err, &power):
 			message = power.Error()
+		case errors.As(err, &manual):
+			message = manual.Error()
 		}
+	}
+	var manualValidation *managed.ManualResultValidationError
+	var manualScenario *managed.ManualScenarioDocumentError
+	if (code == "INVALID_REQUEST" || code == "UNSUPPORTED") && errors.As(err, &manualValidation) {
+		message = manualValidation.Error()
+	} else if code == "INVALID_REQUEST" && errors.As(err, &manualScenario) {
+		message = manualScenario.Error()
 	}
 	send(w, status, op, nil, &responseError{Code: code, Message: message, Retry: retry})
 }
@@ -156,6 +166,7 @@ func (s *runtimeServer) routes() http.Handler {
 	mux.HandleFunc("GET /v1/hello", func(w http.ResponseWriter, r *http.Request) {
 		send(w, 200, "hello", map[string]any{"protocol": protocol, "protocol_version": 1, "capabilities": managed.Capabilities(), "installation_id": s.installationID()}, nil)
 	})
+	mux.HandleFunc("POST /v1/jobs/{id}/manual/complete", s.manualComplete)
 	mux.HandleFunc("POST /v1/resources", s.register)
 	mux.HandleFunc("GET /v1/resources", s.resourcesList)
 	mux.HandleFunc("GET /v1/jobs", s.jobsList)
@@ -347,11 +358,23 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		reject(w, "submit", err)
 		return
 	}
-	// Automatic development Jobs dispatch through their registered backend.
+	// Automatic and manual development Jobs use their registered backend.
 	// A VM never enters the host-local workload path.
-	if (resource.Kind != "local" && resource.Kind != "utm-macos") || job.Mode != "auto" || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 {
+	if (resource.Kind != "local" && resource.Kind != "utm-macos") || (job.Mode != "auto" && job.Mode != "manual") || job.Provenance.EvidenceClass != "development" || len(job.Input.SelectedFiles) == 0 {
 		reject(w, "submit", managed.ErrUnsupported)
 		return
+	}
+	if job.Mode == "manual" {
+		selected := false
+		for _, name := range job.Input.SelectedFiles {
+			if name == job.Manual.ScenarioDocument {
+				selected = true
+			}
+		}
+		if !selected {
+			reject(w, "submit", &managed.ManualScenarioDocumentError{})
+			return
+		}
 	}
 	sealed, err := s.store.Seal(r.Context(), job.Input.Root, job.Input.SelectedFiles, snapshot.Provenance{EvidenceClass: job.Provenance.EvidenceClass})
 	if err != nil {

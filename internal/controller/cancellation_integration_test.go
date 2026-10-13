@@ -28,6 +28,10 @@ func cancellationRuntime(t ginkgo.GinkgoTInterface, script string, options ...fu
 }
 
 func cancellationRuntimeKind(t ginkgo.GinkgoTInterface, script, kind string, options ...func(*managed.JobSpec)) (*sql.DB, *runtimeServer, managed.Receipt, managed.JobSpec, string) {
+	return cancellationRuntimeJobKind(t, script, kind, "cancel-job", options...)
+}
+
+func cancellationRuntimeJobKind(t ginkgo.GinkgoTInterface, script, kind, jobID string, options ...func(*managed.JobSpec)) (*sql.DB, *runtimeServer, managed.Receipt, managed.JobSpec, string) {
 	t.Helper()
 	root, err := state.Resolve(filepath.Join(t.TempDir(), "state"))
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -63,7 +67,7 @@ func cancellationRuntimeKind(t ginkgo.GinkgoTInterface, script, kind string, opt
 		option(&job)
 	}
 	raw, _ = json.Marshal(job)
-	admitted, err := l.AdmitSealed(raw, job.Input.InventoryDigest, sealed.ObjectID, "cancel-key", "cancel-job")
+	admitted, err := l.AdmitSealed(raw, job.Input.InventoryDigest, sealed.ObjectID, "cancel-key", jobID)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	reserve := managed.ReserveRequest{JobID: admitted.JobID, ExpectedJobRevision: admitted.JobRevision, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "reserve-cancel"}
 	if kind == "utm-macos" {

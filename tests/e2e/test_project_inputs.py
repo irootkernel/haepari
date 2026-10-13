@@ -145,6 +145,7 @@ def test_invalid_recipe_uses_refusal(project_root, changes):
 
 
 @pytest.mark.parametrize("manual", [None, "not-a-mapping", {"scenario_document": "../outside", "required_scenarios": ["one"]},
+                                      {"scenario_document": "scenarios/not-selected.md", "required_scenarios": ["one"]},
                                       {"scenario_document": "scenarios/check.md", "required_scenarios": []},
                                       {"scenario_document": "scenarios/check.md", "required_scenarios": ["one", "one"]},
                                       {"scenario_document": "scenarios/check.md", "required_scenarios": ["invalid id"]}])
@@ -162,6 +163,8 @@ def test_manual_recipe_refuses_without_admission(project_root, manual):
         run = project_root / "invalid-manual"
         result = host(project_root, env, run, mode="manual")
         assert result.returncode == 2 and not (run / "run.json").exists() and not (run / "bundle").exists()
+        if isinstance(manual, dict) and manual.get("scenario_document") == "scenarios/not-selected.md":
+            assert "manual.scenario_document" in result.stderr and "input.selected_files" in result.stderr
         assert not owned
         assert _response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"] == []
 

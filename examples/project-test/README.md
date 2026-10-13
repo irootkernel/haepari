@@ -43,9 +43,32 @@ environment. The sibling stdlib `haepari_inputs.py` module supplies reusable
 `capture_inputs`, `tree_digest` and `job_spec` helpers; keep it beside the caller. `SUITE=all` runs only those declared suites, serially, on the same
 frozen bundle and reports skipped suites after a non-passing result. The sample
 declares only `regression`; installation and migration recipes are not required.
-`MODE=auto|manual` is independent of the suite. Manual spec preparation is
-available here; end-to-end manual execution is delivered by TASK-019. Until then,
-the existing controller refuses manual admission rather than reporting PASS.
+`MODE=auto|manual` is independent of the suite. Manual Jobs run the declared
+optional setup and workload smoke within the prepare budget, then hold capacity
+in `awaiting_manual`. Smoke success never supplies a human PASS. The wrapper may
+report PENDING while the original Job remains occupied. Follow the sealed
+scenario document and submit the closed `haepari.manual-result/v1` record with
+`haepari manual complete <job-id> --input <record.json> --expected-revision <n> --json`.
+The `manual_preparation_stopped` event's `workspace` identifies the sealed
+workspace for the hands-on check: a host path for local Jobs and a guest path
+for VM Jobs. Use `haepari events <job-id> --json` to read it.
+Use `installation_id` from doctor. Map the admission/inspection receipt's
+`environment_profile_id` and `environment_profile_digest` to the record's
+`profile_id` and `profile_digest`, respectively. Use
+the current awaiting Job revision and every required scenario ID. Each pass/fail
+needs consumer evidence references; `unobserved` is explicit. Haepari records
+these assertions without interpreting product behavior. Unobserved checks yield
+INCOMPLETE. A fully observed failed check yields FAIL when required evidence is
+complete and cleanup is verified; missing evidence or unverified cleanup yields
+INCOMPLETE while retaining the failure fact.
+
+The exact same record and expected revision replay the original completion
+receipt, even after settlement/restart. A changed record conflicts. Reconnect
+with the saved run directory to report the original result; do not resubmit as a
+new Job. Caller exit and wait expiry do not abandon a manual Job. Explicit
+cancellation or the original manual deadline retires completion authority and
+starts owned collection/cleanup. Restart never renews that deadline or repeats
+setup. Unknown native/filesystem termination keeps reconciliation and occupancy.
 
 `doctor --resource <id> --json` observes the selected installation and resource.
 For a VM it checks the Aqua domain, existing running identity, individual DHCP
