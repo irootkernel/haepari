@@ -67,7 +67,7 @@ Each machine error code maps to one CLI exit:
 | Error code | Meaning | CLI exit |
 | --- | --- | --- |
 | `INVALID_REQUEST` | Malformed, unsafe or placeholder input | 2 |
-| `CONFLICT` | Same request key with a different submitted digest, or a conflicting mutation replay | 2 |
+| `CONFLICT` | Different submitted digest under an existing key; changed surviving input or invalid inventory on replay; changed input during sealing or declared/sealed inventory mismatch before admission (no key consumed); or conflicting mutation replay | 2 |
 | `UNSUPPORTED` | Unsupported mode, schema version, platform or backend, including external execution | 2 |
 | `PREREQUISITE_UNAVAILABLE` | An input or backend prerequisite is unavailable, including VM UUID/pin verification at registration or update; for Job admission, no admission or key consumption occurs | 2 |
 | `NESTED_ACQUISITION_REJECTED` | Submission (including `run` admission) or advisory lock acquisition from a caller whose parent context occupies capacity | 2 |
