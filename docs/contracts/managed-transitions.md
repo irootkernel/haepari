@@ -25,7 +25,7 @@ The capacity delta is `(resource occupancy, global occupancy)`.
 
 | Previous state | Event | Guard and identity/revision | Next state | Delta | Durable record | Replay |
 | --- | --- | --- | --- | --- | --- | --- |
-| absent | submit | Valid schema, sealed input, unique request key and canonical submitted digest; no occupying parent context | queued | (0,0) | Admission, input manifest, key/digest, resolved identities, deadline, event | Same key and submitted digest returns the original ID; a different digest conflicts |
+| absent | submit | Valid schema, sealed input, unique request key and canonical submitted digest; no occupying parent context | queued | (0,0) | Admission, input manifest, key/digest, resolved identities, deadline, event | Same key and submitted digest returns the original ID when surviving selected input matches the sealed inventory; missing selected paths are permitted; a different digest, changed survivor or invalid replay-comparison input conflicts without replacing the bound admission |
 | absent | reject | Invalid input, unsupported mode, nested parent context or an immutable prerequisite unavailable at admission | absent | (0,0) | Bounded diagnostic only; no admission; the request key is not consumed | A retry with the same key is validated again and can be admitted once the cause is gone |
 | queued | cancel | J; cancellation wins before reservation | finished | (0,0) | CANCELLED result and event | Terminal receipt |
 | queued | queue deadline | J; persisted UTC deadline reached, no reservation | finished | (0,0) | INCOMPLETE result, reason `queue_expired` | Terminal receipt |

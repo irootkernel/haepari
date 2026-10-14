@@ -6,8 +6,8 @@ This document owns small follow-up checks intentionally postponed from current w
 
 - **Disposition:** Small independent maintenance follow-up under the EPIC-005 delegated candidate; no current correctness or release obligation is deferred.
 - **Owner:** Haepari maintainer, with TASK-017 owning the current selected-resource diagnostic behavior.
-- **Reason:** Doctor deliberately uses a finite connection deadline and an actionable JSON prerequisite envelope, while existing CLI commands retain their current connection/error policy. All still use the same native client transport. Native DHCP selection in doctor, VM dispatch and guest attestation currently uses the same injected source or read-only no-follow file open. These small repeated policy boundaries agree today; changing only one later can cause drift.
-- **Re-entry condition:** Before changing common CLI connection/context handling, the native DHCP path/open guards or shared Aqua/lean pinned-SSH diagnostic policy, consider one shared policy helper and qualify every caller. No new roadmap identity, loader policy, host effect or compatibility surface is adopted by this entry.
+- **Reason:** Doctor deliberately uses a finite connection deadline and an actionable JSON prerequisite envelope, while existing CLI commands retain their current connection/error policy. All still use the same native client transport. Native DHCP selection in doctor, VM dispatch and guest attestation currently uses the same injected source or read-only no-follow file open. The doctor CLI, controller and pinned-SSH probes also use separate finite caps of 20, 15 and 15 seconds. Each child inherits the earlier parent deadline; the current caps and cancellation fixtures agree. These repeated policy boundaries agree today; changing only one later can cause drift.
+- **Re-entry condition:** Before changing diagnostic deadline values or common CLI connection/context handling, the native DHCP path/open guards or shared Aqua/lean pinned-SSH diagnostic policy, consider one shared policy helper and qualify every caller. No new roadmap identity, loader policy, host effect or compatibility surface is adopted by this entry.
 - **Verification if selected:** Preserve direct doctor usage/error/gap exits and actionable envelopes, existing CLI context errors and timeout semantics, no-follow lease reads, dispatch/attestation identity guards and no-effect diagnostic observations. Run affected CLI, UTM and controller fixtures; no live VM campaign is implied.
 
 ## DF-006: Diagnostic stage naming and residual coverage
@@ -25,6 +25,46 @@ This document owns small follow-up checks intentionally postponed from current w
 - **Reason:** The small Make recipe interpolates caller-owned variables into shell text. The same user already owns the shell and recipes; this is not a multi-user or untrusted-CI guarantee.
 - **Re-entry condition:** Before deriving Make variables from lower-trust or machine-supplied input, define the supported literal-value/escaping contract and consider passing values through exported environment variables. This entry adopts no CI service or new backend scope.
 - **Verification if selected:** Exercise unusual literal path/variable characters as data without unintended shell evaluation, preserving the public CLI flow and original keys. Continue selecting the documented explicit absolute CLI path.
+
+## DF-008: Manual preparation step vocabulary
+
+- **Disposition:** Small independent future maintenance under the EPIC-005 delegated candidate; no current acceptance or lifecycle obligation is deferred.
+- **Owner:** Haepari maintainer, with TASK-019 owning the current manual preparation observation contract.
+- **Reason:** The completed local-phase and explicit manual-observation validators both accept only `vm_start`, `ssh_ready` and `transfer`, at most three unique steps with nonnegative durations. They agree today. Their separate phase, backend, identity and replay guards remain intentional; a later vocabulary or bound change can make the shared part drift.
+- **Re-entry condition:** Before changing the preparation-step vocabulary, count or duration rules, consider one shared validator for those rules and qualify both callers. Preserve their distinct lifecycle fences; this entry adopts no public schema, deadline renewal or workload effect.
+- **Verification if selected:** Preserve original preparation and await deadlines, exact replay and stale/conflicting observation refusal, and durable retirement before owned collection or cleanup. Run the affected phase and manual-ledger fixtures.
+
+## DF-009: Wait and saved-submission recovery guidance
+
+- **Disposition:** Small independent future guidance follow-up under the EPIC-005 delegated candidate; no current identity, admission or verdict obligation is deferred.
+- **Owner:** Haepari maintainer, with TASK-006 owning admission and replay semantics, TASK-008 owning bounded wait and TASK-017 owning the project wrapper's saved-request recovery guidance.
+- **Reason:** A wait timeout ends observation with exit 5 while the same Job continues; the contract already directs callers to wait again using its printed ID, and the wrapper retains a PENDING observation. The short error could state that continuation and connection-failure distinction more directly. The wrapper also preserves its original key after a refusal; its CONFLICT guidance could distinguish a definitive pre-admission profile/digest refusal from uncertain or already-bound admission. Current refusal cannot create aggregate PASS or silently replace a Job.
+- **Re-entry condition:** Before changing wait error wording, caller timeout defaults or saved-submission refusal/reconnect guidance, consider explicit same-ID continuation and definitive-refusal explanations. Keep the original run for inspection; uncertain or committed admission must retain its original spec and key. Do not infer permission to resubmit with a new key.
+- **Verification if selected:** Preserve exit 5/PENDING, exit 6 uncertainty, terminal verdicts, saved spec/key/Job identity and exact replay. Exercise current wait-again and pre-admission versus uncertain-response paths without duplicate workload execution or automatic cancellation.
+
+## DF-010: Remaining project aggregate verdict cases
+
+- **Disposition:** Small independent future regression coverage; no current required observation or truthful-reporting obligation is deferred.
+- **Owner:** Haepari maintainer, with TASK-017 owning the project caller's aggregate projection.
+- **Reason:** The wrapper currently maps INCOMPLETE to exit 3 and CANCELLED to exit 4 and refuses a verdict/exit mismatch. Project-caller assertions cover PASS, FAIL, PENDING and UNKNOWN; native and public CLI manual assertions cover INCOMPLETE and CANCELLED. A future change to the wrapper map could drift without an explicit project aggregate case for those last two verdicts.
+- **Re-entry condition:** Before changing the wrapper verdict/exit map or extending its manual aggregate fixtures, consider one INCOMPLETE and one CANCELLED project-caller case. This entry does not weaken the current truthful aggregate or original-identity contract.
+- **Verification if selected:** Assert aggregate status, exit 3 or 4, the original saved Job ID and absence of aggregate PASS, without another workload admission or automatic cancellation.
+
+## DF-011: Manual evidence labels after retained reboot recovery
+
+- **Disposition:** Small independent future regression coverage; current manual evidence projection and optional reboot qualification remain separate.
+- **Owner:** Haepari maintainer, with TASK-019 owning manual observation projection and TASK-036 owning operational recovery.
+- **Reason:** Reboot-retained collection currently passes its existing `guest_reboot_evidence_retained` gap through `manualCollectionPhase`, which adds the applicable `manual_observation_unobserved` gap without erasing physical evidence. Ordinary manual physical-evidence fixtures cover that distinction, while the reboot-retained fixtures use automatic Jobs. A future edit of this recovery hook could lose the manual label without changing the existing automatic cases.
+- **Re-entry condition:** Before changing retained reboot collection or selecting a focused manual recovery fixture, consider an isolated fake-native manual case. A real VM reboot campaign remains optional under ADR-0020 and needs its own applicable operating authority; this entry creates no release gate or VM effect.
+- **Verification if selected:** Preserve both applicable evidence gaps, a verdict other than PASS, the original Job/run identities and quarantine, and no second guest execution. Keep original deadlines and safe cleanup guards.
+
+## DF-012: First-submit inventory-mismatch assertion
+
+- **Disposition:** Small independent future regression coverage; the current pre-admission comparison and no-key-consumption rule remain implemented and qualified.
+- **Owner:** Haepari maintainer, with TASK-006 owning durable admission and input identity.
+- **Reason:** The controller currently compares the newly sealed tree with the declared inventory digest before creating a Job ID or admitting the key. Existing fixtures cover changed survivors, sealing changes, error mapping and other pre-admission failures, while their ordinary submit inputs use matching digests. A focused new-key mismatch assertion would make a future change to this separate comparison easier to detect.
+- **Re-entry condition:** Before changing the first-submit inventory comparison or its error/admission ordering, consider one otherwise valid Unix submit with a different 64-character inventory digest. This entry does not defer a current code correction, required operating-loop observation or documentation check.
+- **Verification if selected:** Expect public CONFLICT, no admission row for the key and no workload execution. Preserve the separate invalid first-input, changed-survivor and corrupt-retained-inventory classifications.
 
 Master approved the original TASK-016 deferrals on 2026-10-05. On 2026-10-12, Design Revision 3.5 removed DF-001–003 from TASK-027 obligations and kept DF-004 optional under [ADR-0020](architecture-decision-records/0020-local-development-scope.md). All four are unobserved optional hardening, not passing evidence or v0.1.0 blockers. Their historical TASK-016 acceptance and uncertainty are unchanged.
 

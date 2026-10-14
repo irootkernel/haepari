@@ -184,8 +184,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 49100,
-      "sha256": "fe88a604cca742590350dfaf1b9608ba06bdcf98e19225e1ad8b9974bfd11da7"
+      "bytes": 49343,
+      "sha256": "72e8dab8ffdec8075b4bfe7a30ac17ebf411b8e4dc5875d0cc028442d2dff0ff"
     },
     {
       "path": "contracts/configuration.md",
@@ -204,8 +204,8 @@
     },
     {
       "path": "contracts/managed-transitions.md",
-      "bytes": 36819,
-      "sha256": "796ca7b60de26b1f273e8a82d80e0f2f235f5115dc586fc8c1bb9f07d840af81"
+      "bytes": 37007,
+      "sha256": "32df6faf9cc1699336bd2e5fe89f7d3b1d173c954d8fcf2268540ef82ac85141"
     },
     {
       "path": "contracts/resource-and-runner.md",
@@ -214,8 +214,8 @@
     },
     {
       "path": "deferred-feedback.md",
-      "bytes": 11857,
-      "sha256": "c296f7f73205739f1aef1bcffa6a14dbb1a6c416fa7fa337e72d0954181e2154"
+      "bytes": 18696,
+      "sha256": "1027937c3ac670b91d71ddbf49d9de9dd869ae00e4fa1707afaa30a7ac317de2"
     },
     {
       "path": "examples/Makefile.example",
