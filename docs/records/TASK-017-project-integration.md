@@ -20,9 +20,9 @@ paths or raw SSH output. A missing controller retains its actionable explanation
 Non-verdict observation errors use `UNKNOWN`; wait expiry uses `PENDING`. Neither
 claims a terminal INCOMPLETE result or cancels the original Job.
 
-Mode is independent of suite. This candidate constructs manual specs using the
-existing format, but does not claim manual controller admission; TASK-019 owns
-that implementation. TASK-018 owns reusable generic payload helpers and expanded
+Mode is independent of suite. At TASK-017 delivery, the candidate constructed
+manual specs using the existing format without manual controller admission.
+TASK-019 subsequently added that implementation. TASK-018 owns reusable generic payload helpers and expanded
 opaque-profile verification. No installation inventory or host deployment is
 required by this sample.
 
@@ -36,6 +36,11 @@ Observed on macOS arm64 during implementation from baseline
 | Unit suites in `internal/utm` and `cmd/haepari`, race enabled | Ready, stopped VM, expired individual lease, wrong challenge/MAC/boot/platform, transport loss, bounded deadline and stopped-during-probe; strict SSH pins, malformed/oversized identity and SSH stderr refusal, invalid specs/missing pins without guest access; direct doctor usage, absent-controller envelope without state creation and help/schema advertisement. |
 | Integration-tagged `Task017ResourceDoctor|Task017NativeGuestProject` in `internal/controller`, race enabled | Local/missing prerequisite projections without ledger mutation; unsafe local root, advisory resource and configuration-changing-during-probe refusal; unavailable Aqua/private mapping, UTM status and DHCP read refusal; failed post-probe storage read remains distinct from configuration change; actual host wrapper and guest script through the fake UTM/SSH adapter and native guest command, PASS/native 0 and meaningful FAIL/native 7, same IDs on replay, verified owned-directory cleanup with fenced control metadata retained. |
 | `uv run --locked --group dev python -m pytest -q tests/e2e/test_project_cli.py` | Fourteen public CLI scenarios: success/failure/all aggregate and exact replay, queued sealed-input stability, ordinary test independence/guest refusal, missing controller/resource refusal, lost suite membership refuses PASS, manual spec plus truthful unsupported admission, tampered spec/foreign installation refusal, undeclared/nested/private/concurrent caller refusal, actual wait expiry then original-Job completion, and test-owned peer observation faults that preserve identity and report UNKNOWN without rewriting the native PASS; actual Make default/explicit mode-suite and spaced-path forwarding, lost admission reply then deduplicated original-key recovery with one workload, malformed config/peer refusal, selected symlink/hardlink/FIFO rejection and malformed guest-context refusal; invalid JSON and unsupported-shape run records retain explicit recovery guidance, actual 25-second caller expiry recovers the original admission, actual 20-second doctor connection deadline bounds an unresponsive private fault peer, and a coordinated real file write triggers the metadata-change capture refusal. |
+
+The table records the original TASK-017 delivery observations. The current
+`test_reference_project_manual_spec_and_direct_doctor_contract` instead verifies
+manual admission, PENDING while awaiting observation, and PASS after synthetic
+completion; TASK-019 added that behavior and TASK-020 verifies the combined loop.
 
 The focused checks are reproducible from [TESTING.md](../../TESTING.md). Native
 Gaori results remain private; they are not promoted into tracked runtime logs.

@@ -18,7 +18,7 @@ This contract describes managed Jobs. TASK-033 implements `resource register`, `
 | `haepari resources list --json` | List registered resources, availability, occupancy and configuration revisions. |
 | `haepari resource inspect <id> --json` | Return revision, identity, configuration digest, availability, and occupancy. |
 | `haepari resource update --file <lock-or-vm-json> --expected-revision <n> [--expected-availability-revision <n> (required for VM)] --json` | Validate a successor revision for a lock or VM registration; local successor updates are unsupported at this checkpoint. Capacity/identity changes obey the configuration contract. VM updates fence configuration and availability and verify the successor UUID and pin. |
-| `haepari resource remove <lock-id> --expected-revision <n>` | Remove only an idle, unreferenced advisory lock. Local and VM resource removal remain unsupported; no VM-package deletion. |
+| `haepari resource remove <lock-id> --expected-revision <n> --json` | Remove only an idle, unreferenced advisory lock. Local and VM resource removal remain unsupported; no VM-package deletion. |
 | `haepari resource pause <id> --expected-revision <n>` | Stop future dispatch without killing active work. |
 | `haepari resource resume <id> --expected-revision <n>` | Resume a paused resource after current readiness verification; cannot clear quarantine or recover unknown effects. |
 | `haepari resource recover <id> --plan --json` | Read-only exact resource/job ownership, adapter intent progress, observations, uncertainty and evidence loss. Occupied resources return `RECOVERY_BLOCKED`; unsupported backend observations produce no apply token. |

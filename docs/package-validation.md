@@ -1,6 +1,6 @@
 # Package validation: Design Revision 3.5
 
-Date: 2026-10-14. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
+Date: 2026-10-15. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
 
 The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks the package. `python3 docs/tools/validate_docs.py --write` regenerates checks.json and MANIFEST.json; a second non-writing run verifies their contents. Offline regression checks run through `make test-qualification` alongside the existing campaign-driver fixtures.
 

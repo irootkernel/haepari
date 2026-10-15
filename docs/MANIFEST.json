@@ -175,7 +175,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "2c3837c5f22fb999c2934adec3c5174b99c364722410142efafd3be4c93b9091"
+      "sha256": "8d2b6d3676d6efa2f5d84eb198f1273de7d25048efc75ebc9a08758d44f7bfeb"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -184,8 +184,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 49343,
-      "sha256": "72e8dab8ffdec8075b4bfe7a30ac17ebf411b8e4dc5875d0cc028442d2dff0ff"
+      "bytes": 49350,
+      "sha256": "6e26a9cad77023d3ebaf77c579cb38800787e13f5f272a2a75ae8eb3eec3e898"
     },
     {
       "path": "contracts/configuration.md",
@@ -320,7 +320,7 @@
     {
       "path": "package-validation.md",
       "bytes": 8635,
-      "sha256": "b52dd007ffd11a89ad71794feb3b2b79dafd6cebc4a0794d333baf1427bc0273"
+      "sha256": "4940c581fd122c34d307f708058dc3e21977420cc869fb375af3cecff4be47cb"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -354,8 +354,8 @@
     },
     {
       "path": "records/TASK-017-project-integration.md",
-      "bytes": 7022,
-      "sha256": "a23708f6ea7f9e68a0a1c8452a5c5417f8b2b0a9a039ab04f801e905f747ebe5"
+      "bytes": 7364,
+      "sha256": "cd5a217b70fc824f7bb62c388ea5d51aaf3d878574b9068b12491aa3f2c250da"
     },
     {
       "path": "records/TASK-018-opaque-inputs.md",
@@ -364,8 +364,8 @@
     },
     {
       "path": "records/TASK-019-manual-jobs.md",
-      "bytes": 4392,
-      "sha256": "8a3516b6402367af1a11cbf6209982e86513f1addbb012fd350fbbad883276d0"
+      "bytes": 5430,
+      "sha256": "6c7fa18a24f0c46813476fb7186a741be93d5254155e34357d9440a164b85528"
     },
     {
       "path": "records/TASK-020-consumer-freeze.md",
@@ -399,8 +399,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 15983,
-      "sha256": "3365a5f05aa0a2ca0ec5225049b0b34fec77283f539d212eff3f08278d84d232"
+      "bytes": 15980,
+      "sha256": "8da8ed355c00469ccdbe536a858db1ac311571f7e0f368204b5799c06895c87e"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -425,7 +425,7 @@
     {
       "path": "roadmap/EPIC-005.md",
       "bytes": 7776,
-      "sha256": "051e5515c458bd0619da721059b5d969eb155a91f9fbf67bfbf56e144874870e"
+      "sha256": "76f0e808fc79d8410fc9552e4c60c61069a25414241d640f1045ad7f6f152d78"
     },
     {
       "path": "roadmap/EPIC-006.md",

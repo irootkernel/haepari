@@ -33,7 +33,7 @@ Lifecycle status vocabulary:
 | [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Accepted |
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Accepted |
 | [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Accepted |
-| [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | In progress |
+| [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Accepted |
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Planned |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Planned |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |

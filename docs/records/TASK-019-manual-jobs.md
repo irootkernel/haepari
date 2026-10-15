@@ -63,3 +63,20 @@ belongs to [the roadmap](../roadmap.md).
 No actual human product pass, live VM manual release observation, provider test
 workload, installation or service activation is claimed. TASK-020 combines and
 freezes F3; TASK-027 owns the packaged candidate's running-VM manual observation.
+
+## Recovery follow-up
+
+In-flight VM preparation recovery now consumes the authenticated guest's
+supervisor liveness instead of interpreting its process identity on the host.
+False or missing guest proof still blocks recovery; local preparation retains
+its native host identity check. Explicit manual recovery preserves the public
+request key and client digest through the same durable recovery transaction,
+so its original receipt remains replayable after completion and controller-key
+rotation. Automatic startup retains its internally derived recovery identity.
+
+The corresponding integration fixtures cover local and fake/native VM public
+recovery, exact and conflicting replay, one preparation/run, original deadlines
+and verified cleanup. The live-preparation fixture supplies a scripted guest
+supervisor identity absent on the host and checks unchanged recovery state for
+false or unknown liveness. These are isolated regression checks, not a real VM
+or human product observation. Existing phase timing semantics remain unchanged.

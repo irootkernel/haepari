@@ -238,6 +238,16 @@ The integration gate emits a Ginkgo progress report for a test that runs longer
 than one minute, then once per minute. Reports add diagnostic stacks to retained
 check evidence; they do not alter test deadlines, runtime guards or acceptance.
 
+`Task019ManualRemotePreparationRecovery` uses native guest preparation with a
+scripted remote supervisor identity absent from the host. Authenticated guest
+liveness permits original-run reattachment; false or unknown proof preserves the
+entire recovery snapshot. It retains the original preparation deadline and one
+prepare/start attempt without operating a real VM or native remote supervisor.
+`Task019ManualPublicRecoveryReplay` applies the actual HTTP recovery plan for
+local and fake/native VM manual Jobs. It checks the original receipt after human
+completion and controller-key rotation, conflicting replay, unchanged mutation,
+event and run counts, one preparation and verified cleanup.
+
 ## Combined consumer loop and F3
 
 `Task020CombinedConsumer` extends the existing native guest project fixture
