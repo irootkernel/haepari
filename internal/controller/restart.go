@@ -179,7 +179,7 @@ func (s *runtimeServer) recoverInterrupted(jobID string, automatic bool, attesta
 	if snapshot.Spec.Mode == "manual" {
 		m, err := s.ledger.ManualSession(jobID)
 		if err == nil && m.Outcome == nil && attestation == nil && snapshot.Attestation == nil {
-			return s.recoverManual(snapshot, m, automatic)
+			return s.recoverManual(snapshot, m, automatic, key, clientDigest)
 		}
 		if err != nil && !errors.Is(err, managed.ErrNotFound) {
 			return err

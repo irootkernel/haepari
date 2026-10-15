@@ -13,7 +13,7 @@ import (
 
 // Manual recovery observes the sole original preparation. It never starts a
 // second setup/smoke sequence or converts its native success into human PASS.
-func (s *runtimeServer) recoverManual(snapshot managed.RecoverySnapshot, m managed.ManualSession, automatic bool) error {
+func (s *runtimeServer) recoverManual(snapshot managed.RecoverySnapshot, m managed.ManualSession, automatic bool, key, clientDigest string) error {
 	if snapshot.Receipt.JobState != "reconciling" || m.Legacy || m.Identity != snapshot.Identity || s.jobWorkerAlive(m.Identity.JobID) {
 		return managed.ErrBlocked
 	}
@@ -28,6 +28,7 @@ func (s *runtimeServer) recoverManual(snapshot managed.RecoverySnapshot, m manag
 	var request runner.Request
 	var view runner.Observation
 	var guest *runner.GuestRequest
+	var guestSupervisorAlive *bool
 	workspace := filepath.Join(s.root.Path, "jobs", m.Identity.JobID, "workspace")
 	if snapshot.Resource.Kind == "utm-macos" {
 		q, facts, err := s.observeVMRecovery(snapshot)
@@ -37,6 +38,7 @@ func (s *runtimeServer) recoverManual(snapshot managed.RecoverySnapshot, m manag
 		request = q.Request
 		view = *facts.View
 		guest = &q
+		guestSupervisorAlive = facts.SupervisorAlive
 		workspace = filepath.Join(q.JobRoot, m.Identity.JobID, "workspace")
 	} else if snapshot.Resource.Kind == "local" {
 		owned, err := s.inspectRecoveryRoot(m.Identity)
@@ -62,9 +64,15 @@ func (s *runtimeServer) recoverManual(snapshot managed.RecoverySnapshot, m manag
 		if view.Intent == nil {
 			return managed.ErrBlocked
 		}
-		owner, err := platform.ObserveProcess(view.Intent.Supervisor.PID)
-		if err != nil || owner.Zombie || owner.Identity != view.Intent.Supervisor {
-			return managed.ErrBlocked
+		if guest != nil {
+			if guestSupervisorAlive == nil || !*guestSupervisorAlive {
+				return managed.ErrBlocked
+			}
+		} else {
+			owner, err := platform.ObserveProcess(view.Intent.Supervisor.PID)
+			if err != nil || owner.Zombie || owner.Identity != view.Intent.Supervisor {
+				return managed.ErrBlocked
+			}
 		}
 	}
 	for _, item := range []struct {
@@ -98,6 +106,9 @@ func (s *runtimeServer) recoverManual(snapshot managed.RecoverySnapshot, m manag
 	}
 	evidence := recoveryObservation("original-manual-preparation", map[string]any{"session": m, "request": request, "receipts": view}, "job:"+m.Identity.JobID)
 	q := managed.JobRecoveryRequest{Identity: m.Identity, SnapshotDigest: managed.RecoveryDigest(fresh), MutationKey: "manual-restart-" + fresh.EventsDigest[7:39], Automatic: automatic, Action: "reattach", NextState: next, Evidence: evidence}
+	if key != "" {
+		q.MutationKey, q.ClientDigest = key, clientDigest
+	}
 	r, err := s.ledger.BeginJobRecovery(q)
 	if err != nil {
 		s.unregisterLocal(c)
