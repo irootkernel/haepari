@@ -95,8 +95,16 @@ func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.Jo
 			result.Reason = "cleanup_deadline"
 		}
 	}
-	if collect.EvidenceCompleteness != "complete" {
-		result.Reason = "evidence_retained"
+	// A manual-only observation gap leaves physical collection complete.
+	// Fresh settlement uses that physical fact and does not call it retained.
+	if physicalCollectionPhase(job, collect).EvidenceCompleteness != "complete" {
+		// Positive absence applies only after cleanup completes. Incomplete
+		// cleanup keeps evidence_retained, or cleanup_deadline when already set.
+		if reason == "" && cleanup.Outcome == "complete" && requiredOutputAbsence(job, collect) {
+			result.Reason = "required_output_absent"
+		} else if result.Reason != "cleanup_deadline" {
+			result.Reason = "evidence_retained"
+		}
 	}
 	if result.Reason == "" && out.WorkloadOutcome == "timed_out" {
 		result.Reason = "run_deadline"

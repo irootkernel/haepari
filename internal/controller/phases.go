@@ -276,9 +276,12 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 		result.Reason = "cleanup_deadline"
 	}
 	if !collected.complete {
-		result.Reason = "evidence_retained"
-		if safeCleanup {
+		// Positive absence is a completed-cleanup label. Failed cleanup stays
+		// evidence_retained, and a late cleanup keeps cleanup_deadline.
+		if cleanupOutcome == "complete" && safeCleanup {
 			result.Reason = "required_output_absent"
+		} else if reason == "" && result.Reason != "cleanup_deadline" {
+			result.Reason = "evidence_retained"
 		}
 	}
 	return s.verifyLocalResult(c, result, false)

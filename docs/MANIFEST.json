@@ -175,7 +175,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "8d2b6d3676d6efa2f5d84eb198f1273de7d25048efc75ebc9a08758d44f7bfeb"
+      "sha256": "05263c47b73a9880aa113c824ffd26718bd5b7af672c3af7d5027d3a49adac58"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -390,7 +390,7 @@
     {
       "path": "requirements.md",
       "bytes": 35952,
-      "sha256": "6a1780df3a8b6bdc097c42805283055be0d7a5be868591cad0ebd5fef5330771"
+      "sha256": "d0e1ebe568382143fa643b37a9232256dd6b48b7204ddf5d6cebba970ea7a8b2"
     },
     {
       "path": "review-disposition.md",
@@ -399,8 +399,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 15980,
-      "sha256": "8da8ed355c00469ccdbe536a858db1ac311571f7e0f368204b5799c06895c87e"
+      "bytes": 15985,
+      "sha256": "851cebc94587d4739eb62d69afdaf46aea84a7f20e6d10cbaf3928e35ea8cefb"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -430,7 +430,7 @@
     {
       "path": "roadmap/EPIC-006.md",
       "bytes": 8405,
-      "sha256": "25bd8cd350b2be33db463d2b7377a3e8ba1a9ded91862d433809a82c3850ff0a"
+      "sha256": "c4368dc28cf37aff1b704e0c2916b4befe86938fb83cfdd9396f7791b9bce5b0"
     },
     {
       "path": "roadmap/EPIC-007.md",

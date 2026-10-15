@@ -37,3 +37,14 @@ func collectionAllowsCleanup(job managed.JobSpec, p managed.LocalPhase) bool {
 	}
 	return true
 }
+
+// requiredOutputAbsence is the partial-collection half of cleanup permission.
+// A complete collection, a manual-only gap, protected bytes, or an uncollected
+// name must not be labeled as positive absence.
+func requiredOutputAbsence(job managed.JobSpec, phase managed.LocalPhase) bool {
+	physical := physicalCollectionPhase(job, phase)
+	if physical.EvidenceCompleteness == "complete" {
+		return false
+	}
+	return collectionAllowsCleanup(job, phase)
+}

@@ -433,11 +433,13 @@ var _ = ginkgo.Describe("Task036OperationalRecovery", ginkgo.Label("integration"
 			gomega.Expect(err).To(gomega.HaveOccurred())
 			if schema == "haepari.job/v2" {
 				gomega.Expect(result.Schema).To(gomega.Equal("haepari.result/v2"))
+				gomega.Expect(result.Reason).To(gomega.Equal("required_output_absent"))
 				gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("verified")))
 				gomega.Expect(result.ResourceAvailability).To(gomega.Equal("available"))
 				gomega.Expect(result.EvidenceGaps).To(gomega.ContainElement(managed.EvidenceGap{Path: "results/output.txt", Reason: "required_output_absent"}))
 			} else {
 				gomega.Expect(result.Schema).To(gomega.Equal("haepari.result/v1"))
+				gomega.Expect(result.Reason).To(gomega.Equal("evidence_retained"))
 				gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("failed")))
 				gomega.Expect(result.ResourceAvailability).To(gomega.Equal("quarantined"))
 			}

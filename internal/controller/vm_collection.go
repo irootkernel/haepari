@@ -405,6 +405,7 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 			result.Reason = "cancel_before_start"
 		}
 	}
+	abortReason := ""
 	if c.manual {
 		m, err := s.ledger.ManualSession(c.identity.JobID)
 		if err != nil {
@@ -412,12 +413,20 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 		}
 		if m.AbortReason != "" {
 			result.Reason = m.AbortReason
+			abortReason = m.AbortReason
 		}
 	}
 	if cleanup.Outcome != "complete" {
 		result.CleanupOutcome = "failed"
 		result.ResourceAvailability = "quarantined"
 		result.Reason = "guest_evidence_retained"
+	}
+	// Fill absence or timeout only while no earlier reason is set. Manual abort,
+	// start failure, and guest retention therefore stay ahead of this projection.
+	if abortReason == "" && result.Reason == "" && requiredOutputAbsence(job, collect) {
+		result.Reason = "required_output_absent"
+	} else if abortReason == "" && result.Reason == "" && out.WorkloadOutcome == "timed_out" {
+		result.Reason = "run_deadline"
 	}
 	return s.verifyLocalResult(c, result, false)
 }

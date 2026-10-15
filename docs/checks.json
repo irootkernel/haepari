@@ -1,6 +1,6 @@
 {
   "design_revision": "3.5",
-  "validation_date": "2026-10-15",
+  "validation_date": "2026-10-16",
   "scope": "documentation only",
   "generator": "docs/tools/validate_docs.py",
   "document_checks": {

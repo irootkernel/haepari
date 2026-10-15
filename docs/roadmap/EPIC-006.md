@@ -11,23 +11,23 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-045`, `HP-REQ-046`.
 
 #### Implement
-- [ ] Cover mandatory failure invariants across admissions, leases, runners, events, manual state and settlement with deterministic, bounded local/fake-native fault fixtures.
-- [ ] Evaluate repeated settlement/receipt-import paths, filesystem durability primitives and test-only export/substitute paths identified by the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition). Consolidate only where a concrete invariant or drift justifies it; no universal backend abstraction is prescribed.
+- [x] Cover mandatory failure invariants across admissions, leases, runners, events, manual state and settlement with deterministic, bounded local/fake-native fault fixtures.
+- [x] Evaluate repeated settlement/receipt-import paths, filesystem durability primitives and test-only export/substitute paths identified by the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition). Consolidate only where a concrete invariant or drift justifies it; no universal backend abstraction is prescribed.
 
 #### Do not
-- [ ] Do not use sleeps alone as concurrency proof or rerun unknown external effects to make a flaky test pass.
+- [x] Do not use sleeps alone as concurrency proof or rerun unknown external effects to make a flaky test pass.
 
 #### Verify
-- [ ] Run managed capacity cases including nested acquisition at global limit one and multiple occupied slots, a nested caller's rejected blocking wait, independent resource progress with `global_limit` of at least two, and stale return races.
-- [ ] Run the advisory lock cases (V59–V64) under concurrent callers alongside managed jobs.
-- [ ] Map every mandatory row to assertions and review state after test-owned controller restart. Run extra stress only for a concrete remaining concurrency concern; no repeated live VM campaign is required.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Run managed capacity cases including nested acquisition at global limit one and multiple occupied slots, a nested caller's rejected blocking wait, independent resource progress with `global_limit` of at least two, and stale return races.
+- [x] Run the advisory lock cases (V59–V64) under concurrent callers alongside managed jobs.
+- [x] Map every mandatory row to assertions and review state after test-owned controller restart. Run extra stress only for a concrete remaining concurrency concern; no repeated live VM campaign is required.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-022
 

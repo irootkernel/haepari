@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/runner"
@@ -279,6 +281,78 @@ var _ = ginkgo.Describe("Task011Restart", ginkgo.Label("integration"), func() {
 		gomega.Expect(cmd.Process.Kill()).To(gomega.Succeed())
 		gomega.Expect(cmd.Wait()).To(gomega.HaveOccurred())
 		gomega.Expect(controllerOwnerStopped(p)).To(gomega.BeTrue())
+	})
+	ginkgo.It("retains occupancy when the native supervisor dies after spawn and before start", func() {
+		t := ginkgo.GinkgoT()
+		count := filepath.Join(t.TempDir(), "native-runs")
+		db, s, r, job, object := cancellationRuntime(t, `printf x >> "$COUNT"`, func(job *managed.JobSpec) {
+			job.Workload.Environment = map[string]string{"COUNT": count}
+			job.Deadlines.RunSeconds = 30
+		})
+		root := filepath.Join(s.root.Path, "jobs", r.JobID)
+		fault := filepath.Join(root, "after-spawn-fault")
+		t.Cleanup(func() { _ = os.Remove(fault) })
+		c, err := s.registerLocal(r)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		c.beforePhase = func(phase string) {
+			if phase == "ready" {
+				_ = os.MkdirAll(root, 0700)
+				_ = os.WriteFile(fault, []byte("after_spawn\n"), 0600)
+			}
+		}
+		done := make(chan error, 1)
+		go func() {
+			defer ginkgo.GinkgoRecover()
+			defer s.unregisterLocal(c)
+			err := s.executeLocalControlled(c, job, object, time.Now().Add(5*time.Second))
+			if err != nil {
+				s.failed(r.JobID, err)
+			}
+			done <- err
+		}()
+		gomega.Eventually(done, 8*time.Second).Should(gomega.Receive(gomega.HaveOccurred()))
+		intentPath, startPath := filepath.Join(root, "intent.json"), filepath.Join(root, "start.json")
+		raw, err := os.ReadFile(intentPath)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var intent runner.Intent
+		gomega.Expect(json.Unmarshal(raw, &intent)).To(gomega.Succeed())
+		gomega.Expect(intent.Supervisor.PID).NotTo(gomega.BeZero())
+		gomega.Expect(intent.Supervisor.BootID).NotTo(gomega.BeEmpty())
+		gomega.Expect(intent.Identity.JobID).To(gomega.Equal(r.JobID))
+		observed, observeErr := platform.ObserveProcess(intent.Supervisor.PID)
+		if observeErr == nil {
+			gomega.Expect(observed.Identity).NotTo(gomega.Equal(intent.Supervisor))
+		} else {
+			gomega.Expect(errors.Is(observeErr, unix.ESRCH)).To(gomega.BeTrue())
+		}
+		_, err = os.Stat(startPath)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		_, err = os.Stat(count)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		before, err := s.ledger.RecoverySnapshot(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(before.Receipt.GlobalOccupancy).To(gomega.Equal(1))
+		gomega.Expect(before.Receipt.ResourceAvailability).To(gomega.Equal("quarantined"))
+		gomega.Expect(before.Phases["run"].Deadline.IsZero()).To(gomega.BeFalse())
+		gomega.Expect(s.ledger.MarkInterrupted()).To(gomega.Succeed())
+		fresh, err := newRuntime(s.root, s.ledger, s.store)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(fresh.tryRecoverInterrupted(r.JobID, true, nil)).NotTo(gomega.Succeed())
+		gomega.Expect(fresh.reconcileStartup()).To(gomega.Succeed())
+		after, err := fresh.ledger.RecoverySnapshot(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(after.Identity).To(gomega.Equal(before.Identity))
+		gomega.Expect(after.Phases["run"].Deadline).To(gomega.Equal(before.Phases["run"].Deadline))
+		gomega.Expect(after.Receipt.GlobalOccupancy).To(gomega.Equal(1))
+		gomega.Expect(after.Receipt.ResourceAvailability).To(gomega.Equal("quarantined"))
+		gomega.Expect(after.Receipt.JobState).NotTo(gomega.Equal("finished"))
+		_, err = runner.StartRun(filepath.Join(root, "request.json"))
+		gomega.Expect(errors.Is(err, runner.ErrAmbiguous)).To(gomega.BeTrue())
+		_, err = os.Stat(count)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		var runs int
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_runs WHERE job_id=?`, r.JobID).Scan(&runs)).To(gomega.Succeed())
+		gomega.Expect(runs).To(gomega.Equal(1))
 	})
 	ginkgo.It("retains an ambiguous run claim without a native intent", func() {
 		_, s, r, _, _ := cancellationRuntime(ginkgo.GinkgoT(), "true")

@@ -201,12 +201,12 @@ Acceptance: Offline, live automatic, and human observations remain distinguishab
 Implementation owner: `TASK-019`.
 
 ### HP-REQ-045
-- [ ] Exercise crash, race, repeated request, and resource starvation boundaries with bounded deterministic failure injection.
+- [x] Exercise crash, race, repeated request, and resource starvation boundaries with bounded deterministic failure injection.
 Acceptance: The published failure matrix is executed and each invariant is tied to a test or observed VM scenario.
 Implementation owner: `TASK-021`.
 
 ### HP-REQ-046
-- [ ] Preserve clear cancellation races with final results.
+- [x] Preserve clear cancellation races with final results.
 Acceptance: Cancellation before admission, queued cancellation, running cancellation, and cancellation after finish have documented results without overwriting a terminal record.
 Implementation owner: `TASK-021`.
 

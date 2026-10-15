@@ -362,6 +362,52 @@ var _ = ginkgo.Describe("Task008Observers", ginkgo.Label("integration"), func() 
 		gomega.Expect(after).To(gomega.Equal(before))
 	})
 
+	ginkgo.It("rejects nested follow of an unreserved queued job while another job is occupied", func() {
+		s, c, _ := availabilityFixture(ginkgo.GinkgoT())
+		basis, err := s.ledger.RecoverySnapshot("queued-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		target, err := s.ledger.Admit(mustJSONScheduling(basis.Spec), basis.Spec.Input.InventoryDigest, "follow-target-key", "follow-target")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(target.JobState).To(gomega.Equal("queued"))
+		occupied, err := s.ledger.Reserve(managed.ReserveRequest{JobID: "queued-job", ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "follow-parent"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		chain, err := s.ledger.RunnerParentChain(s.installationID(), occupied.JobID, occupied.LeaseGeneration)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		raw, err := json.Marshal(chain)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		ginkgo.GinkgoT().Setenv(managed.ParentContextEnvironment, string(raw))
+		before, err := s.ledger.Snapshot(target.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(before.JobState).To(gomega.Equal("queued"))
+		gomega.Expect(before.Slot).To(gomega.Equal(-1))
+		gomega.Expect(before.LeaseGeneration).To(gomega.BeZero())
+		ctx, cancel := observerContext()
+		defer cancel()
+		_, _, err = c.Events(ctx, target.JobID, client.EventsOptions{Limit: 1})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, _, err = c.Logs(ctx, target.JobID, client.LogsOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		for _, follow := range []func() error{
+			func() error {
+				return c.FollowEvents(ctx, target.JobID, client.EventsOptions{}, func(client.Record) error { return nil })
+			},
+			func() error {
+				return c.FollowLogs(ctx, target.JobID, client.LogsOptions{}, func(client.Record) error { return nil })
+			},
+		} {
+			var issue *client.Issue
+			gomega.Expect(errors.As(follow(), &issue)).To(gomega.BeTrue())
+			gomega.Expect(issue.Code).To(gomega.Equal("NESTED_WAIT_REJECTED"))
+		}
+		after, err := s.ledger.Snapshot(target.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(after).To(gomega.Equal(before))
+		parent, err := s.ledger.Snapshot(occupied.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(parent.GlobalOccupancy).To(gomega.Equal(1))
+		gomega.Expect(parent.LeaseGeneration).To(gomega.Equal(occupied.LeaseGeneration))
+	})
+
 	ginkgo.It("allows nested pages but refuses nested nonterminal event and log follow", func() {
 		t := ginkgo.GinkgoT()
 		s, c, _ := availabilityFixture(t)

@@ -458,6 +458,306 @@ var _ = ginkgo.Describe("Task035LockUnix", ginkgo.Label("integration"), func() {
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	})
 
+	ginkgo.It("qualifies advisory rows beside an occupied managed job", func() {
+		t := ginkgo.GinkgoT()
+		s, c, db := availabilityFixture(t)
+		ctx := context.Background()
+		occupied, err := s.ledger.Reserve(managed.ReserveRequest{JobID: "queued-job", ExpectedJobRevision: 1, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "task021-occupy"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(occupied.GlobalOccupancy).To(gomega.Equal(1))
+		held := func() {
+			ginkgo.GinkgoHelper()
+			current, err := s.ledger.Snapshot(occupied.JobID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(current.JobState).To(gomega.Equal(occupied.JobState))
+			gomega.Expect(current.GlobalOccupancy).To(gomega.Equal(1))
+			gomega.Expect(current.LeaseGeneration).To(gomega.Equal(occupied.LeaseGeneration))
+			gomega.Expect(current.Slot).To(gomega.Equal(occupied.Slot))
+			gomega.Expect(current.ResourceAvailability).To(gomega.Equal("available"))
+		}
+		other, err := client.Connect(ctx, s.root)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		t.Cleanup(other.Close)
+		clock := time.Now().UTC().Truncate(time.Millisecond)
+		s.ledger.SetLockClock(func() (time.Time, string, error) { return clock, "task021-wake", nil })
+		gomega.Expect(s.ledger.LockStartup()).To(gomega.Succeed())
+		_, err = c.Register(ctx, []byte(`{"schema":"haepari.resource/v1","kind":"lock","id":"beside-job","capacity":1,"liveness_seconds":10,"max_hold_seconds":30}`))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		parent, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "beside-job", RequestKey: "owner", Holder: "parent"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(parent.Current.State).To(gomega.Equal("granted"))
+		waiter, _, err := other.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "beside-job", RequestKey: "waiter", Holder: "next"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(waiter.Current.State).To(gomega.Equal("queued"))
+		ref := managed.LockGrantReference{InstallationID: c.Hello.InstallationID, LockID: "beside-job", GrantID: parent.Current.GrantID, Generation: parent.Current.Generation}
+		raw, err := json.Marshal(ref)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// V59: one holder, and a concurrent borrower plus a waiting caller.
+		listing := make(chan error, 1)
+		go func() {
+			defer ginkgo.GinkgoRecover()
+			var listErr error
+			for i := 0; i < 3 && listErr == nil; i++ {
+				page, _, err := other.LocksList(ctx, "beside-job")
+				if err != nil {
+					listErr = err
+					break
+				}
+				granted := 0
+				for _, request := range page.Requests {
+					if request.State == "granted" {
+						granted++
+					}
+				}
+				if granted != 1 {
+					listErr = errors.New("advisory lock had more than one holder")
+				}
+			}
+			listing <- listErr
+		}()
+		t.Setenv(managed.LockGrantEnvironment, string(raw))
+		for _, outcome := range []string{"success", "failure", "cancelled"} {
+			executable, err := os.Executable()
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			childCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			cmd := exec.CommandContext(childCtx, executable, "-test.run=^TestTask035LockBorrower$")
+			cmd.Env = []string{"PATH=/usr/bin:/bin", "HAEPARI_HOME=" + s.root.Path, managed.LockGrantEnvironment + "=" + string(raw), "HAEPARI_TEST_BORROWER_OUTCOME=" + outcome}
+			output, err := cmd.StdoutPipe()
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			var childErrors bytes.Buffer
+			cmd.Stderr = &childErrors
+			gomega.Expect(cmd.Start()).To(gomega.Succeed())
+			line, readErr := bufio.NewReader(output).ReadBytes('\n')
+			var killErr error
+			if outcome == "cancelled" {
+				killErr = cmd.Process.Kill()
+			}
+			waitErr := cmd.Wait()
+			cancel()
+			gomega.Expect(killErr).NotTo(gomega.HaveOccurred())
+			gomega.Expect(readErr).NotTo(gomega.HaveOccurred(), childErrors.String())
+			var childRequest managed.LockRequest
+			gomega.Expect(json.Unmarshal(line, &childRequest)).To(gomega.Succeed(), childErrors.String())
+			gomega.Expect(childRequest.GrantID).To(gomega.Equal(parent.Current.GrantID))
+			gomega.Expect(childRequest.Generation).To(gomega.Equal(parent.Current.Generation))
+			if outcome == "success" {
+				gomega.Expect(waitErr).NotTo(gomega.HaveOccurred(), childErrors.String())
+			} else {
+				gomega.Expect(waitErr).To(gomega.HaveOccurred())
+			}
+		}
+		gomega.Eventually(listing, 20*time.Second).Should(gomega.Receive(gomega.Not(gomega.HaveOccurred())))
+		checked, err := c.CheckLockGrant(ctx, ref, "beside-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(checked.GrantID).To(gomega.Equal(parent.Current.GrantID))
+		gomega.Expect(checked.LivenessDeadline).To(gomega.Equal(parent.Current.LivenessDeadline))
+		held()
+		// V60: replay, changed key, ended replay, and wrong installation or lock.
+		t.Setenv(managed.LockGrantEnvironment, "")
+		replay, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "beside-job", RequestKey: "owner", Holder: "parent"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(replay.Current.RequestID).To(gomega.Equal(parent.Current.RequestID))
+		_, _, err = c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "beside-job", RequestKey: "owner", Holder: "changed"})
+		expectLockIssue(err, "CONFLICT")
+		for _, change := range []func(*managed.LockGrantReference){func(r *managed.LockGrantReference) { r.InstallationID = "wrong" }, func(r *managed.LockGrantReference) { r.LockID = "wrong" }} {
+			bad := ref
+			change(&bad)
+			_, err = c.CheckLockGrant(ctx, bad, "beside-job")
+			gomega.Expect(errors.Is(err, managed.ErrConflict)).To(gomega.BeTrue())
+		}
+		var requests int
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_lock_requests WHERE lock_id='beside-job'`).Scan(&requests)).To(gomega.Succeed())
+		gomega.Expect(requests).To(gomega.Equal(2))
+		// V64 wait timeout leaves the waiter queued. The handoff is concurrent.
+		_, _, err = other.WaitLock(ctx, waiter.Current.RequestID, 20*time.Millisecond)
+		expectLockIssue(err, "WAIT_TIMEOUT")
+		queued, _, err := other.LocksList(ctx, "beside-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(queued.Requests[1].State).To(gomega.Equal("queued"))
+		handoff := make(chan managed.LockReply, 1)
+		handoffErr := make(chan error, 1)
+		go func() {
+			defer ginkgo.GinkgoRecover()
+			reply, _, err := other.WaitLock(ctx, waiter.Current.RequestID, 3*time.Second)
+			handoff <- reply
+			handoffErr <- err
+		}()
+		t.Setenv(managed.LockGrantEnvironment, "")
+		released, _, err := c.ReleaseLock(ctx, parent.Current.GrantID, false, "")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var successor managed.LockReply
+		gomega.Eventually(handoff, 3*time.Second).Should(gomega.Receive(&successor))
+		gomega.Eventually(handoffErr, time.Second).Should(gomega.Receive(gomega.Not(gomega.HaveOccurred())))
+		gomega.Expect(successor.Current.State).To(gomega.Equal("granted"))
+		gomega.Expect(successor.Current.RequestID).To(gomega.Equal(waiter.Current.RequestID))
+		staleRelease, _, err := c.ReleaseLock(ctx, parent.Current.GrantID, false, "")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(staleRelease.Receipt).To(gomega.Equal(released.Receipt))
+		current, _, err := other.LocksList(ctx, "beside-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(current.Requests[1].State).To(gomega.Equal("granted"))
+		gomega.Expect(current.Requests[1].GrantID).To(gomega.Equal(successor.Current.GrantID))
+		_, _, err = c.RenewLock(ctx, parent.Current.GrantID)
+		expectLockIssue(err, "LOCK_EXPIRED")
+		ended, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "beside-job", RequestKey: "owner", Holder: "parent"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(ended.Current.State).To(gomega.Equal("released"))
+		gomega.Expect(ended.Receipt).To(gomega.Equal(replay.Receipt))
+		held()
+		// V61: stopped renewal, unclaimed grant, keepalive until max hold, forced reason.
+		_, err = c.Register(ctx, []byte(`{"schema":"haepari.resource/v1","kind":"lock","id":"expiry-beside","capacity":1,"liveness_seconds":10,"max_hold_seconds":30}`))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		holder, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "expiry-beside", RequestKey: "holder", Holder: "holder"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		unclaimed, _, err := other.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "expiry-beside", RequestKey: "unclaimed", Holder: "waiting"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		clock = holder.Current.LivenessDeadline.Add(time.Second)
+		gomega.Expect(s.ledger.SweepLocks()).To(gomega.Succeed())
+		stopped, _, err := c.LocksList(ctx, "expiry-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(stopped.Requests[0].State).To(gomega.Equal("hold_expired"))
+		gomega.Expect(stopped.Requests[0].RequestID).To(gomega.Equal(holder.Current.RequestID))
+		_, _, err = c.RenewLock(ctx, holder.Current.GrantID)
+		expectLockIssue(err, "LOCK_EXPIRED")
+		claimed, _, err := other.LocksList(ctx, "expiry-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(claimed.Requests[1].State).To(gomega.Equal("granted"))
+		gomega.Expect(claimed.Requests[1].RequestID).To(gomega.Equal(unclaimed.Current.RequestID))
+		clock = claimed.Requests[1].LivenessDeadline.Add(time.Second)
+		gomega.Expect(s.ledger.SweepLocks()).To(gomega.Succeed())
+		_, _, err = other.RenewLock(ctx, claimed.Requests[1].GrantID)
+		expectLockIssue(err, "LOCK_EXPIRED")
+		keeper, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "expiry-beside", RequestKey: "keeper", Holder: "keeper"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(keeper.Current.State).To(gomega.Equal("granted"))
+		for step := 0; step < 4; step++ {
+			next := clock.Add(9 * time.Second)
+			if next.After(*keeper.Current.MaxHoldDeadline) {
+				next = keeper.Current.MaxHoldDeadline.Add(-time.Millisecond)
+			}
+			clock = next
+			renewed, _, err := c.RenewLock(ctx, keeper.Current.GrantID)
+			if clock.Before(*keeper.Current.MaxHoldDeadline) && step < 3 {
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(renewed.Current.State).To(gomega.Equal("granted"))
+				continue
+			}
+			break
+		}
+		clock = keeper.Current.MaxHoldDeadline.Add(time.Second)
+		_, _, err = c.RenewLock(ctx, keeper.Current.GrantID)
+		expectLockIssue(err, "LOCK_EXPIRED")
+		maxed, _, err := c.LocksList(ctx, "expiry-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var kept managed.LockRequest
+		for _, request := range maxed.Requests {
+			if request.RequestID == keeper.Current.RequestID {
+				kept = request
+			}
+		}
+		gomega.Expect(kept.State).To(gomega.Equal("hold_expired"))
+		gomega.Expect(kept.Reason).To(gomega.Equal("max_hold_deadline"))
+		forcedTarget, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "expiry-beside", RequestKey: "forced", Holder: "forced"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		forced, _, err := c.CancelLock(ctx, forcedTarget.Current.RequestID, true, "operator holder cleanup")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(forced.Receipt.Force).To(gomega.BeTrue())
+		gomega.Expect(forced.Receipt.Reason).To(gomega.Equal("operator holder cleanup"))
+		held()
+		// V62: locks take no managed capacity. Nested acquisition, pause, recover, and removal.
+		t.Setenv(managed.ParentContextEnvironment, "")
+		chain, err := s.ledger.RunnerParentChain(c.Hello.InstallationID, occupied.JobID, occupied.LeaseGeneration)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		chainJSON, err := json.Marshal(chain)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		t.Setenv(managed.ParentContextEnvironment, string(chainJSON))
+		_, _, err = c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "beside-job", RequestKey: "nested", Holder: "nested"})
+		expectLockIssue(err, "NESTED_ACQUISITION_REJECTED")
+		t.Setenv(managed.ParentContextEnvironment, "")
+		lockStatus, _, err := c.InspectResource(ctx, "beside-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(lockStatus.Occupancy).To(gomega.BeZero())
+		held()
+		_, err = c.Register(ctx, []byte(`{"schema":"haepari.resource/v1","kind":"lock","id":"pause-beside","capacity":1,"liveness_seconds":10,"max_hold_seconds":30}`))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		pausedGrant, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "pause-beside", RequestKey: "paused-owner", Holder: "owner"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		pause := managed.AvailabilityRequest{ResourceID: "pause-beside", MutationKey: "pause-beside", ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, Reason: "hold grants"}
+		_, _, err = c.SetAvailability(ctx, pause, false)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		pausedWaiter, _, err := other.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "pause-beside", RequestKey: "paused-waiter", Holder: "waiter"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(pausedWaiter.Current.State).To(gomega.Equal("queued"))
+		_, _, err = c.ReleaseLock(ctx, pausedGrant.Current.GrantID, false, "")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		stillQueued, _, err := other.LocksList(ctx, "pause-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(stillQueued.Requests[1].State).To(gomega.Equal("queued"))
+		_, err = c.LockResourceAction(ctx, "recover", "pause-beside", nil, 0, true)
+		expectLockIssue(err, "UNSUPPORTED")
+		_, err = c.LockResourceAction(ctx, "remove", "pause-beside", nil, 1, false)
+		expectLockIssue(err, "RESOURCE_BUSY")
+		_, _, err = other.CancelLock(ctx, pausedWaiter.Current.RequestID, false, "")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = c.LockResourceAction(ctx, "remove", "pause-beside", nil, 1, false)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		held()
+		// V63: restart and injected wake refresh liveness without passing max hold.
+		_, err = c.Register(ctx, []byte(`{"schema":"haepari.resource/v1","kind":"lock","id":"wake-beside","capacity":1,"liveness_seconds":10,"max_hold_seconds":40}`))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		live, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "wake-beside", RequestKey: "live", Holder: "live"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		waiting, _, err := other.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "wake-beside", RequestKey: "waiting", Holder: "waiting"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		beforeWake, _, err := c.LocksList(ctx, "wake-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		clock = live.Current.LivenessDeadline.Add(5 * time.Second)
+		s.ledger.SetLockClock(func() (time.Time, string, error) { return clock, "task021-wake-restart", nil })
+		gomega.Expect(s.ledger.LockStartup()).To(gomega.Succeed())
+		restarted, _, err := c.LocksList(ctx, "wake-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(restarted.Requests[0].State).To(gomega.Equal("granted"))
+		gomega.Expect(restarted.Requests[0].GrantID).To(gomega.Equal(live.Current.GrantID))
+		gomega.Expect(restarted.Requests[1].State).To(gomega.Equal("queued"))
+		gomega.Expect(restarted.Requests[1].RequestID).To(gomega.Equal(waiting.Current.RequestID))
+		gomega.Expect(restarted.Requests[0].QueueDeadline).To(gomega.Equal(beforeWake.Requests[0].QueueDeadline))
+		gomega.Expect(*restarted.Requests[0].LivenessDeadline).To(gomega.Equal(clock.Add(10 * time.Second)))
+		gomega.Expect(restarted.Requests[0].LivenessDeadline.After(*live.Current.MaxHoldDeadline)).To(gomega.BeFalse())
+		clock = live.Current.MaxHoldDeadline.Add(time.Second)
+		s.ledger.SetLockClock(func() (time.Time, string, error) { return clock, "task021-wake-cap", nil })
+		gomega.Expect(s.ledger.LockStartup()).To(gomega.Succeed())
+		capped, _, err := c.LocksList(ctx, "wake-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(capped.Requests[0].State).To(gomega.Equal("hold_expired"))
+		gomega.Expect(capped.Requests[1].State).To(gomega.Equal("granted"))
+		held()
+		// V64 continued: stale inherited grant, and queue expiry leaves no successor grant.
+		t.Setenv(managed.LockGrantEnvironment, string(raw))
+		_, err = c.CheckLockGrant(ctx, ref, "beside-job")
+		gomega.Expect(errors.Is(err, managed.ErrLockExpired)).To(gomega.BeTrue())
+		_, _, err = c.RenewLock(ctx, ref.GrantID)
+		expectLockIssue(err, "LOCK_EXPIRED")
+		beforeBorrow, err := s.ledger.LocksList("beside-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, _, err = c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "beside-job", RequestKey: "child", Holder: "borrower"})
+		expectLockIssue(err, "LOCK_EXPIRED")
+		afterBorrow, err := s.ledger.LocksList("beside-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(afterBorrow.Requests).To(gomega.Equal(beforeBorrow.Requests))
+		t.Setenv(managed.LockGrantEnvironment, "")
+		seconds := int64(10)
+		expiring, _, err := c.AcquireLock(ctx, managed.LockAcquireRequest{LockID: "wake-beside", RequestKey: "expiring", Holder: "expiring", QueueSeconds: &seconds})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(expiring.Current.State).To(gomega.Equal("queued"))
+		clock = expiring.Current.QueueDeadline.Add(time.Second)
+		gomega.Expect(s.ledger.SweepLocks()).To(gomega.Succeed())
+		expiredQueue, _, err := c.LocksList(ctx, "wake-beside")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(expiredQueue.Requests[2].State).To(gomega.Equal("queue_expired"))
+		gomega.Expect(expiredQueue.Requests[2].RequestID).To(gomega.Equal(expiring.Current.RequestID))
+		held()
+	})
+
 	ginkgo.It("recovers an acquire whose real Unix reply is lost without a second durable request", func() {
 		t := ginkgo.GinkgoT()
 		s, c, db := availabilityFixture(t)
