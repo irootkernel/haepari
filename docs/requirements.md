@@ -211,17 +211,17 @@ Acceptance: Cancellation before admission, queued cancellation, running cancella
 Implementation owner: `TASK-021`.
 
 ### HP-REQ-047
-- [ ] Restrict control access to the owning user and protect local state and secret references.
+- [x] Restrict control access to the owning user and protect local state and secret references.
 Acceptance: Socket/state permissions, path containment, redacted diagnostics, secret omission, and symlink attacks are tested; same-user arbitrary code is explicitly outside the security boundary.
 Implementation owner: `TASK-022`.
 
 ### HP-REQ-048
-- [ ] Keep live credentials and external side effects outside the VM test boundary.
+- [x] Keep live credentials and external side effects outside the VM test boundary.
 Acceptance: No authentication files are bundled from the host. Live scenarios disclose exact endpoints and budget scope; no cleanup is described as undoing network writes or model charges.
 Implementation owner: `TASK-022`.
 
 ### HP-REQ-049
-- [ ] Treat queued commands and test recipes as authorized executable code, not automatically safe data.
+- [x] Treat queued commands and test recipes as authorized executable code, not automatically safe data.
 Acceptance: A local resource is documented as unsandboxed. An untrusted repository cannot change registered host adapter commands, resource identity, or recovery policy through a job.
 Implementation owner: `TASK-022`.
 

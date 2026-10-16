@@ -36,22 +36,22 @@ Requirement coverage: `HP-REQ-045`, `HP-REQ-046`.
 Requirement coverage: `HP-REQ-047`, `HP-REQ-048`, `HP-REQ-049`.
 
 #### Implement
-- [ ] Audit socket/path ownership, registered host commands, scoped input snapshots, SSH identity, secret references, evidence redaction and offline/live separation.
-- [ ] Check event-visible metadata versus private replay authority and investigate concrete error-classification/atomicity scenarios from the [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition); metadata alone is not mutation authorization.
+- [x] Audit socket/path ownership, registered host commands, scoped input snapshots, SSH identity, secret references, evidence redaction and offline/live separation.
+- [x] Check event-visible metadata versus private replay authority and investigate concrete error-classification/atomicity scenarios from the [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition); metadata alone is not mutation authorization.
 
 #### Do not
-- [ ] Do not claim same-user sandboxing or automatic rollback of external messages, database writes or charges.
+- [x] Do not claim same-user sandboxing or automatic rollback of external messages, database writes or charges.
 
 #### Verify
-- [ ] Verify managed parent-context privacy, recovery provenance and refusal to manufacture stop evidence from lost process handles.
-- [ ] Run malicious-path/request fixtures, wrong-target VM fixtures, log/secret scans and missing-live-prerequisite rejection. Review each destructive path against ownership evidence.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Verify managed parent-context privacy, recovery provenance and refusal to manufacture stop evidence from lost process handles.
+- [x] Run malicious-path/request fixtures, wrong-target VM fixtures, log/secret scans and missing-live-prerequisite rejection. Review each destructive path against ownership evidence.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-023
 

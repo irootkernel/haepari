@@ -185,7 +185,8 @@ var _ = ginkgo.Describe("Task007UnixScheduling", ginkgo.Label("integration"), fu
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		_, _, err = c.Wait(context.Background(), other.JobID, time.Second)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		foreign := managed.ParentChain{{InstallationID: "foreign-installation", JobID: "foreign-job", LeaseGeneration: 7, Nonce: digest}}
+		inheritedNonce := strings.Repeat("b", 64)
+		foreign := managed.ParentChain{{InstallationID: "foreign-installation", JobID: "foreign-job", LeaseGeneration: 7, Nonce: inheritedNonce}}
 		foreignJSON, _ := json.Marshal(foreign)
 		t.Setenv(managed.ParentContextEnvironment, string(foreignJSON))
 		job.Input.Root = source
@@ -218,7 +219,39 @@ var _ = ginkgo.Describe("Task007UnixScheduling", ginkgo.Label("integration"), fu
 		gomega.Expect(observed[0]).To(gomega.Equal(foreign[0]))
 		gomega.Expect(observed[1].InstallationID).To(gomega.Equal(runtime.installationID()))
 		gomega.Expect(observed[1].JobID).To(gomega.Equal(inherited.JobID))
-		gomega.Expect(observed[1].Nonce).NotTo(gomega.Equal(digest))
+		gomega.Expect(observed[1].Nonce).NotTo(gomega.Equal(inheritedNonce))
+		gomega.Expect(observed[1].Nonce).NotTo(gomega.BeEmpty())
+		requestRaw, err := os.ReadFile(filepath.Join(root.Path, "jobs", inherited.JobID, "request.json"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(string(requestRaw)).To(gomega.ContainSubstring(inheritedNonce))
+		inspection, _, err := c.Inspect(context.Background(), inherited.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		report, _, err := c.DoctorResource(context.Background(), inherited.ResourceID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var publicEvents []byte
+		after := int64(0)
+		complete := false
+		for pageN := 0; pageN < 20; pageN++ {
+			page, _, err := c.Events(context.Background(), inherited.JobID, client.EventsOptions{After: after, Limit: 100})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			encoded, err := json.Marshal(page)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			publicEvents = append(publicEvents, encoded...)
+			if !page.More {
+				complete = true
+				break
+			}
+			gomega.Expect(page.NextCursor).To(gomega.BeNumerically(">", after))
+			after = page.NextCursor
+		}
+		gomega.Expect(complete).To(gomega.BeTrue())
+		for _, surface := range []any{result, inspection, report} {
+			encoded, err := json.Marshal(surface)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(string(encoded)).NotTo(gomega.ContainSubstring(inheritedNonce))
+		}
+		gomega.Expect(string(publicEvents)).NotTo(gomega.ContainSubstring(inheritedNonce))
+		gomega.Expect(string(publicEvents)).To(gomega.ContainSubstring(observed[1].Nonce))
 		// A queued pin survives admission; an idle registration update cannot
 		// silently dispatch it under the new configuration.
 		changed, _, err := c.Submit(context.Background(), raw, "configuration-pin")

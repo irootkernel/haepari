@@ -156,6 +156,35 @@ var _ = ginkgo.Describe("Task019NativeManual", ginkgo.Label("integration"), func
 			gomega.Expect(f.control.effects).To(gomega.BeEmpty())
 		})
 	}
+
+	ginkgo.It("stops live manual preparation before workload when the credential reference is missing", func() {
+		t := ginkgo.GinkgoT()
+		missing := filepath.Join(t.TempDir(), "synthetic-live-credential")
+		marker := filepath.Join(t.TempDir(), "forbidden-auth")
+		_, s, r, job, object := cancellationRuntime(t, "printf workload-ran > '"+marker+"'", func(job *managed.JobSpec) {
+			job.Schema = "haepari.job/v2"
+			job.Mode = "manual"
+			job.Manual = &managed.Manual{ScenarioDocument: "source/input.txt", RequiredScenarios: []string{"check"}}
+			job.Deadlines.RunSeconds = 0
+			job.Deadlines.ManualSeconds = 30
+			job.Effects = managed.Effects{Mode: "live", AuthorizationReference: "synthetic-live-authorization"}
+			job.Setup = &managed.Setup{Argv: []string{"/bin/sh", "-c", `test -f "$1" || exit 3; printf forbidden-auth > "$2"`, "setup", missing, marker}}
+		})
+		c, err := s.registerLocal(r)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer s.unregisterLocal(c)
+		gomega.Expect(s.executeLocalControlled(c, job, object, time.Now().Add(5*time.Second))).To(gomega.Succeed())
+		result, err := s.ledger.Result(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Incomplete))
+		gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("verified")))
+		gomega.Expect(result.NativeExitCode).NotTo(gomega.BeNil())
+		gomega.Expect(*result.NativeExitCode).To(gomega.Equal(3))
+		_, err = os.Stat(marker)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		_, err = os.Stat(missing)
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+	})
 })
 
 var _ = ginkgo.Describe("Task019ManualDeadlineCommitRestart", ginkgo.Label("integration"), func() {

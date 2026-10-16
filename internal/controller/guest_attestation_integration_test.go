@@ -13,7 +13,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -24,10 +26,261 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type guestCommandNote struct {
+	Operation     string
+	Schema        string
+	CommandOK     bool
+	WireSchema    string
+	WireOK        bool
+	ErrorClass    string
+	ExitCode      int
+	InputLen      int
+	StdoutLen     int
+	StderrLen     int
+	ElapsedMillis int64
+	AfterDeadline bool
+}
+
+type guestCommandRecorder struct {
+	sync.Mutex
+	dropped  int
+	commands []guestCommandNote
+}
+
+var guestCommandRecorders sync.Map
+
+func recorderFor(f *vmJobFixture) *guestCommandRecorder {
+	if f == nil {
+		return nil
+	}
+	rec, _ := guestCommandRecorders.Load(f)
+	typed, _ := rec.(*guestCommandRecorder)
+	return typed
+}
+
+func (r *guestCommandRecorder) note(input, stdout []byte, exitCode, stderrLen int, commandErr error, elapsed time.Duration) {
+	r.Lock()
+	defer r.Unlock()
+	req := vmTransportRequest(input)
+	note := guestCommandNote{
+		Operation: clipDiagToken(req.Operation), Schema: clipDiagToken(req.Schema), CommandOK: commandErr == nil,
+		ExitCode: exitCode, InputLen: len(input), StdoutLen: len(stdout), StderrLen: stderrLen,
+		ElapsedMillis: elapsed.Milliseconds(), AfterDeadline: !req.Deadline.IsZero() && time.Now().After(req.Deadline),
+	}
+	if commandErr != nil {
+		note.ErrorClass = "command"
+		if errors.Is(commandErr, context.DeadlineExceeded) {
+			note.ErrorClass = "deadline"
+		}
+	} else {
+		note.WireSchema, note.WireOK, note.ErrorClass = classifyGuestWire(stdout, req)
+	}
+	r.commands = append(r.commands, note)
+	if len(r.commands) > 16 {
+		r.dropped += len(r.commands) - 16
+		r.commands = r.commands[len(r.commands)-16:]
+	}
+}
+
+func (r *guestCommandRecorder) clippedLine() string {
+	notes, dropped := r.snapshot()
+	var b strings.Builder
+	b.WriteString("guest-commands=")
+	b.WriteString(strconv.Itoa(len(notes)))
+	b.WriteString(" dropped=")
+	b.WriteString(strconv.Itoa(dropped))
+	for _, note := range notes {
+		b.WriteString(" [op=")
+		b.WriteString(note.Operation)
+		b.WriteString(" schema=")
+		b.WriteString(note.Schema)
+		b.WriteString(" exit=")
+		b.WriteString(strconv.Itoa(note.ExitCode))
+		b.WriteString(" command_ok=")
+		b.WriteString(strconv.FormatBool(note.CommandOK))
+		b.WriteString(" wire_schema=")
+		b.WriteString(clipDiagToken(note.WireSchema))
+		b.WriteString(" wire_ok=")
+		b.WriteString(strconv.FormatBool(note.WireOK))
+		b.WriteString(" class=")
+		b.WriteString(note.ErrorClass)
+		b.WriteString(" in=")
+		b.WriteString(strconv.Itoa(note.InputLen))
+		b.WriteString(" out=")
+		b.WriteString(strconv.Itoa(note.StdoutLen))
+		b.WriteString(" errn=")
+		b.WriteString(strconv.Itoa(note.StderrLen))
+		b.WriteString(" ms=")
+		b.WriteString(strconv.FormatInt(note.ElapsedMillis, 10))
+		b.WriteString(" late=")
+		b.WriteString(strconv.FormatBool(note.AfterDeadline))
+		b.WriteString("]")
+	}
+	return b.String()
+}
+
+func (r *guestCommandRecorder) snapshot() ([]guestCommandNote, int) {
+	r.Lock()
+	defer r.Unlock()
+	return append([]guestCommandNote(nil), r.commands...), r.dropped
+}
+
+func classifyGuestWire(stdout []byte, req runner.GuestRequest) (schema string, ok bool, class string) {
+	env, err := managed.DecodeEnvelope(stdout)
+	if err != nil {
+		return "unlisted", false, "parse"
+	}
+	schema = clipDiagToken(env.Schema)
+	if !env.OK {
+		class = "not-ok"
+		if env.Error != nil {
+			class = clipDiagToken(string(env.Error.Code))
+		}
+		return schema, false, class
+	}
+	switch env.Operation {
+	case "runner.guest", "runner.guest-transport":
+		reply, err := runner.DecodeGuestReply(env.Data)
+		if err != nil {
+			return schema, true, "parse"
+		}
+		if req.Schema != "" && (reply.Schema != runner.GuestReplySchema(req) || reply.ProtocolDigest != runner.GuestProtocolDigest(req) || reply.VMUUID != req.VMUUID || reply.MAC != req.MAC || reply.Challenge != req.Challenge) {
+			return schema, true, "identity"
+		}
+		return schema, true, "ok"
+	case "runner.guest-recovery":
+		if _, err := runner.DecodeGuestRecoveryReply(env.Data); err != nil {
+			return schema, true, "parse"
+		}
+		return schema, true, "ok"
+	default:
+		return schema, env.OK, "not-classified"
+	}
+}
+
+func clipDiagToken(value string) string {
+	if len(value) > 48 {
+		value = value[:48]
+	}
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.' || r == '-' || r == '_' || r == '/':
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "unlisted"
+	}
+	return b.String()
+}
+
+func guestFailureNote(rec *guestCommandRecorder, body []byte, ledger, stage, owner string, syncCalls int) string {
+	var b strings.Builder
+	b.WriteString("syncs=")
+	b.WriteString(strconv.Itoa(syncCalls))
+	if syncCalls == 0 {
+		b.WriteString(" hook=unobserved")
+	}
+	b.WriteString(" ledger=")
+	b.WriteString(clipDiagToken(ledger))
+	if ledger == "present" {
+		b.WriteString(" stage=")
+		b.WriteString(clipDiagToken(stage))
+		b.WriteString(" owner=")
+		b.WriteString(clipDiagToken(owner))
+	}
+	b.WriteString(" body=")
+	b.WriteString(strconv.Itoa(len(body)))
+	var env managed.Envelope
+	if json.Unmarshal(body, &env) != nil {
+		b.WriteString(" class=decode")
+	} else {
+		class := "ok"
+		if env.Error != nil {
+			class = string(env.Error.Code)
+		} else if !env.OK {
+			class = "not-ok"
+		}
+		b.WriteString(" schema=")
+		b.WriteString(clipDiagToken(env.Schema))
+		b.WriteString(" op=")
+		b.WriteString(clipDiagToken(env.Operation))
+		b.WriteString(" ok=")
+		b.WriteString(strconv.FormatBool(env.OK))
+		b.WriteString(" class=")
+		b.WriteString(clipDiagToken(class))
+	}
+	var notes []guestCommandNote
+	dropped := 0
+	if rec != nil {
+		notes, dropped = rec.snapshot()
+	}
+	b.WriteString(" cmds=")
+	b.WriteString(strconv.Itoa(len(notes)))
+	b.WriteString(" dropped=")
+	b.WriteString(strconv.Itoa(dropped))
+	for _, note := range notes {
+		b.WriteString(" [op=")
+		b.WriteString(note.Operation)
+		b.WriteString(" schema=")
+		b.WriteString(note.Schema)
+		b.WriteString(" exit=")
+		b.WriteString(strconv.Itoa(note.ExitCode))
+		b.WriteString(" command_ok=")
+		b.WriteString(strconv.FormatBool(note.CommandOK))
+		b.WriteString(" wire_schema=")
+		b.WriteString(clipDiagToken(note.WireSchema))
+		b.WriteString(" wire_ok=")
+		b.WriteString(strconv.FormatBool(note.WireOK))
+		b.WriteString(" class=")
+		b.WriteString(note.ErrorClass)
+		b.WriteString(" in=")
+		b.WriteString(strconv.Itoa(note.InputLen))
+		b.WriteString(" out=")
+		b.WriteString(strconv.Itoa(note.StdoutLen))
+		b.WriteString(" errn=")
+		b.WriteString(strconv.Itoa(note.StderrLen))
+		b.WriteString(" ms=")
+		b.WriteString(strconv.FormatInt(note.ElapsedMillis, 10))
+		b.WriteString(" late=")
+		b.WriteString(strconv.FormatBool(note.AfterDeadline))
+		b.WriteString("]")
+	}
+	return b.String()
+}
+
+func recoveryLedgerNote(f *vmJobFixture, key string) (state, stage, owner string) {
+	_, receipt, found, err := f.s.ledger.EvidenceRecovery(key, "")
+	if err != nil {
+		return "query-error", "", ""
+	}
+	if !found {
+		return "absent", "", ""
+	}
+	stage, owner = "absent", "absent"
+	if len(receipt.Jobs) > 0 {
+		stage = receipt.Jobs[0].Stage
+	}
+	if receipt.ActiveOwner != nil {
+		owner = "present"
+	}
+	return "present", stage, owner
+}
+
 func attestedVMFixture() *vmJobFixture {
 	f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf retained > ../results/output.txt; printf once > once.txt")
 	f.job.Deadlines.CollectSeconds = 30
 	f.job.Deadlines.CleanupSeconds = 30
+	recorder := &guestCommandRecorder{}
+	guestCommandRecorders.Store(f, recorder)
+	ginkgo.GinkgoT().Cleanup(func() {
+		defer guestCommandRecorders.Delete(f)
+		if !ginkgo.CurrentSpecReport().Failed() {
+			return
+		}
+		_, _ = ginkgo.GinkgoWriter.Write([]byte(recorder.clippedLine() + "\n"))
+	})
 	// Run the actual fixed bootstrap and transferred executable. Worker birth
 	// receipts therefore belong to real short-lived native guest processes.
 	f.s.sshCommand = func(ctx context.Context, _ string, args []string, input []byte) (utm.CommandResult, error) {
@@ -38,11 +291,14 @@ func attestedVMFixture() *vmJobFixture {
 		var out, diag bytes.Buffer
 		cmd.Stdout = &out
 		cmd.Stderr = &diag
+		started := time.Now()
 		err := cmd.Run()
+		elapsed := time.Since(started)
 		code := -1
 		if cmd.ProcessState != nil {
 			code = cmd.ProcessState.ExitCode()
 		}
+		recorder.note(input, out.Bytes(), code, diag.Len(), err, elapsed)
 		return utm.CommandResult{Stdout: out.String(), Stderr: diag.String(), ExitCode: code}, err
 	}
 	return f
@@ -88,7 +344,8 @@ var _ = ginkgo.Describe("GuestAttestedRecovery", ginkgo.Label("integration"), fu
 			return unix.EIO
 		}
 		response := vmMutationHTTP(f.s, "/v1/resources/"+f.spec.ID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: key})
-		gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())
+		state, stage, owner := recoveryLedgerNote(f, "evidence-recovery-"+key)
+		gomega.Expect(response.Code).To(gomega.Equal(200), guestFailureNote(recorderFor(f), response.Body.Bytes(), state, stage, owner, calls))
 		gomega.Expect(calls).To(gomega.Equal(1))
 		_, receipt, found, err := f.s.ledger.EvidenceRecovery("evidence-recovery-"+key, "")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -128,7 +385,8 @@ var _ = ginkgo.Describe("GuestAttestedRecovery", ginkgo.Label("integration"), fu
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
 			response := vmMutationHTTP(f.s, "/v1/resources/"+f.spec.ID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: "guest-log-collect"})
-			gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())
+			state, stage, owner := recoveryLedgerNote(f, "evidence-recovery-guest-log-collect")
+			gomega.Expect(response.Code).To(gomega.Equal(200), guestFailureNote(recorderFor(f), response.Body.Bytes(), state, stage, owner, 0))
 			_, receipt, found, err := f.s.ledger.EvidenceRecovery("evidence-recovery-guest-log-collect", "")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(found).To(gomega.BeTrue())
