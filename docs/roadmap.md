@@ -34,13 +34,13 @@ Lifecycle status vocabulary:
 | [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Accepted |
 | [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Accepted |
 | [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Accepted |
-| [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | In progress |
+| [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Accepted |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Planned |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
 
 EPIC-003 Canonical Outcomes: [managed core freeze](records/TASK-012-managed-core-freeze.md), [managed transitions](contracts/managed-transitions.md), [artifact delivery and retention](contracts/artifact-and-profile.md), and [operations](operations.md).
 
-EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture-decision-records/0019-owned-runner-transport.md), [core VM operating observations](records/TASK-038-operating-campaign.md), and [small caller e2e and TASK-017 handoff](records/TASK-039-small-e2e.md). The [shared feedback dossier](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) remains for active EPIC-006/007 consumers. Epic/task identity does not encode execution order; existing IDs and accepted history are preserved.
+EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture-decision-records/0019-owned-runner-transport.md), [core VM operating observations](records/TASK-038-operating-campaign.md), and [small caller e2e and TASK-017 handoff](records/TASK-039-small-e2e.md). The [shared feedback dossier](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) remains for active EPIC-007 consumers. Epic/task identity does not encode execution order; existing IDs and accepted history are preserved.
 
 ## Recommended task order and actual prerequisites
 

@@ -39,8 +39,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 15979,
-      "sha256": "51f888434f4b46fc3b9f40fe41dbc9abc9493c299e4d55f7e1fd85878c020ed9"
+      "bytes": 16017,
+      "sha256": "30b17dae7052a8fd81e1db58b95cd8d4487f7cbc136d114c132dda6357a14c75"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -404,8 +404,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 15988,
-      "sha256": "dafc57696dd89605fd2e5eea119909f0f73c86592edb10d49a3c9c64a6429389"
+      "bytes": 15981,
+      "sha256": "2aee89e76e205663cc192df722df8c13c4a78425b4ebd339b3212dcd00ba616c"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -435,7 +435,7 @@
     {
       "path": "roadmap/EPIC-006.md",
       "bytes": 8405,
-      "sha256": "b08c85cf094cc27063a8e6dec24d575588f718ce33552fdbde3e82392e072d13"
+      "sha256": "4c97d2c8839edf635a9a9ce5ebf2e3ad448c1f46d81830e5894e176925f3307a"
     },
     {
       "path": "roadmap/EPIC-007.md",
