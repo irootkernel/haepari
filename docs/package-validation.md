@@ -1,6 +1,6 @@
 # Package validation: Design Revision 3.5
 
-Date: 2026-10-15. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
+Date: 2026-10-17. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
 
 The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks the package. `python3 docs/tools/validate_docs.py --write` regenerates checks.json and MANIFEST.json; a second non-writing run verifies their contents. Offline regression checks run through `make test-qualification` alongside the existing campaign-driver fixtures.
 
@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (701 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (713 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |
@@ -37,7 +37,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | ADRs | 20 | 18 | 0 | 2 |
 | Verification cases | 85 | 58 | 7 | 20 |
 
-The package also holds 81 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
+The package also holds 82 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
 
 ## Limits of these checks
 

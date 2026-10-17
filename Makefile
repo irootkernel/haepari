@@ -1,10 +1,15 @@
-.PHONY: build test test-prepare test-unit test-int test-e2e lint test-integration check test-macos-supervision test-utm test-qualification
+.PHONY: build test test-prepare test-unit test-int test-e2e lint test-integration check test-macos-supervision test-utm test-qualification release
 
 GO ?= go
 OUTPUT ?= bin/haepari
+RELEASE_VERSION ?= 0.1.0
+RELEASE_OUTPUT ?= dist
 
 build:
 	GO="$(GO)" sh build/build.sh "$(OUTPUT)"
+
+release:
+	GO="$(GO)" sh build/release.sh "$(RELEASE_VERSION)" "$(RELEASE_OUTPUT)"
 
 test:
 	+$(MAKE) test-prepare

@@ -41,6 +41,30 @@ type developmentServicePlan struct {
 	Plist               string `json:"plist"`
 }
 
+const (
+	devServicePlanSchemaV1    = "haepari.development-service-plan/v1"
+	devServicePlanSchemaV2    = "haepari.development-service-plan/v2"
+	releaseServicePlanSchema  = "haepari.release-service-plan/v1"
+	devServiceOwnerSchema     = "haepari.development-service-owner/v1"
+	releaseServiceOwnerSchema = "haepari.release-service-owner/v1"
+)
+
+// serviceLabel keeps the isolated development prefix distinct from the release
+// identity; a release plan never carries the dev label and vice versa.
+func serviceLabel(schema, instance string) string {
+	if schema == releaseServicePlanSchema {
+		return "io.rootkernel.haepari." + instance
+	}
+	return "io.rootkernel.haepari.dev." + instance
+}
+
+func serviceOwnerSchema(schema string) string {
+	if schema == releaseServicePlanSchema {
+		return releaseServiceOwnerSchema
+	}
+	return devServiceOwnerSchema
+}
+
 var developmentInstanceID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
 
 type developmentServiceOwner struct {
@@ -52,7 +76,7 @@ type developmentServiceOwner struct {
 
 func developmentRootOwner(p developmentServicePlan, create bool) error {
 	path := filepath.Join(p.Root, ".development-service.json")
-	expected := developmentServiceOwner{"haepari.development-service-owner/v1", p.Instance, p.OwnerUID, p.Root}
+	expected := developmentServiceOwner{serviceOwnerSchema(p.Schema), p.Instance, p.OwnerUID, p.Root}
 	f, err := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err == nil {
 		defer f.Close()
@@ -101,9 +125,15 @@ func plistString(s string) string {
 }
 
 func planDevelopmentService(instance, binary, rootPath string) (developmentServicePlan, error) {
-	return planDevelopmentServiceLimits(instance, binary, rootPath, 1, 1, false)
+	return planManagedService(instance, binary, rootPath, 1, 1, false, false)
 }
 func planDevelopmentServiceLimits(instance, binary, rootPath string, globalLimit, hostLimit int, explicit bool) (developmentServicePlan, error) {
+	return planManagedService(instance, binary, rootPath, globalLimit, hostLimit, explicit, false)
+}
+func planReleaseService(instance, binary, rootPath string, globalLimit, hostLimit int) (developmentServicePlan, error) {
+	return planManagedService(instance, binary, rootPath, globalLimit, hostLimit, true, true)
+}
+func planManagedService(instance, binary, rootPath string, globalLimit, hostLimit int, explicit, release bool) (developmentServicePlan, error) {
 	p := developmentServicePlan{}
 	if globalLimit < 1 || hostLimit < 1 || hostLimit > 2 {
 		return p, managed.ErrInvalid
@@ -151,11 +181,16 @@ func planDevelopmentServiceLimits(instance, binary, rootPath string, globalLimit
 	if err != nil {
 		return p, err
 	}
-	p = developmentServicePlan{Schema: "haepari.development-service-plan/v1", Instance: instance, Label: "io.rootkernel.haepari.dev." + instance, Domain: "gui/" + strconv.Itoa(os.Geteuid()), OwnerUID: os.Geteuid(), Binary: binary, BinarySHA256: "sha256:" + hex.EncodeToString(h.Sum(nil)), Root: root.Path}
+	p = developmentServicePlan{Schema: devServicePlanSchemaV1, Instance: instance, Label: "io.rootkernel.haepari.dev." + instance, Domain: "gui/" + strconv.Itoa(os.Geteuid()), OwnerUID: os.Geteuid(), Binary: binary, BinarySHA256: "sha256:" + hex.EncodeToString(h.Sum(nil)), Root: root.Path}
+	if release {
+		p.Schema, p.Label = releaseServicePlanSchema, serviceLabel(releaseServicePlanSchema, instance)
+	}
 	p.PlistPath = filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist")
 	limitArguments := ""
 	if explicit {
-		p.Schema = "haepari.development-service-plan/v2"
+		if !release {
+			p.Schema = devServicePlanSchemaV2
+		}
 		p.GlobalLimit, p.HostMACOSGuestLimit = globalLimit, hostLimit
 		limitArguments = plistString("--global-limit") + plistString(strconv.Itoa(globalLimit)) + plistString("--host-macos-guest-limit") + plistString(strconv.Itoa(hostLimit))
 	}
@@ -196,14 +231,22 @@ func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServ
 	if json.Unmarshal(raw, &shape) != nil {
 		return p, managed.ErrInvalid
 	}
-	if p.Schema == "haepari.development-service-plan/v1" {
-		if _, ok := shape["global_limit"]; ok {
+	_, hasGlobal := shape["global_limit"]
+	_, hasHost := shape["host_macos_guest_limit"]
+	switch p.Schema {
+	case devServicePlanSchemaV1:
+		if hasGlobal || hasHost {
 			return p, managed.ErrInvalid
 		}
-		if _, ok := shape["host_macos_guest_limit"]; ok {
+	case devServicePlanSchemaV2:
+		if !hasGlobal || !hasHost || p.GlobalLimit < 1 || p.HostMACOSGuestLimit < 1 || p.HostMACOSGuestLimit > 2 {
 			return p, managed.ErrInvalid
 		}
-	} else if p.Schema != "haepari.development-service-plan/v2" || p.GlobalLimit < 1 || p.HostMACOSGuestLimit < 1 || p.HostMACOSGuestLimit > 2 {
+	case releaseServicePlanSchema:
+		if !hasGlobal || !hasHost || p.GlobalLimit < 1 || p.HostMACOSGuestLimit < 1 || p.HostMACOSGuestLimit > 2 {
+			return p, managed.ErrInvalid
+		}
+	default:
 		return p, managed.ErrInvalid
 	}
 	if verifyBinary {
@@ -219,7 +262,7 @@ func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServ
 		if err != nil {
 			return p, err
 		}
-		if (p.Schema != "haepari.development-service-plan/v1" && p.Schema != "haepari.development-service-plan/v2") || !developmentInstanceID.MatchString(p.Instance) || p.OwnerUID != os.Geteuid() || p.Domain != "gui/"+strconv.Itoa(os.Geteuid()) || p.Label != "io.rootkernel.haepari.dev."+p.Instance || p.PlistPath != filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist") {
+		if p.OwnerUID != os.Geteuid() || p.Domain != "gui/"+strconv.Itoa(os.Geteuid()) || p.Label != serviceLabel(p.Schema, p.Instance) || !developmentInstanceID.MatchString(p.Instance) || p.PlistPath != filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist") {
 			return p, managed.ErrInvalid
 		}
 	}
@@ -227,13 +270,16 @@ func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServ
 }
 
 func recreateDevelopmentServicePlan(p developmentServicePlan) (developmentServicePlan, error) {
-	if p.Schema == "haepari.development-service-plan/v1" {
+	switch p.Schema {
+	case devServicePlanSchemaV1:
 		return planDevelopmentService(p.Instance, p.Binary, p.Root)
-	}
-	if p.Schema != "haepari.development-service-plan/v2" {
+	case devServicePlanSchemaV2:
+		return planDevelopmentServiceLimits(p.Instance, p.Binary, p.Root, p.GlobalLimit, p.HostMACOSGuestLimit, true)
+	case releaseServicePlanSchema:
+		return planReleaseService(p.Instance, p.Binary, p.Root, p.GlobalLimit, p.HostMACOSGuestLimit)
+	default:
 		return developmentServicePlan{}, managed.ErrInvalid
 	}
-	return planDevelopmentServiceLimits(p.Instance, p.Binary, p.Root, p.GlobalLimit, p.HostMACOSGuestLimit, true)
 }
 
 func launchctlService(args ...string) error {
@@ -341,7 +387,7 @@ func uninstallDevelopmentService(p developmentServicePlan) error {
 
 func serviceCommand(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari service plan --instance <id> --binary <absolute-path> --root <private-root> --json | install/uninstall --plan-file <json> --json")
+		fmt.Fprintln(stderr, "usage: haepari service plan [--release] --instance <id> --binary <absolute-path> --root <private-root> --json | install/uninstall --plan-file <json> --json")
 		return 2
 	}
 	flags := flag.NewFlagSet("service "+args[0], flag.ContinueOnError)
@@ -353,6 +399,7 @@ func serviceCommand(args []string, stdout, stderr io.Writer) int {
 	outputJSON := flags.Bool("json", false, "machine-readable response")
 	globalLimit := flags.Int("global-limit", 1, "positive global execution limit")
 	hostLimit := flags.Int("host-macos-guest-limit", 1, "host macOS guest capacity")
+	release := flags.Bool("release", false, "plan the explicit user release service identity")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || !*outputJSON {
 		return 2
 	}
@@ -369,9 +416,13 @@ func serviceCommand(args []string, stdout, stderr io.Writer) int {
 		if *file != "" {
 			return 2
 		}
-		p, err = planDevelopmentServiceLimits(*instance, *binary, *root, *globalLimit, *hostLimit, explicitLimits)
+		if *release {
+			p, err = planReleaseService(*instance, *binary, *root, *globalLimit, *hostLimit)
+		} else {
+			p, err = planDevelopmentServiceLimits(*instance, *binary, *root, *globalLimit, *hostLimit, explicitLimits)
+		}
 	case "install", "uninstall":
-		if explicitLimits || *file == "" || *instance != "" || *binary != "" || *root != "" {
+		if *release || explicitLimits || *file == "" || *instance != "" || *binary != "" || *root != "" {
 			return 2
 		}
 		p, err = readDevelopmentServicePlan(*file, args[0] == "install")

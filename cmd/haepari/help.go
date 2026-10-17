@@ -24,6 +24,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		{"doctor", "doctor --projection --section queue|retention [--resource <id>] [--cursor <cursor>] [--limit <1-20>] --json"},
 		{"daemon run", "daemon run [--backend local] [--root <absolute-private-root>] [--config <private-file>] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]"},
 		{"service plan", "service plan --instance <id> --binary <absolute-path> --root <private-root> [--global-limit <positive-integer>] [--host-macos-guest-limit 1|2] --json"},
+		{"service plan --release", "service plan --release --instance <id> --binary <absolute-path> --root <private-root> [--global-limit <positive-integer>] [--host-macos-guest-limit 1|2] --json"},
 		{"service install", "service install --plan-file <json> --json"},
 		{"service uninstall", "service uninstall --plan-file <json> --json"},
 		{"runner start", "runner start --request <absolute-request.json> [--json]"},

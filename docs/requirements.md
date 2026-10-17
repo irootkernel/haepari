@@ -246,12 +246,12 @@ Acceptance: Self-tests use an isolated state root or guest, unique socket, and s
 Implementation owner: `TASK-024`.
 
 ### HP-REQ-054
-- [ ] Distribute a verified binary and same-release `use-haepari` skill, with explicit daemon service installation.
+- [x] Distribute a verified binary and same-release `use-haepari` skill, with explicit daemon service installation.
 Acceptance: An isolated installation verifies the complete packaged skill tree, documented CLI flow and explicit service lifecycle without Aquarium or another scheduler. External model/provider skill-behavior evaluation is optional; installation does not auto-enable UTM or modify other products.
 Implementation owner: `TASK-025`.
 
 ### HP-REQ-055
-- [ ] Publish version and capabilities as machine-readable information.
+- [x] Publish version and capabilities as machine-readable information.
 Acceptance: The consumer checks declared schema, backend, wait, manual, and recovery capabilities instead of guessing support from a version string.
 Implementation owner: `TASK-025`.
 

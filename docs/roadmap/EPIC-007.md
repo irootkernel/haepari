@@ -11,22 +11,22 @@ Identity, status and ordering belong to the [canonical roadmap](../roadmap.md). 
 Requirement coverage: `HP-REQ-054`, `HP-REQ-055`.
 
 #### Implement
-- [ ] Expose only qualified managed protocol, local/UTM, blocking wait, manual, cancellation, recovery and `advisory-lock/v1` capabilities. Teach use-haepari same-key observation, truthful results and the lock flow: the acquiring owner waits, renews while its work runs, and releases on every completion path; a nested borrower only validates and uses the grant.
-- [ ] Produce checksummed native artifacts, complete use-haepari skill, explicit user-service installers, and frozen capability output. Keep binaries independent of a source checkout or plugin cache.
-- [ ] Package the release LaunchAgent with the configuration decided in TASK-004 and verified under TASK-011's development service. No signing identity is required ([TASK-034 probe record](../records/TASK-034-utm-probe.md)). TASK-027 re-verifies the packaged service with real UTM.
+- [x] Expose only qualified managed protocol, local/UTM, blocking wait, manual, cancellation, recovery and `advisory-lock/v1` capabilities. Teach use-haepari same-key observation, truthful results and the lock flow: the acquiring owner waits, renews while its work runs, and releases on every completion path; a nested borrower only validates and uses the grant.
+- [x] Produce checksummed native artifacts, complete use-haepari skill, explicit user-service installers, and frozen capability output. Keep binaries independent of a source checkout or plugin cache.
+- [x] Package the release LaunchAgent with the configuration decided in TASK-004 and verified under TASK-011's development service. No signing identity is required ([TASK-034 probe record](../records/TASK-034-utm-probe.md)). TASK-027 re-verifies the packaged service with real UTM.
 
 #### Do not
-- [ ] Do not auto-install into production while packaging, auto-enroll UTM, or add a required MCP transport.
+- [x] Do not auto-install into production while packaging, auto-enroll UTM, or add a required MCP transport.
 
 #### Verify
-- [ ] Install into an isolated test root in the same user, verify packaged skill files/documented CLI flow and service lifecycle, and run native submit/wait/reconnect/manual/cancel scenarios. No extra host account or model/provider behavior session is required.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Install into an isolated test root in the same user, verify packaged skill files/documented CLI flow and service lifecycle, and run native submit/wait/reconnect/manual/cancel scenarios. No extra host account or model/provider behavior session is required.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-026
 

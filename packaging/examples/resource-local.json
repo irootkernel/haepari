@@ -1,0 +1,14 @@
+{
+  "schema": "haepari.resource/v1",
+  "id": "pkg-local",
+  "kind": "local",
+  "execution_mode": "managed",
+  "capacity": 1,
+  "revision": 1,
+  "adapter": {
+    "qualification_reference": "haepari-package-example"
+  },
+  "cleanup": {
+    "policy_reference": "owned-workspace"
+  }
+}

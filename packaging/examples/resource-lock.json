@@ -1,0 +1,8 @@
+{
+  "schema": "haepari.resource/v1",
+  "kind": "lock",
+  "id": "pkg-review",
+  "capacity": 1,
+  "liveness_seconds": 120,
+  "max_hold_seconds": 21600
+}

@@ -35,7 +35,7 @@ Lifecycle status vocabulary:
 | [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Accepted |
 | [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Accepted |
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Accepted |
-| [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Planned |
+| [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | In progress |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
 
 EPIC-003 Canonical Outcomes: [managed core freeze](records/TASK-012-managed-core-freeze.md), [managed transitions](contracts/managed-transitions.md), [artifact delivery and retention](contracts/artifact-and-profile.md), and [operations](operations.md).
@@ -77,7 +77,7 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-022](roadmap/EPIC-006.md#task-022) | Harden trust, privacy and external-effect boundaries | TASK-021 | Active | Accepted |
 | [TASK-023](roadmap/EPIC-006.md#task-023) | Measure bounds and qualify supported platforms | TASK-021 | Active | Accepted |
 | [TASK-024](roadmap/EPIC-006.md#task-024) | Qualify storage compatibility and self-test isolation | TASK-005, TASK-021 | Active | Accepted |
-| [TASK-025](roadmap/EPIC-007.md#task-025) | Package the release, user services and paired skill | TASK-020, TASK-022, TASK-023, TASK-024 | Active | Planned |
+| [TASK-025](roadmap/EPIC-007.md#task-025) | Package the release, user services and paired skill | TASK-020, TASK-022, TASK-023, TASK-024 | Active | Accepted |
 | [TASK-026](roadmap/EPIC-007.md#task-026) | Finalize operator and developer documentation | TASK-025 | Active | Planned |
 | [TASK-027](roadmap/EPIC-007.md#task-027) | Run exact release acceptance | TASK-016, TASK-019, TASK-020, TASK-025, TASK-026 | Active | Planned |
 | [TASK-028](roadmap/EPIC-007.md#task-028) | Deliver the Aquarium consumer handoff | TASK-027 | Active | Planned |
