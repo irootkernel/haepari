@@ -11,9 +11,12 @@ import (
 
 // A recorded collection is consumed, never copied again into an exclusive
 // artifact directory. An interrupted collector protects its remaining source.
-func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.JobSpec, workspace string, out managed.LocalOutcome, reason string) error {
+func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.JobSpec, workspace string, out managed.LocalOutcome, reason string, logLimit int64, hasRequest bool, artifactBytes, artifactCount int64) error {
 	collect := c.phases["collect"]
 	if !collect.Completed || collect.Outcome == "unproven" {
+		// The native manifest has no pinned token. Keep a gap the unproven receipt already recorded.
+		priorGaps := append([]managed.EvidenceGap(nil), collect.EvidenceGaps...)
+		unproven := collect.Outcome == "unproven"
 		collect.Completed, collect.Outcome = true, "failed"
 		collect.EvidenceCompleteness = "partial"
 		var err error
@@ -21,11 +24,51 @@ func (s *runtimeServer) resumeLocalSettlement(c *localRunControl, job managed.Jo
 		if err != nil {
 			return err
 		}
+		if len(collect.Logs) > 0 && !hasRequest {
+			return managed.ErrBlocked
+		}
+		collect.Logs, collect.EvidenceGaps, _ = rejectOversizedPinnedLog(collect.Logs, collect.EvidenceGaps, logLimit, hasRequest)
+		if unproven {
+			for _, gap := range priorGaps {
+				if gap.Reason != "pinned_log_exceeded" {
+					continue
+				}
+				kept := false
+				for _, existing := range collect.EvidenceGaps {
+					if existing == gap {
+						kept = true
+						break
+					}
+				}
+				if !kept {
+					collect.EvidenceGaps = append(collect.EvidenceGaps, gap)
+				}
+			}
+		}
 		collect.ProtectedEvidence = []managed.ProtectedEvidence{{Path: "workspace", Reason: "collection_interrupted", RecoveryReference: "job:" + c.identity.JobID}}
 		if err := s.endPhase(c, "collect", collect); err != nil {
 			return err
 		}
 		collect = c.phases["collect"]
+	} else {
+		if len(collect.Logs) > 0 && !hasRequest {
+			return managed.ErrBlocked
+		}
+		for _, item := range collect.Logs {
+			if item.SizeBytes > logLimit {
+				return managed.ErrInvalid
+			}
+		}
+		if int64(len(collect.Artifacts)) > artifactCount {
+			return managed.ErrInvalid
+		}
+		var used int64
+		for _, item := range collect.Artifacts {
+			if item.SizeBytes > artifactBytes-used {
+				return managed.ErrInvalid
+			}
+			used += item.SizeBytes
+		}
 	}
 	if c.receipt.JobState == "collecting" {
 		if err := s.advancePhase(c, "collecting", "cleaning", "recovered-collected"); err != nil {

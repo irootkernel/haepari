@@ -159,6 +159,9 @@ func reject(w http.ResponseWriter, op string, err error) {
 	} else if code == "INVALID_REQUEST" && errors.As(err, &manualScenario) {
 		message = manualScenario.Error()
 	}
+	if code == "INVALID_REQUEST" && strings.Contains(err.Error(), "request_bytes") {
+		message = err.Error()
+	}
 	send(w, status, op, nil, &responseError{Code: code, Message: message, Retry: retry})
 }
 func (s *runtimeServer) routes() http.Handler {
@@ -179,6 +182,7 @@ func (s *runtimeServer) routes() http.Handler {
 	mux.HandleFunc("POST /v1/resources/{id}/{action}", s.resourceAvailability)
 	mux.HandleFunc("GET /v1/resources/{id}", s.resourceInspect)
 	mux.HandleFunc("GET /v1/resources/{id}/doctor", s.resourceDoctor)
+	mux.HandleFunc("GET /v1/operator/projection", s.operatorProjection)
 	mux.HandleFunc("POST /v1/jobs", s.submit)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.inspect)
 	mux.HandleFunc("GET /v1/jobs/{id}/wait", s.wait)
@@ -355,6 +359,10 @@ func (s *runtimeServer) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !errors.Is(err, managed.ErrNotFound) {
+		reject(w, "submit", err)
+		return
+	}
+	if err := s.ledger.ScreenAdmission(job.ResourceID, job, input.Spec); err != nil {
 		reject(w, "submit", err)
 		return
 	}

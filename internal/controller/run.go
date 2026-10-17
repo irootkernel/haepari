@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irootkernel/haepari/internal/config"
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/snapshot"
@@ -27,14 +28,30 @@ var ErrSocketExists = errors.New("control socket already exists; refusing to rep
 type Options struct {
 	HostMACOSGuestLimit int
 	GlobalLimit         int
+	HostLimitExplicit   bool
+	GlobalLimitExplicit bool
+	ConfigPath          string
+	ConfigExplicit      bool
 }
 
 func Run(ctx context.Context, root state.Root) error {
 	return RunWithOptions(ctx, root, Options{HostMACOSGuestLimit: 1, GlobalLimit: 1})
 }
+
+func bindAcceptedLimits(server *runtimeServer, accepted config.Document) {
+	server.vmHostLimit = int(accepted.HostMACOSGuestLimit)
+}
 func RunWithOptions(ctx context.Context, root state.Root, options Options) error {
 	if options.GlobalLimit < 1 || options.HostMACOSGuestLimit < 1 || options.HostMACOSGuestLimit > 2 {
 		return managed.ErrInvalid
+	}
+	loaded, fromFile, err := config.Load(root.Path, config.Sources{
+		Path: options.ConfigPath, ConfigExplicit: options.ConfigExplicit,
+		GlobalLimit: options.GlobalLimit, GlobalExplicit: options.GlobalLimitExplicit,
+		HostLimit: options.HostMACOSGuestLimit, HostExplicit: options.HostLimitExplicit,
+	})
+	if err != nil {
+		return err
 	}
 	if err := root.Prepare(); err != nil {
 		return err
@@ -49,9 +66,6 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 			_ = ownership.Close()
 		}
 	}()
-	if err := recoverStaleSocket(root.SocketPath, ownership, os.Lstat); err != nil {
-		return err
-	}
 	db, err := sqlite.Open(root.DBPath)
 	if err != nil {
 		return err
@@ -61,9 +75,21 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 			_ = db.Close()
 		}
 	}()
-	ledger, err := managed.NewLedger(db, options.GlobalLimit)
+	ledger, err := managed.NewLedger(db, int(loaded.GlobalLimit))
 	if err != nil {
 		return fmt.Errorf("initialize managed state: %w", err)
+	}
+	ledger.RequireAcceptedConfiguration()
+	// The accepted document and its audit commit before socket publication,
+	// reconciliation, or dispatch. A rejected revision leaves the stored
+	// document and existing jobs untouched. A foreign socket is refused
+	// afterwards and is not removed.
+	accepted, err := ledger.CommitEffectiveConfig(loaded, fromFile)
+	if err != nil {
+		return err
+	}
+	if err := recoverStaleSocket(root.SocketPath, ownership, os.Lstat); err != nil {
+		return err
 	}
 	store, err := snapshot.OpenStore(root.Path)
 	if err != nil {
@@ -90,7 +116,7 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 	if err != nil {
 		return fmt.Errorf("bind installation identity: %w", err)
 	}
-	runtime.vmHostLimit = options.HostMACOSGuestLimit
+	bindAcceptedLimits(runtime, accepted)
 	runtime.vmTransport = true
 	// A graceful listener exit detaches observers, not the independent runner.
 	// Retain the kernel ownership lock and database until in-process workers

@@ -197,6 +197,9 @@ func (l *Ledger) BeginPurge(q PurgeIntent) error {
 	if b.Receipt.Admission.ObjectID == "" || q.Object.Path != b.Receipt.Admission.ObjectID || len(b.Inventory) == 0 {
 		return ErrBlocked
 	}
+	if err = requireJobBoundsTx(tx, q.JobID); err != nil {
+		return err
+	}
 	// The intent and unavailable receipt precede every bulk deletion. Small
 	// immutable result and ownership records remain private reconciliation data.
 	cursor, err := retentionEvent(tx, q.JobID, "purge_intent", map[string]any{"expected_revision": q.ExpectedRevision, "snapshot_digest": q.SnapshotDigest})
@@ -239,6 +242,9 @@ func (l *Ledger) CompletePurge(q PurgeIntent) (PurgeReceipt, error) {
 		return PurgeReceipt{}, err
 	}
 	if !complete {
+		if err = requireJobBoundsTx(tx, q.JobID); err != nil {
+			return PurgeReceipt{}, err
+		}
 		// Public tombstones omit the cursor. Permanent ownership still defines
 		// the prefix; recovery bindings remain private replay authority.
 		var through int64
@@ -277,6 +283,9 @@ func (l *Ledger) CompletePurge(q PurgeIntent) (PurgeReceipt, error) {
 
 // Supplementary evidence revisions describe retention, never a changed result.
 func retentionEvent(tx *sql.Tx, id, kind string, payload any) (int64, error) {
+	if err := requireJobBoundsTx(tx, id); err != nil {
+		return 0, err
+	}
 	if _, err := tx.Exec(`UPDATE managed_jobs SET revision=revision+1 WHERE id=? AND state='finished'`, id); err != nil {
 		return 0, err
 	}

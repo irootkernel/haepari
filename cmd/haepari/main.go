@@ -12,10 +12,12 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/client"
+	"github.com/irootkernel/haepari/internal/config"
 	"github.com/irootkernel/haepari/internal/controller"
 	"github.com/irootkernel/haepari/internal/identity"
 	"github.com/irootkernel/haepari/internal/managed"
@@ -38,7 +40,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: haepari help --json | version --json | capabilities --json | doctor --resource <id> --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | manual complete <job-id> --input <json> --expected-revision <n> --json | submit | run | inspect | wait | events | logs | cancel | export | purge")
+		fmt.Fprintln(stderr, "usage: haepari help --json | version --json | capabilities --json | doctor --resource <id> --json | doctor --projection --section queue|retention --json | daemon run | service plan/install/uninstall | runner start/inspect/watch/cancel --request <absolute-request.json> | resource register/inspect/pause/resume/update/remove/recover | job recover | lock acquire/wait/renew/keepalive/release/cancel | locks list | resources list | jobs list | manual complete <job-id> --input <json> --expected-revision <n> --json | submit | run | inspect | wait | events | logs | cancel | export | purge")
 		return 2
 	}
 	switch args[0] {
@@ -73,31 +75,57 @@ func run(args []string, stdout, stderr io.Writer) int {
 			Capabilities      []string `json:"capabilities"`
 		}{platform.CompiledBackends(), []string{}, []string{"managed-execution/v1"}, managed.Capabilities()})
 	case "daemon":
+		usage := "usage: haepari daemon run [--backend local] [--root <absolute-private-root>] [--config <private-file>] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]"
 		if len(args) < 2 || args[1] != "run" {
-			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]")
+			fmt.Fprintln(stderr, usage)
 			return 2
 		}
 		flags := flag.NewFlagSet("daemon run", flag.ContinueOnError)
 		flags.SetOutput(stderr)
 		backend := flags.String("backend", platform.DefaultBackend, "bootstrap backend")
+		cliRoot := flags.String("root", "", "absolute private state root")
+		configPath := flags.String("config", "", "private configuration file; a relative path uses the working directory")
 		hostLimit := flags.Int("host-macos-guest-limit", 1, "host macOS guest capacity, including operator VMs")
 		globalLimit := flags.Int("global-limit", 1, "positive global execution limit")
 		if err := flags.Parse(args[2:]); err != nil {
 			return 2
 		}
 		if flags.NArg() != 0 {
-			fmt.Fprintln(stderr, "usage: haepari daemon run [--backend local] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]")
+			fmt.Fprintln(stderr, usage)
 			return 2
 		}
+		var rootExplicit, configExplicit, hostExplicit, globalExplicit bool
+		flags.Visit(func(f *flag.Flag) {
+			switch f.Name {
+			case "root":
+				rootExplicit = true
+			case "config":
+				configExplicit = true
+			case "host-macos-guest-limit":
+				hostExplicit = true
+			case "global-limit":
+				globalExplicit = true
+			}
+		})
 		if *globalLimit < 1 || *hostLimit < 1 || *hostLimit > 2 {
 			fmt.Fprintln(stderr, "global execution limit must be positive; host macOS guest limit must be 1 or 2")
+			return 2
+		}
+		if rootExplicit && strings.TrimSpace(*cliRoot) == "" {
+			fmt.Fprintln(stderr, "explicit --root is empty")
 			return 2
 		}
 		if err := platform.Validate(runtime.GOOS, runtime.GOARCH, *backend); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
-		root, err := state.Resolve(os.Getenv("HAEPARI_HOME"))
+		var root state.Root
+		var err error
+		if rootExplicit {
+			root, err = state.ResolvePreferred(*cliRoot, os.Getenv("HAEPARI_HOME"))
+		} else {
+			root, err = state.Resolve(os.Getenv("HAEPARI_HOME"))
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			if errors.Is(err, state.ErrInvalidRoot) {
@@ -107,9 +135,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		if err := controller.RunWithOptions(ctx, root, controller.Options{HostMACOSGuestLimit: *hostLimit, GlobalLimit: *globalLimit}); err != nil {
+		if err := controller.RunWithOptions(ctx, root, controller.Options{
+			HostMACOSGuestLimit: *hostLimit, GlobalLimit: *globalLimit,
+			HostLimitExplicit: hostExplicit, GlobalLimitExplicit: globalExplicit,
+			ConfigPath: *configPath, ConfigExplicit: configExplicit,
+		}); err != nil {
 			fmt.Fprintln(stderr, err)
-			if errors.Is(err, state.ErrControllerOwned) || errors.Is(err, state.ErrInvalidRoot) || errors.Is(err, controller.ErrSocketExists) || errors.Is(err, sqlite.ErrInvalidStore) {
+			if errors.Is(err, state.ErrControllerOwned) || errors.Is(err, state.ErrInvalidRoot) || errors.Is(err, controller.ErrSocketExists) || errors.Is(err, sqlite.ErrInvalidStore) || errors.Is(err, config.ErrRefused) || errors.Is(err, managed.ErrInvalid) || errors.Is(err, managed.ErrConflict) {
 				return 2
 			}
 			return 6
@@ -299,6 +331,27 @@ func submit(args []string, stdout, stderr io.Writer, blocking bool) int {
 		return code
 	}
 	defer c.Close()
+	spec, filled, err := materializeActiveDeadlines(spec, func() (config.Deadlines, error) {
+		view, err := c.AcceptedConfiguration(context.Background())
+		if err != nil {
+			return config.Deadlines{}, err
+		}
+		doc, _, err := config.Parse(view.Config)
+		if err != nil {
+			return config.Deadlines{}, fmt.Errorf("accepted configuration projection is unavailable; omitted phase budgets cannot be filled: %w", err)
+		}
+		return doc.DefaultDeadlines, nil
+	})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if filled {
+		if _, err := managed.DecodeJob(spec); err != nil {
+			fmt.Fprintf(stderr, "job deadline validator: %v\n", err)
+			return 2
+		}
+	}
 	receipt, envelope, err := c.Submit(context.Background(), spec, *key)
 	if err != nil {
 		return clientFailure(stdout, stderr, envelope, err)

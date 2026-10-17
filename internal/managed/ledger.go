@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,9 @@ type Ledger struct {
 	changesMu           sync.Mutex
 	changes             chan struct{}
 	lockClock           func() (time.Time, string, error)
+	// legacyFixtureBounds is false after NewLedger. Only UseLegacyFixtureBounds
+	// selects the historical caps for an isolated fixture.
+	legacyFixtureBounds bool
 }
 
 // Changes returns the current commit generation. Subscribe before reading the
@@ -201,6 +205,9 @@ func (l *Ledger) PurgeEventsThrough(jobID string, through int64) error {
 	if through <= floor {
 		return nil
 	}
+	if err := requireJobBoundsTx(tx, jobID); err != nil {
+		return err
+	}
 	// Recovery intents and compensations bind permanent replay/provenance;
 	// they remain private below the public resynchronization floor.
 	if _, err := tx.Exec(`DELETE FROM managed_events WHERE job_id=? AND cursor<=? AND kind NOT IN ('recovery_intent','phase_reconciled','vm_prepared','vm_retained','vm_transport_binding','vm_transport_admission','vm_retire_intent','power_cessation','local_workspace')`, jobID, through); err != nil {
@@ -333,7 +340,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 10 {
+	if version > 12 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
 	if err := checkBaseSchemaTx(tx, version); err != nil {
@@ -366,6 +373,16 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	}
 	if version >= 10 {
 		if err := checkManualSchemaTx(tx); err != nil {
+			return nil, err
+		}
+	}
+	if version >= 11 {
+		if err := checkEffectiveConfigSchemaTx(tx); err != nil {
+			return nil, err
+		}
+	}
+	if version >= 12 {
+		if err := checkJobBoundsSchemaTx(tx); err != nil {
 			return nil, err
 		}
 	}
@@ -436,10 +453,16 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := initManualSchemaTx(tx, version); err != nil {
 		return nil, err
 	}
+	if err := initEffectiveConfigTx(tx, version); err != nil {
+		return nil, err
+	}
+	if err := initJobBoundsTx(tx, version); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &Ledger{db: db, globalLimit: globalLimit}, nil
+	return &Ledger{db: db, globalLimit: globalLimit, legacyFixtureBounds: false}, nil
 }
 
 func powerTransitionHasColumnTx(tx *sql.Tx, column string) (bool, error) {
@@ -636,10 +659,21 @@ func (l *Ledger) AdmitWithParent(data []byte, sealedDigest, objectID string, inv
 	if kind == "lock" {
 		return Receipt{}, ErrUnsupported
 	}
+	policy, err := prepareAdmissionTx(tx, l.legacyFixtureBounds, job.ResourceID, job, data)
+	if err != nil {
+		return Receipt{}, err
+	}
 	now := time.Now().UTC()
+	deadline, err := queueDeadlineNs(now, job.Deadlines.QueueSeconds)
+	if err != nil {
+		return Receipt{}, err
+	}
 	if _, err := tx.Exec(`INSERT INTO managed_jobs(id,request_key,submitted_digest,resource_id,pinned_config_revision,admitted_at_ns,queue_deadline_ns,spec_json) VALUES(?,?,?,?,?,?,?,?)`,
-		jobID, requestKey, digest, job.ResourceID, configRevision, now.UnixNano(), now.Add(time.Duration(job.Deadlines.QueueSeconds)*time.Second).UnixNano(), canonical); err != nil {
+		jobID, requestKey, digest, job.ResourceID, configRevision, now.UnixNano(), deadline, canonical); err != nil {
 		return Receipt{}, admissionError(err)
+	}
+	if err := insertJobBoundsTx(tx, jobID, policy); err != nil {
+		return Receipt{}, err
 	}
 
 	parentJSON, _ := json.Marshal(chain)
@@ -704,6 +738,9 @@ func (l *Ledger) Reserve(q ReserveRequest) (Receipt, error) {
 		}
 		if state != "queued" {
 			return Receipt{}, ErrConflict
+		}
+		if err := requireJobBoundsTx(tx, q.JobID); err != nil {
+			return Receipt{}, err
 		}
 		var deadline int64
 		if err := tx.QueryRow(`SELECT queue_deadline_ns FROM managed_jobs WHERE id=?`, q.JobID).Scan(&deadline); err != nil {
@@ -1025,7 +1062,7 @@ func (l *Ledger) SettleNoEffect(q SettleNoEffectRequest) (Receipt, error) {
 			ResourceRevision: configRev, LeaseGeneration: lease, JobState: "finished", ResourceAvailability: availability,
 			WorkloadOutcome: outcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict,
 			Observations: &ResultObservations{Source: q.JobID + ":" + proof.ObservationReference}, Timings: timings})
-		if err := releaseSlotTx(tx, resourceID); err != nil {
+		if err := releaseSlotTx(tx, q.JobID, resourceID); err != nil {
 			return Receipt{}, err
 		}
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, resultJSON, q.JobID); err != nil {
@@ -1204,6 +1241,11 @@ func (l *Ledger) mutate(kind, key string, request any, do func(*sql.Tx) (Receipt
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Receipt{}, err
 	}
+	if jobID := effectJobID(request); jobID != "" {
+		if err := requireJobBoundsTx(tx, jobID); err != nil {
+			return Receipt{}, err
+		}
+	}
 	receipt, err := do(tx)
 	if err != nil {
 		return Receipt{}, err
@@ -1222,9 +1264,20 @@ func (l *Ledger) mutate(kind, key string, request any, do func(*sql.Tx) (Receipt
 }
 
 func addEvent(tx *sql.Tx, jobID, kind string, payload any) (int64, error) {
+	if err := requireJobBoundsTx(tx, jobID); err != nil {
+		return 0, err
+	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return 0, err
+	}
+	// The largest cursor encoding is the bound. A later assigned cursor cannot be bigger.
+	probe, err := json.Marshal(Event{Cursor: math.MaxInt64, JobID: jobID, Kind: kind, Payload: encoded})
+	if err != nil {
+		return 0, err
+	}
+	if len(probe) > 2<<20 {
+		return 0, ErrInvalid
 	}
 	result, err := tx.Exec(`INSERT INTO managed_events(job_id,kind,payload_json) VALUES(?,?,?)`, jobID, kind, encoded)
 	if err != nil {

@@ -195,9 +195,9 @@ func syncVMParentsUntil(name, stop string, deadline time.Time) error {
 		}
 	}
 }
-func (s *runtimeServer) collectVM(q runner.GuestRequest, required []string, destination string, deadline time.Time) collectionAttempt {
+func (s *runtimeServer) collectVM(q runner.GuestRequest, required []string, destination string, deadline time.Time, byteLimit, countLimit int64) collectionAttempt {
 	a := collectionAttempt{complete: true}
-	if len(required) > 1000 {
+	if byteLimit < 1 || countLimit < 1 || int64(len(required)) > countLimit {
 		return collectionAttempt{}
 	}
 	if err := os.Mkdir(destination, 0700); err != nil {
@@ -212,7 +212,7 @@ func (s *runtimeServer) collectVM(q runner.GuestRequest, required []string, dest
 			a.expired = true
 			break
 		}
-		result, err := s.collectVMFile(q, name, filepath.Join(destination, filepath.FromSlash(name)), deadline, (1<<30)-total)
+		result, err := s.collectVMFile(q, name, filepath.Join(destination, filepath.FromSlash(name)), deadline, byteLimit-total)
 		if err != nil {
 			a.complete = false
 			if errors.Is(err, errOutputAbsent) {
@@ -258,6 +258,10 @@ func (s *runtimeServer) cleanupVM(q runner.GuestRequest, deadline time.Time) err
 	return nil
 }
 func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, q runner.GuestRequest, out managed.LocalOutcome) error {
+	logLimit, hasRequest, artifactBytes, artifactCount, _, boundsErr := s.jobCollectionBounds(c.identity.JobID)
+	if boundsErr != nil {
+		return boundsErr
+	}
 	jobRoot := filepath.Join(s.root.Path, "jobs", c.identity.JobID)
 	// Restart consumes durable collection and cleanup outcomes; deadlines are
 	// never renewed for an existing phase.
@@ -274,7 +278,7 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 			required = nil
 		}
 		collected, status := boundedPhaseWithWorker(collect.Deadline, s.detached, func(work func()) bool { return s.startJobWorker(c.identity.JobID, work) }, func() collectionAttempt {
-			return s.collectVM(q, required, filepath.Join(jobRoot, "artifacts"), collect.Deadline)
+			return s.collectVM(q, required, filepath.Join(jobRoot, "artifacts"), collect.Deadline, artifactBytes, artifactCount)
 		})
 		logs, gaps, err := s.ledger.LocalLogManifest(c.identity.JobID)
 		if err != nil {
@@ -284,8 +288,16 @@ func (s *runtimeServer) settleVMPhases(c *localRunControl, job managed.JobSpec, 
 			collected.complete = false
 			gaps = append(gaps, managed.EvidenceGap{Path: "output.log", Reason: "native_log_manifest_missing"})
 		}
-		if len(logs) > 0 {
-			log, err := s.collectVMFile(vmLogRequest(q), "output.log", filepath.Join(jobRoot, "output.log"), collect.Deadline, 256<<20)
+		if len(logs) > 0 && !hasRequest {
+			return managed.ErrBlocked
+		}
+		var oversized bool
+		logs, gaps, oversized = rejectOversizedPinnedLog(logs, gaps, logLimit, hasRequest)
+		if oversized {
+			collected.complete = false
+		}
+		if len(logs) > 0 && !oversized {
+			log, err := s.collectVMFile(vmLogRequest(q), "output.log", filepath.Join(jobRoot, "output.log"), collect.Deadline, logLimit)
 			if err != nil || log != logs[0] {
 				collected.complete = false
 				gaps = append(gaps, managed.EvidenceGap{Path: "output.log", Reason: "guest_log_uncollected"})
@@ -469,7 +481,11 @@ func (s *runtimeServer) collectVMLog(q runner.GuestRequest, deadline time.Time) 
 	if len(logs) == 0 {
 		return nil
 	}
-	result, err := s.collectVMFile(vmLogRequest(q), "output.log", filepath.Join(s.root.Path, "jobs", q.Request.Identity.JobID, "output.log"), deadline, 256<<20)
+	logLimit, hasRequest, _, _, _, err := s.jobCollectionBounds(q.Request.Identity.JobID)
+	if err != nil || !hasRequest || logs[0].SizeBytes > logLimit {
+		return managed.ErrBlocked
+	}
+	result, err := s.collectVMFile(vmLogRequest(q), "output.log", filepath.Join(s.root.Path, "jobs", q.Request.Identity.JobID, "output.log"), deadline, logLimit)
 	if err != nil {
 		return err
 	}

@@ -39,6 +39,7 @@ var _ = ginkgo.Describe("Task007UnixScheduling", ginkgo.Label("integration"), fu
 		defer db.Close()
 		ledger, err := managed.NewLedger(db, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		ledger.UseLegacyFixtureBounds()
 		store, err := snapshot.OpenStore(root.Path)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		runtime, err := newRuntime(root, ledger, store)

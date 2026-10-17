@@ -82,16 +82,8 @@ func cancellationStatusTx(tx *sql.Tx, jobID string) (CancellationStatus, error) 
 		var terminal bool
 		err := tx.QueryRow(`SELECT state='finished' AND result_json IS NOT NULL FROM managed_jobs WHERE id=?`, jobID).Scan(&terminal)
 		if errors.Is(err, sql.ErrNoRows) {
-			var data []byte
-			if err := tx.QueryRow(`SELECT tombstone_receipt FROM managed_admissions WHERE job_id=? AND retention_state='unavailable'`, jobID).Scan(&data); err != nil {
-				return status, mapNoRows(err)
-			}
-			var tombstone Receipt
-			if err := json.Unmarshal(data, &tombstone); err != nil {
+			if err := retainedTerminalTombstoneTx(tx, jobID); err != nil {
 				return status, err
-			}
-			if tombstone.JobID != jobID || tombstone.JobState != "finished" || tombstone.ResultStatus != "unavailable" {
-				return status, fmt.Errorf("cancellation lost retained terminal identity")
 			}
 			terminal = true
 		} else if err != nil {
@@ -115,6 +107,23 @@ func (l *Ledger) Cancellation(jobID string) (CancellationStatus, error) {
 		return CancellationStatus{}, err
 	}
 	return cancellationStatusTx(tx, jobID)
+}
+
+// retainedTerminalTombstoneTx checks the retained unavailable tombstone.
+// The caller decides whether a live job row still owns the policy guard.
+func retainedTerminalTombstoneTx(tx *sql.Tx, jobID string) error {
+	var data []byte
+	if err := tx.QueryRow(`SELECT tombstone_receipt FROM managed_admissions WHERE job_id=? AND retention_state='unavailable'`, jobID).Scan(&data); err != nil {
+		return mapNoRows(err)
+	}
+	var tombstone Receipt
+	if err := json.Unmarshal(data, &tombstone); err != nil {
+		return err
+	}
+	if tombstone.JobID != jobID || tombstone.JobState != "finished" || tombstone.ResultStatus != "unavailable" {
+		return fmt.Errorf("cancellation lost retained terminal identity")
+	}
+	return nil
 }
 
 // Cancel serializes the queued/reserved decision with Reserve in SQLite.
@@ -151,6 +160,25 @@ func (l *Ledger) Cancel(q CancelRequest) (CancelReceipt, error) {
 	} else {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return CancelReceipt{}, err
+		}
+		if err = requireJobBoundsTx(tx, q.JobID); err != nil {
+			// A current job row keeps this refusal. Missing policy is not a
+			// fallback. The original no-effect late cancel continues only when
+			// that row is already gone and the retained terminal tombstone
+			// authorizes the same job in this transaction.
+			if !errors.Is(err, ErrBlocked) {
+				return CancelReceipt{}, err
+			}
+			var currentJobs int
+			if scanErr := tx.QueryRow(`SELECT COUNT(*) FROM managed_jobs WHERE id=?`, q.JobID).Scan(&currentJobs); scanErr != nil {
+				return CancelReceipt{}, scanErr
+			}
+			if currentJobs != 0 {
+				return CancelReceipt{}, err
+			}
+			if authErr := retainedTerminalTombstoneTx(tx, q.JobID); authErr != nil {
+				return CancelReceipt{}, authErr
+			}
 		}
 		current, err := l.snapshotTx(tx, q.JobID)
 		if err != nil {

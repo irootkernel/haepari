@@ -23,7 +23,7 @@ test-prepare:
 	python3 docs/tools/validate_docs.py
 
 test-unit:
-	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --fail-on-pending --label-filter=unit ./cmd/haepari ./internal/client ./internal/managed ./internal/platform ./internal/runner ./internal/snapshot ./internal/state ./internal/utm
+	$(GO) run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --fail-on-pending --label-filter=unit ./cmd/haepari ./internal/client ./internal/managed ./internal/platform ./internal/runner ./internal/snapshot ./internal/state ./internal/utm ./internal/config
 	+$(MAKE) test-qualification
 
 test-qualification:

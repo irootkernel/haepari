@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/irootkernel/haepari/internal/config"
 	"github.com/irootkernel/haepari/internal/platform"
 )
 
@@ -337,6 +338,78 @@ func (l *Ledger) BeginEvidenceRecovery(q EvidenceRecoveryIntent) error {
 	return l.commit(tx)
 }
 
+func savedEffectiveLogLimitTx(tx *sql.Tx, jobID string, pin int64) (int64, bool, error) {
+	var raw []byte
+	err := tx.QueryRow(`SELECT payload_json FROM managed_runner_receipts WHERE job_id=? AND kind='request'`, jobID).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	var saved struct {
+		LogLimitBytes int64 `json:"log_limit_bytes"`
+	}
+	if json.Unmarshal(raw, &saved) != nil || saved.LogLimitBytes < 0 || saved.LogLimitBytes > config.MaxLogBytes {
+		return 0, false, ErrBlocked
+	}
+	limit := saved.LogLimitBytes
+	if limit == 0 {
+		limit = config.MaxLogBytes
+	}
+	if pin < limit {
+		limit = pin
+	}
+	return limit, true, nil
+}
+
+func recoveryReceiptWithinPin(tx *sql.Tx, jobs []EvidenceRecoveryOutcome) error {
+	for _, o := range jobs {
+		// An empty outcome can still authorize cleanup, so the current pin is
+		// required before that fast path. A committed complete replay returns
+		// earlier and does not reach this check.
+		bounds, err := validatedJobBoundsTx(tx, o.JobID)
+		if err != nil {
+			return err
+		}
+		guestLog := int64(-1)
+		for _, a := range o.GuestArtifacts {
+			if a.Path == "output.log" {
+				guestLog = a.SizeBytes
+			}
+		}
+		if len(o.Artifacts) == 0 && guestLog < 0 {
+			continue
+		}
+		if len(o.Artifacts) > 0 {
+			if int64(len(o.Artifacts)) > bounds.ArtifactCount {
+				return ErrInvalid
+			}
+			var used int64
+			for _, a := range o.Artifacts {
+				if a.SizeBytes > bounds.ArtifactBytes-used {
+					return ErrInvalid
+				}
+				used += a.SizeBytes
+			}
+		}
+		if guestLog < 0 {
+			continue
+		}
+		limit, hasRequest, err := savedEffectiveLogLimitTx(tx, o.JobID, bounds.LogBytes)
+		if err != nil {
+			return err
+		}
+		if !hasRequest {
+			return ErrBlocked
+		}
+		if guestLog > limit {
+			return ErrInvalid
+		}
+	}
+	return nil
+}
+
 func (l *Ledger) RecordEvidenceRecovery(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) error {
 	if !validEvidenceIntent(q) || !validEvidenceReceipt(q, r) {
 		return ErrInvalid
@@ -373,6 +446,11 @@ func (l *Ledger) RecordEvidenceRecovery(q EvidenceRecoveryIntent, r EvidenceReco
 	}
 	if state != "recovering" {
 		return ErrStale
+	}
+	// Structural caps stay in validEvidenceReceipt. This ceiling is the job's
+	// immutable pin, so a later accepted revision cannot raise it.
+	if err = recoveryReceiptWithinPin(tx, r.Jobs); err != nil {
+		return err
 	}
 	raw, err := json.Marshal(r)
 	if err != nil {

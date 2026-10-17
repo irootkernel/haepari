@@ -375,6 +375,10 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	q.ObjectID = object
 	q.InputDigest = snap.Manifest.TreeSHA256
 	q.ProfileDigest = "sha256:" + strings.TrimPrefix(job.Environment.ProfileDigest, "sha256:")
+	bounds, err := s.ledger.ValidatedJobBounds(id.JobID)
+	if err != nil {
+		return err
+	}
 	q.Request = runner.Request{Schema: managed.RunnerSchema("request"), Identity: id, BootID: identity.BootID, WorkDir: filepath.Join(root, "workspace", filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: vmEnvironment(job, chain), Deadline: prepareDeadline.Add(time.Duration(job.Deadlines.RunSeconds) * time.Second).UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds}
 	if c.manual {
 		argv, err := preparationArgv(job, filepath.Join(root, "haepari"))
@@ -385,6 +389,7 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 		q.Request.Deadline = prepareDeadline.UTC()
 		q.Request.RunSeconds = job.Deadlines.PrepareSeconds
 	}
+	applyPinnedLogLimit(&q.Request, bounds.LogBytes)
 	q.Inventory = inventory
 	var payloadBytes int64
 	for _, entry := range snap.Manifest.Entries {

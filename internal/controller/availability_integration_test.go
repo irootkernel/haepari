@@ -38,6 +38,7 @@ func availabilityFixture(t ginkgo.FullGinkgoTInterface) (*runtimeServer, *client
 	t.Cleanup(func() { _ = db.Close() })
 	l, err := managed.NewLedger(db, 1)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	l.UseLegacyFixtureBounds()
 	store, err := snapshot.OpenStore(root.Path)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	runtime, err := newRuntime(root, l, store)

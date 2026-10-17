@@ -121,11 +121,15 @@ func (s *runtimeServer) finishPreparation(c *localRunControl, job managed.JobSpe
 // Every stopped local path reaches this collection/cleanup/verification path.
 // Unproven workers return to reconciliation; they never reach terminal commit.
 func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpec, jobRoot, workspace string, outcome managed.LocalOutcome, noEffect bool, reason string, log *os.File) error {
+	logLimit, hasRequest, artifactBytes, artifactCount, _, boundsErr := s.jobCollectionBounds(c.identity.JobID)
+	if boundsErr != nil {
+		return boundsErr
+	}
 	if noEffect {
 		return s.verifyLocalResult(c, managed.Result{WorkloadOutcome: outcome.WorkloadOutcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", ResourceAvailability: "available", Reason: reason}, true)
 	}
 	if _, exists := c.phases["collect"]; exists && c.recoveryEvidence != nil {
-		return s.resumeLocalSettlement(c, job, workspace, outcome, reason)
+		return s.resumeLocalSettlement(c, job, workspace, outcome, reason, logLimit, hasRequest, artifactBytes, artifactCount)
 	}
 	collectDeadline := time.Now().Add(time.Duration(job.Deadlines.CollectSeconds) * time.Second)
 	if err := s.beginPhase(c, "collect", job.Deadlines.CollectSeconds, collectDeadline); err != nil {
@@ -149,7 +153,7 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 				return collectionAttempt{rootConflict: true}
 			}
 		}
-		a := collectOutputDetails(workspace, filepath.Join(jobRoot, "artifacts"), required, collectDeadline, 1<<30, 1000, copyUntil)
+		a := collectOutputDetails(workspace, filepath.Join(jobRoot, "artifacts"), required, collectDeadline, artifactBytes, int(artifactCount), copyUntil)
 		if managed.AbsenceAware(job) && outcome.Started {
 			if _, err := s.verifyLocalWorkspace(c.identity, workspace); err != nil {
 				a.complete = false
@@ -164,6 +168,10 @@ func (s *runtimeServer) settleLocalPhases(c *localRunControl, job managed.JobSpe
 	if err != nil {
 		return err
 	}
+	if len(logs) > 0 && !hasRequest {
+		return managed.ErrBlocked
+	}
+	logs, gaps, _ = rejectOversizedPinnedLog(logs, gaps, logLimit, hasRequest)
 	if collected.rootConflict {
 		gaps = append(gaps, managed.EvidenceGap{Path: "workspace", Reason: "workspace_identity_conflict"})
 	}

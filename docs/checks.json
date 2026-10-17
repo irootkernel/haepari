@@ -1,6 +1,6 @@
 {
   "design_revision": "3.5",
-  "validation_date": "2026-10-16",
+  "validation_date": "2026-10-17",
   "scope": "documentation only",
   "generator": "docs/tools/validate_docs.py",
   "document_checks": {
@@ -65,9 +65,9 @@
       "deferred_external": 20
     },
     "markdown_documents": 81,
-    "json_templates": 12,
+    "json_templates": 13,
     "producer_request_drafts": 9,
-    "relative_links_checked": 689
+    "relative_links_checked": 696
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",

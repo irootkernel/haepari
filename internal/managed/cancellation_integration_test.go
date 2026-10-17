@@ -61,7 +61,7 @@ var _ = ginkgo.Describe("Task008CancellationLedger", ginkgo.Label("integration")
 		gomega.Expect(l.RetainAdmissionTombstone(r.JobID)).To(gomega.Succeed())
 		// TASK-012 owns production GC. Keep permanent admission, mutation and
 		// cancellation intent; this fixture removes only the bulk Job children.
-		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_local_outcomes", "managed_cancel_edges", "managed_events", "managed_event_owners", "managed_event_progress", "managed_jobs"} {
+		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_local_outcomes", "managed_cancel_edges", "managed_events", "managed_event_owners", "managed_event_progress", "managed_job_bounds", "managed_jobs"} {
 			_, err = db.Exec("DELETE FROM " + table)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}

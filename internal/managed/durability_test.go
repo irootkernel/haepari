@@ -30,6 +30,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			panic(err)
 		}
+		ledger.UseLegacyFixtureBounds()
 		ledger.transactionBoundary = func(boundary string) {
 			if boundary == os.Getenv("HAEPARI_STORAGE_BOUNDARY") {
 				if err := os.WriteFile(path+".barrier", []byte(boundary), 0600); err != nil {

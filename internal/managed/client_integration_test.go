@@ -134,7 +134,7 @@ var _ = ginkgo.Describe("Task008DurablePages", ginkgo.Label("integration"), func
 		}
 		check()
 		// Only this temporary fixture's retained Job payload is removed.
-		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_jobs"} {
+		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_job_bounds", "managed_jobs"} {
 			column := "job_id"
 			if table == "managed_jobs" {
 				column = "id"

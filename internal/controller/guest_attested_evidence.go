@@ -65,6 +65,10 @@ func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j mana
 	if _, err := b.attestedIntent(j); err != nil {
 		return collectionAttempt{}
 	}
+	logLimit, hasRequest, artifactBytes, artifactCount, _, err := b.s.jobCollectionBounds(j.JobID)
+	if err != nil || !hasRequest || artifactBytes < 1 || artifactCount < 1 || int64(len(j.Outputs)) > artifactCount {
+		return collectionAttempt{}
+	}
 	a := collectionAttempt{complete: true}
 	q.Deadline = j.CollectDeadline
 	q.Operation = "file"
@@ -81,7 +85,7 @@ func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j mana
 	}
 	var total int64
 	for _, name := range j.Outputs {
-		v, err := b.s.collectVMFileUsing(q.Guest, name, filepath.Join(destination, name), j.CollectDeadline, (1<<30)-total, call)
+		v, err := b.s.collectVMFileUsing(q.Guest, name, filepath.Join(destination, name), j.CollectDeadline, artifactBytes-total, call)
 		if errors.Is(err, errOutputAbsent) && j.AbsenceBinding != nil {
 			a.absentOutputs = append(a.absentOutputs, managed.EvidenceAbsentOutput{Path: name, ObservedAt: time.Now().UTC()})
 			continue
@@ -109,6 +113,9 @@ func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j mana
 		if !valid || j.GuestLogLimitBytes != q.Attestation.Basis.Request.LogLimitBytes {
 			a.complete = false
 			return a
+		}
+		if name == "output.log" && logLimit < limit {
+			limit = logLimit
 		}
 		v, err := b.s.collectVMFileUsing(guest, name, filepath.Join(destination+"-native", name), j.CollectDeadline, limit, call)
 		if err != nil || name != "output.log" && "sha256:"+v.SHA256 != q.Attestation.Basis.Digests[name] || name == "output.log" && q.Attestation.Basis.Observation.Exit != nil && q.Attestation.Basis.Observation.Exit.Log != nil && v != q.Attestation.Basis.Observation.Exit.Log.Artifact {

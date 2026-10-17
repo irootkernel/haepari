@@ -226,12 +226,12 @@ Acceptance: A local resource is documented as unsandboxed. An untrusted reposito
 Implementation owner: `TASK-022`.
 
 ### HP-REQ-050
-- [ ] Bound orchestration inputs, logs, artifacts and retained events, with streaming delivery.
+- [x] Bound orchestration inputs, logs, artifacts and retained events, with streaming delivery.
 Acceptance: Configured bounds and visible truncation/gaps are verified with bounded local fixtures. Larger memory/throughput benchmarks are optional unless their measured performance is advertised; an unmeasured target is not a release blocker or a performance claim.
 Implementation owner: `TASK-023`.
 
 ### HP-REQ-051
-- [ ] Support inspection and recovery without Aquarium or any tool under test.
+- [x] Support inspection and recovery without Aquarium or any tool under test.
 Acceptance: Disable those products and demonstrate Haepari status, cancel, wait and managed fixture recovery through the native CLI. Unknown managed execution retains occupancy until supported termination or no-start evidence exists.
 Implementation owner: `TASK-023`.
 

@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/irootkernel/haepari/internal/store/sqlite"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -23,6 +25,7 @@ func openLedger(t ginkgo.GinkgoTInterface, path string, limit int) (*sql.DB, *Le
 		db.Close()
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
+	l.UseLegacyFixtureBounds()
 	return db, l
 }
 
@@ -460,12 +463,63 @@ var _ = ginkgo.Describe("QuarantinePreservedAndCursorScoped", ginkgo.Label("inte
 	})
 })
 
+var _ = ginkgo.Describe("Task023 event bound", func() {
+	ginkgo.It("rejects an oversized event bound before insert and reads a small event after commit", func() {
+		t := ginkgo.GinkgoT()
+		db, l := openLedger(t, filepath.Join(t.TempDir(), "event-bound.sqlite"), 1)
+		defer db.Close()
+		gomega.Expect(l.RegisterResource(encode(t, validResource()))).To(gomega.Succeed())
+		admitted, err := l.Admit(encode(t, validJob()), digest, "event-bound-key", "event-bound-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var revision int64
+		gomega.Expect(db.QueryRow(`SELECT revision FROM managed_jobs WHERE id=?`, admitted.JobID).Scan(&revision)).To(gomega.Succeed())
+		eventsBefore := countQuery(db, `SELECT COUNT(*) FROM managed_events`)
+		ownersBefore := countQuery(db, `SELECT COUNT(*) FROM managed_event_owners`)
+
+		tx, err := db.Begin()
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = tx.Exec(`UPDATE managed_jobs SET revision=revision+1 WHERE id=?`, admitted.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = addEvent(tx, admitted.JobID, "note", strings.Repeat("a", 2<<20))
+		gomega.Expect(errors.Is(err, ErrInvalid)).To(gomega.BeTrue())
+		gomega.Expect(countQueryTx(tx, `SELECT COUNT(*) FROM managed_events WHERE kind='note'`)).To(gomega.BeZero())
+		gomega.Expect(tx.Rollback()).To(gomega.Succeed())
+
+		var after int64
+		gomega.Expect(db.QueryRow(`SELECT revision FROM managed_jobs WHERE id=?`, admitted.JobID).Scan(&after)).To(gomega.Succeed())
+		gomega.Expect(after).To(gomega.Equal(revision))
+		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM managed_events`)).To(gomega.Equal(eventsBefore))
+		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM managed_event_owners`)).To(gomega.Equal(ownersBefore))
+
+		tx, err = db.Begin()
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		cursor, err := addEvent(tx, admitted.JobID, "note", map[string]string{"mark": "kept"})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(tx.Commit()).To(gomega.Succeed())
+		batch, err := l.EventsAfter(admitted.JobID, 0, 100)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var found bool
+		for _, event := range batch.Events {
+			if event.Cursor == cursor && event.Kind == "note" && string(event.Payload) == `{"mark":"kept"}` {
+				found = true
+			}
+		}
+		gomega.Expect(found).To(gomega.BeTrue())
+	})
+})
+
+func countQueryTx(tx *sql.Tx, query string) int {
+	var n int
+	gomega.Expect(tx.QueryRow(query).Scan(&n)).To(gomega.Succeed())
+	return n
+}
+
 // These supplementary layouts follow the schema-2 tables in c371408 and the
 // schema-3 additions in eb9df35. They are not prior public-release fixtures.
 func legacyCoreLayout(t ginkgo.GinkgoTInterface, db *sql.DB, version int) {
 	t.Helper()
 	for _, statement := range []string{
-		`DROP TABLE managed_manual_sessions; DELETE FROM schema_migrations WHERE version=10; DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DROP TABLE managed_runner_receipts; DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities`,
+		`DROP TABLE managed_job_bounds; DELETE FROM schema_migrations WHERE version=12; DROP TABLE managed_effective_config; DROP TABLE managed_config_audits; DELETE FROM schema_migrations WHERE version=11; DROP TABLE managed_manual_sessions; DELETE FROM schema_migrations WHERE version=10; DROP TABLE managed_purges; DROP TABLE managed_evidence_recovery; DROP TABLE managed_runner_receipts; DROP TABLE managed_lock_requests; DROP TABLE managed_lock_slots; DROP TABLE managed_lock_clock; DROP TABLE managed_lock_discontinuities`,
 		`DROP TABLE managed_installation; DROP TABLE managed_cancellations; DROP TABLE managed_cancel_edges; DROP TABLE managed_local_outcomes`,
 		`DROP TABLE managed_parent_context; DROP TABLE managed_parent_nonces; DROP TABLE managed_queue_blockers; DROP TABLE managed_vm_observations; DROP TABLE managed_power_progress; DROP TABLE managed_availability_receipts`,
 		`DROP TABLE managed_admissions; DROP TABLE managed_job_inputs; DROP TABLE managed_runs`,
@@ -507,7 +561,7 @@ var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			var current int
 			gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&current)).To(gomega.Succeed())
-			gomega.Expect(current).To(gomega.Equal(10))
+			gomega.Expect(current).To(gomega.Equal(12))
 			var retained []byte
 			gomega.Expect(db.QueryRow(`SELECT receipt_json FROM managed_mutations WHERE mutation_key='legacy-reserve'`).Scan(&retained)).To(gomega.Succeed())
 			gomega.Expect(retained).To(gomega.Equal(original))
@@ -582,7 +636,7 @@ var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration
 			gomega.Expect(err.Error()).To(gomega.ContainSubstring(table))
 		})
 	}
-	for _, table := range []string{"schema_migrations", "managed_resources", "managed_jobs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_mutations", "managed_runs", "managed_power_transitions", "managed_no_effect_observations", "managed_job_inputs", "managed_admissions", "managed_runner_receipts", "managed_purges", "managed_evidence_recovery"} {
+	for _, table := range []string{"schema_migrations", "managed_resources", "managed_jobs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_mutations", "managed_runs", "managed_power_transitions", "managed_no_effect_observations", "managed_job_inputs", "managed_admissions", "managed_runner_receipts", "managed_purges", "managed_evidence_recovery", "managed_effective_config", "managed_config_audits", "managed_job_bounds"} {
 		for _, loss := range []string{"table", "column"} {
 			ginkgo.It("refuses a lost "+table+" "+loss+" without changing the surviving schema", func() {
 				t := ginkgo.GinkgoT()
@@ -616,7 +670,7 @@ var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration
 				gomega.Expect(after).To(gomega.Equal(before))
 				var version int
 				gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-				gomega.Expect(version).To(gomega.Equal(10))
+				gomega.Expect(version).To(gomega.Equal(12))
 			})
 		}
 	}
@@ -676,7 +730,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		path := filepath.Join(t.TempDir(), "state.sqlite")
 		db, l := openLedger(t, path, 1)
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 10 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 12 {
 			t.Fatalf("schema version %d: %v", version, err)
 		}
 		r := validResource()
@@ -695,7 +749,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		if err := l.RegisterResource(encode(t, r)); !errors.Is(err, ErrConflict) {
 			t.Fatalf("duplicate VM identity: %v", err)
 		}
-		if _, err := db.Exec(`PRAGMA user_version=11`); err != nil {
+		if _, err := db.Exec(`PRAGMA user_version=13`); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		if err := db.Close(); err != nil {
@@ -725,7 +779,7 @@ var _ = ginkgo.Describe("ProvisionalV1PowerTableMigration", ginkgo.Label("integr
 		db, l := openLedger(t, path, 1)
 		defer db.Close()
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 10 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 12 {
 			t.Fatalf("migrated version %d: %v", version, err)
 		}
 		var value int64

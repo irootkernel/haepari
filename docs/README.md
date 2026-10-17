@@ -10,6 +10,8 @@ The accepted [EPIC-009](roadmap/EPIC-009.md) qualifies the reduced single-machin
 
 TASK-017 adds the [runnable project caller](../examples/project-test/README.md), separate guarded guest entrypoint, sealed selected-file bundle, saved-key recovery and read-only selected-resource doctor. Its [implementation record](records/TASK-017-project-integration.md) distinguishes local/fake-native observations from TASK-027 live release checks. TASK-018 adds reusable [opaque input helpers](records/TASK-018-opaque-inputs.md) and exact raw-profile binding. TASK-019 connects general manual execution and recorded observations; its acceptance remains with the canonical roadmap.
 
+[TASK-023](roadmap/EPIC-006.md#task-023) implements bounded configuration and diagnostics; its lifecycle is recorded on the [roadmap](roadmap.md). It loads closed `haepari.config/v1` through the general configuration loader, applies accepted defaults, and keeps bounded historical `haepari.resource/v2` pins on private schema 12. Runtime input, output, event, and phase bounds follow the [configuration contract](contracts/configuration.md), with visible streaming and truncation. `doctor --projection` serves the bounded queue and retention pages, and unknown occupancy, policy, and execution stay conservative. The implementation covers [HP-REQ-050](requirements.md#hp-req-050) and [HP-REQ-051](requirements.md#hp-req-051); the [EPIC-006](roadmap/EPIC-006.md) acceptance checklist remains open. Canonical acceptance, live qualification, and release remain with the roadmap.
+
 ## Read in this order
 
 1. [Requirements](requirements.md) defines the release scope and observable acceptance criteria.

@@ -109,6 +109,7 @@ var _ = ginkgo.Describe("PreparationDeadlineAndUnprovenWorkerKeepCorrectOwnershi
 				if err != nil {
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				}
+				ledger.UseLegacyFixtureBounds()
 				resource := managed.ResourceSpec{Schema: "haepari.resource/v1", ID: "local-one", Kind: "local", ExecutionMode: "managed", Capacity: 1, Revision: 1, Adapter: managed.Adapter{QualificationReference: "isolated-integration"}, Cleanup: &managed.CleanupPolicy{PolicyReference: "owned-workspace"}}
 				resourceJSON, _ := json.Marshal(resource)
 				if err := ledger.RegisterOnlyLocal(resourceJSON); err != nil {

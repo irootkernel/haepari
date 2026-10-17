@@ -42,6 +42,7 @@ func cancellationRuntimeJobKind(t ginkgo.GinkgoTInterface, script, kind, jobID s
 	t.Cleanup(func() { _ = db.Close() })
 	l, err := managed.NewLedger(db, 1)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	l.UseLegacyFixtureBounds()
 	store, err := snapshot.OpenStore(root.Path)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	s, err := newRuntime(root, l, store)

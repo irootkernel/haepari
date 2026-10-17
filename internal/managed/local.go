@@ -208,6 +208,9 @@ func (l *Ledger) ReconcileLocalFailure(jobID string) error {
 	if state == "finished" || state == "queued" {
 		return nil
 	}
+	if err := requireJobBoundsTx(tx, jobID); err != nil {
+		return err
+	}
 	var resourceID string
 	if err := tx.QueryRow(`SELECT resource_id FROM managed_jobs WHERE id=?`, jobID).Scan(&resourceID); err != nil {
 		return err
@@ -338,7 +341,7 @@ func (l *Ledger) SettleLocal(jobID string, revision int64, result Result) (Recei
 		if _, err := DecodeResultForJob(encoded, spec); err != nil {
 			return Receipt{}, err
 		}
-		if err := releaseSlotTx(tx, resourceID); err != nil {
+		if err := releaseSlotTx(tx, jobID, resourceID); err != nil {
 			return Receipt{}, err
 		}
 		if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, encoded, jobID); err != nil {
@@ -418,6 +421,9 @@ func (l *Ledger) MarkInterrupted() error {
 		return err
 	}
 	for _, id := range ids {
+		if err := requireJobBoundsTx(tx, id); err != nil {
+			return err
+		}
 		var priorState, resourceID string
 		if err := tx.QueryRow(`SELECT state,resource_id FROM managed_jobs WHERE id=?`, id).Scan(&priorState, &resourceID); err != nil {
 			return err

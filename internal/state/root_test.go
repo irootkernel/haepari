@@ -9,6 +9,24 @@ import (
 	"strings"
 )
 
+var _ = ginkgo.Describe("ResolvePreferred", ginkgo.Label("unit"), func() {
+	ginkgo.It("selects the CLI root before the environment root", func() {
+		parent, err := os.MkdirTemp("/tmp", "hp-root-")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		ginkgo.GinkgoT().Cleanup(func() { _ = os.RemoveAll(parent) })
+		cli := filepath.Join(parent, "cli")
+		env := filepath.Join(parent, "env")
+		chosen, err := ResolvePreferred(cli, env)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(filepath.Base(chosen.Path)).To(gomega.Equal("cli"))
+		chosen, err = ResolvePreferred("", env)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(filepath.Base(chosen.Path)).To(gomega.Equal("env"))
+		_, err = ResolvePreferred("relative", env)
+		gomega.Expect(errors.Is(err, ErrInvalidRoot)).To(gomega.BeTrue())
+	})
+})
+
 var _ = ginkgo.Describe("ResolveAndPrepare", ginkgo.Label("unit"), func() {
 	ginkgo.It("ResolveAndPrepare", func() {
 		t := ginkgo.GinkgoT()

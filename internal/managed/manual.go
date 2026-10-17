@@ -240,6 +240,10 @@ func (l *Ledger) BindManualVM(id LocalIdentity, deadline time.Time, installation
 	if !errors.Is(err, ErrNotFound) {
 		return err
 	}
+	// Exact replay and conflict returned above. A new binding still requires the current policy.
+	if err := requireJobBoundsTx(tx, id.JobID); err != nil {
+		return err
+	}
 	if err := insertManualSessionTx(tx, m); err != nil {
 		return err
 	}
@@ -282,6 +286,9 @@ func (l *Ledger) RecordManualPreparationSteps(id LocalIdentity, steps []ResultSt
 	}
 	if m.Stopped || m.Outcome != nil {
 		return ErrBlocked
+	}
+	if err := requireJobBoundsTx(tx, id.JobID); err != nil {
+		return err
 	}
 	m.PreparationSteps = append([]ResultStep{}, steps...)
 	if err := saveManualSessionTx(tx, m); err != nil {
@@ -338,6 +345,9 @@ func (l *Ledger) RecordManualPreparation(id LocalIdentity, out LocalOutcome, wor
 			return ErrBlocked
 		}
 	} else {
+		return err
+	}
+	if err := requireJobBoundsTx(tx, id.JobID); err != nil {
 		return err
 	}
 	m.Preparation = &out
@@ -450,6 +460,9 @@ func (l *Ledger) CompleteManual(jobID, installation string, raw []byte, expected
 	}
 	if cancel.Requested {
 		return Receipt{}, &ManualCompletionRefusal{Reason: "retired"}
+	}
+	if err := requireJobBoundsTx(tx, jobID); err != nil {
+		return Receipt{}, err
 	}
 	out := LocalOutcome{Started: true, WorkloadOutcome: "pass"}
 	for _, s := range result.Scenarios {

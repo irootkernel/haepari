@@ -37,6 +37,7 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		defer db.Close()
 		ledger, err := managed.NewLedger(db, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		ledger.UseLegacyFixtureBounds()
 		store, err := snapshot.OpenStore(root.Path)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		source := filepath.Join(parent, "input")
@@ -113,6 +114,7 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 		defer db.Close()
 		ledger, err := managed.NewLedger(db, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		ledger.UseLegacyFixtureBounds()
 		store, err := snapshot.OpenStore(root.Path)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		source := filepath.Join(parent, "input")
@@ -291,7 +293,7 @@ var _ = ginkgo.Describe("ConcurrentSealedAdmission", ginkgo.Label("integration")
 
 		// This is synthetic, fixture-only retention. Production GC is TASK-012.
 		gomega.Expect(os.RemoveAll(filepath.Dir(sealed.Root))).To(gomega.Succeed())
-		for _, table := range []string{"managed_runner_receipts", "managed_job_inputs", "managed_runs", "managed_local_outcomes", "managed_cancel_edges", "managed_events", "managed_event_owners", "managed_event_progress", "managed_jobs"} {
+		for _, table := range []string{"managed_runner_receipts", "managed_job_inputs", "managed_runs", "managed_local_outcomes", "managed_cancel_edges", "managed_events", "managed_event_owners", "managed_event_progress", "managed_job_bounds", "managed_jobs"} {
 			_, err := db.Exec("DELETE FROM " + table)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}

@@ -21,7 +21,8 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 	commands := []commandHelp{
 		{"help", "help --json"}, {"version", "version --json"}, {"capabilities", "capabilities --json"},
 		{"doctor", "doctor --resource <id> --json"},
-		{"daemon run", "daemon run [--backend local] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]"},
+		{"doctor", "doctor --projection --section queue|retention [--resource <id>] [--cursor <cursor>] [--limit <1-20>] --json"},
+		{"daemon run", "daemon run [--backend local] [--root <absolute-private-root>] [--config <private-file>] [--host-macos-guest-limit 1|2] [--global-limit <positive-integer>]"},
 		{"service plan", "service plan --instance <id> --binary <absolute-path> --root <private-root> [--global-limit <positive-integer>] [--host-macos-guest-limit 1|2] --json"},
 		{"service install", "service install --plan-file <json> --json"},
 		{"service uninstall", "service uninstall --plan-file <json> --json"},
@@ -39,8 +40,8 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		{"job recover", "job recover <id> --plan [--action reconcile|attest-stopped|attest-no-start] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},
 		{"resources list", "resources list [--cursor <cursor>] [--limit <1-100>] --json"},
 		{"jobs list", "jobs list [--resource <id>] [--state <state>] [--cursor <cursor>] [--limit <1-100>] --json"},
-		{"submit", "submit --spec <json> --request-key <key> --json"},
-		{"run", "run --spec <json> --request-key <key> [--json]"},
+		{"submit", "submit --spec <json> --request-key <key> --json; omitted active phase budgets come from the accepted configuration"},
+		{"run", "run --spec <json> --request-key <key> [--json]; omitted active phase budgets come from the accepted configuration"},
 		{"inspect", "inspect <job-id> --json"},
 		{"manual complete", "manual complete <job-id> --input <json> --expected-revision <n> --json"},
 		{"wait", "wait <job-id> [--timeout <duration up to 24h>] --json"},
@@ -79,7 +80,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		Canonicalization string                    `json:"canonicalization"`
 	}{
 		Schema: "haepari.help/v1", Protocol: "managed-execution/v1", Commands: commands,
-		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.doctor/v1", "haepari.manual-result/v1"},
+		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.doctor/v1", "haepari.manual-result/v1", "haepari.resource/v2", "haepari.operator-projection/v1", "haepari.operator-diagnostic/v1"},
 		ErrorExits: errors, VerdictExits: map[managed.Verdict]int{managed.Pass: 0, managed.Fail: 1, managed.Incomplete: 3, managed.Cancelled: 4},
 		Enums: map[string][]string{
 			"job_state":             {"queued", "preparing", "ready", "running", "awaiting_manual", "cancelling", "collecting", "cleaning", "settling", "reconciling", "finished"},
@@ -91,6 +92,6 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		},
 		Cursors:          map[string]string{"events": "global monotonic integer scoped to one Job; retained ownership rejects foreign cursors before unavailable results; explicit prefix retention returns resync", "lists": "opaque scoped continuation; not a snapshot across pages", "logs": "exact byte offset plus file identity; a gap is explicit", "artifacts": "exact byte offset with signed file-incarnation token; export verifies full size and SHA-256"},
 		Limits:           map[string]int64{"artifact_page_bytes": 64 << 10, "log_bytes": 256 << 20, "artifact_bytes_per_collection": 1 << 30, "artifacts_per_collection": 1000, "caller_wait_seconds": 86400},
-		Canonicalization: "closed schemas reject duplicate and unknown fields; normalized POSIX relative paths; lowercase SHA-256; canonical typed admission JSON with ordered arrays and sorted map keys",
+		Canonicalization: "closed schemas reject duplicate and unknown fields; normalized POSIX relative paths; lowercase SHA-256; canonical typed admission JSON with ordered arrays and sorted map keys; haepari.resource/v2 lifecycle budgets are explicit ceilings",
 	})
 }

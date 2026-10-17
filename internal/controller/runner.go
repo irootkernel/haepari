@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irootkernel/haepari/internal/config"
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/runner"
@@ -76,6 +77,10 @@ func observeWithinRunBudgetWithWorker(deadline time.Time, terminationAllowance t
 }
 
 func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpec, jobRoot, workspace, runID string, deadline time.Time) (bool, *os.File, error) {
+	bounds, err := s.ledger.ValidatedJobBounds(c.identity.JobID)
+	if err != nil {
+		return false, nil, err
+	}
 	c.mu.Lock()
 	receipt := c.receipt
 	c.mu.Unlock()
@@ -119,6 +124,7 @@ func (s *runtimeServer) observeSupervisor(c *localRunControl, job managed.JobSpe
 		return false, log, err
 	}
 	q := runner.Request{Schema: managed.RunnerSchema("request"), Identity: c.identity, BootID: boot, WorkDir: filepath.Join(workspace, filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: environment, Deadline: deadline.UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds, LogDevice: uint64(st.Dev), LogInode: uint64(st.Ino)}
+	applyPinnedLogLimit(&q, bounds.LogBytes)
 	if err := q.Validate(jobRoot); err != nil {
 		return false, log, err
 	}
@@ -300,4 +306,46 @@ func (s *runtimeServer) importRunner(c *localRunControl) (runner.Observation, er
 		c.publishCompletion(nativeCompletion{at: view.Outcome.ObservedAt, outcome: &out})
 	}
 	return view, nil
+}
+
+func applyPinnedLogLimit(q *runner.Request, pin int64) {
+	if pin > 0 && pin < config.MaxLogBytes {
+		q.LogLimitBytes = pin
+	}
+}
+
+func (s *runtimeServer) jobCollectionBounds(jobID string) (logLimit int64, hasRequest bool, artifactBytes, artifactCount int64, request []byte, err error) {
+	bounds, err := s.ledger.ValidatedJobBounds(jobID)
+	if err != nil {
+		return 0, false, 0, 0, nil, err
+	}
+	raw, err := s.ledger.RunnerReceiptPayload(jobID, "request")
+	if errors.Is(err, managed.ErrNotFound) {
+		return 0, false, bounds.ArtifactBytes, bounds.ArtifactCount, nil, nil
+	}
+	if err != nil {
+		return 0, false, 0, 0, nil, err
+	}
+	var saved struct {
+		LogLimitBytes int64 `json:"log_limit_bytes"`
+	}
+	if json.Unmarshal(raw, &saved) != nil || saved.LogLimitBytes < 0 || saved.LogLimitBytes > config.MaxLogBytes {
+		return 0, false, 0, 0, nil, managed.ErrBlocked
+	}
+	limit := saved.LogLimitBytes
+	if limit == 0 {
+		limit = config.MaxLogBytes
+	}
+	if bounds.LogBytes < limit {
+		limit = bounds.LogBytes
+	}
+	return limit, true, bounds.ArtifactBytes, bounds.ArtifactCount, raw, nil
+}
+
+func rejectOversizedPinnedLog(logs []managed.ResultArtifact, gaps []managed.EvidenceGap, limit int64, hasRequest bool) ([]managed.ResultArtifact, []managed.EvidenceGap, bool) {
+	if !hasRequest || len(logs) == 0 || logs[0].SizeBytes <= limit {
+		return logs, gaps, false
+	}
+	gaps = append(gaps, managed.EvidenceGap{Path: "output.log", Reason: "pinned_log_exceeded", Offset: logs[0].SizeBytes, DroppedBytes: 0})
+	return nil, gaps, true
 }

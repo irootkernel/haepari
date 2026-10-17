@@ -15,6 +15,14 @@ Registering or updating a `utm-macos` resource is revision-fenced. It checks tha
 
 
 
+## TASK-023 M2a lifecycle budgets
+
+`haepari.resource/v1` remains closed for managed `local`, `utm-macos`, and `lock` resources. A v1 document rejects `lifecycle_budgets`, including a null value, and keeps its previous canonical bytes. Lock resources stay on v1. `haepari.resource/v2` is the closed schema for managed `local` and `utm-macos` only. It keeps the v1 fields and requires `lifecycle_budgets` with the six positive phase ceilings `queue_seconds`, `prepare_seconds`, `run_seconds`, `manual_seconds`, `collect_seconds`, and `cleanup_seconds`. Each ceiling is at most the existing 366-day product limit. Null, unknown, duplicate, missing, wrong-type, and overflow values are rejected. Operator configuration defaults do not fill these ceilings.
+
+A new admission compares only the job's active phases with the resource revision selected for that admission. An automatic job uses queue, prepare, run, collect, and cleanup. A manual job uses queue, prepare, manual, collect, and cleanup. A v1 resource uses the 366-day product ceiling on each active phase (`legacy_product_ceiling`). A v2 resource uses its stored ceilings. The comparison happens inside new admission and before Seal. A later resource update does not retest or evict a pinned job. Registration and update stay on the existing resource operations.
+
+M2a stores the accepted log, artifact, and retention policy with the new job and enforces the spec-JSON request bound. It does not yet enforce output, event, or artifact limits. Those remain M2b, together with visible gaps. A partial required artifact is not complete or PASS. Omitted or zero `log_limit_bytes` on `haepari.runner-request/v1` remains the 256 MiB combined stdout/stderr cap, and that request is not rewritten.
+
 ## Adapter phases
 
 Every Job-phase managed adapter call carries the job ID, resource ID, expected resource/configuration revision, lease generation, nonce, input/profile digests, and phase deadline. Responses identify the same tuple. Capacity-driven victim stops use the separate internal power-transition intent, which binds the victim and target identities/revisions and target Job/lease generation; an idle victim has no Job lease to borrow.

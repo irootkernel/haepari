@@ -76,6 +76,9 @@ func (l *Ledger) recordDiagnosticCause(jobID, cause string, recovery bool) error
 			return nil
 		}
 	}
+	if err = requireJobBoundsTx(tx, jobID); err != nil {
+		return err
+	}
 	// The event supplements observation only; it cannot release capacity,
 	// establish proof or mutate an immutable terminal result.
 	payload := struct {

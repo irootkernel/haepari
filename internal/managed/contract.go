@@ -88,18 +88,30 @@ type Provenance struct {
 }
 
 type ResourceSpec struct {
-	Schema          string         `json:"schema"`
-	ID              string         `json:"id"`
-	Kind            string         `json:"kind"`
-	ExecutionMode   string         `json:"execution_mode"`
-	Capacity        int            `json:"capacity"`
-	Revision        int64          `json:"revision"`
-	Adapter         Adapter        `json:"adapter"`
-	Cleanup         *CleanupPolicy `json:"cleanup,omitempty"`
-	VM              *VM            `json:"vm,omitempty"`
-	Guest           *Guest         `json:"guest,omitempty"`
-	LivenessSeconds int64          `json:"liveness_seconds,omitempty"`
-	MaxHoldSeconds  int64          `json:"max_hold_seconds,omitempty"`
+	Schema           string            `json:"schema"`
+	ID               string            `json:"id"`
+	Kind             string            `json:"kind"`
+	ExecutionMode    string            `json:"execution_mode"`
+	Capacity         int               `json:"capacity"`
+	Revision         int64             `json:"revision"`
+	Adapter          Adapter           `json:"adapter"`
+	Cleanup          *CleanupPolicy    `json:"cleanup,omitempty"`
+	VM               *VM               `json:"vm,omitempty"`
+	Guest            *Guest            `json:"guest,omitempty"`
+	LivenessSeconds  int64             `json:"liveness_seconds,omitempty"`
+	MaxHoldSeconds   int64             `json:"max_hold_seconds,omitempty"`
+	LifecycleBudgets *LifecycleBudgets `json:"lifecycle_budgets,omitempty"`
+}
+
+// LifecycleBudgets is the closed haepari.resource/v2 phase-ceiling object.
+// Operator configuration defaults do not fill it.
+type LifecycleBudgets struct {
+	QueueSeconds   int64 `json:"queue_seconds"`
+	PrepareSeconds int64 `json:"prepare_seconds"`
+	RunSeconds     int64 `json:"run_seconds"`
+	ManualSeconds  int64 `json:"manual_seconds"`
+	CollectSeconds int64 `json:"collect_seconds"`
+	CleanupSeconds int64 `json:"cleanup_seconds"`
 }
 type Adapter struct {
 	QualificationReference string `json:"qualification_reference"`
@@ -243,6 +255,9 @@ func DecodeResource(data []byte) (ResourceSpec, error) {
 		if !identifier.MatchString(r.ID) || !validLockSeconds(r.LivenessSeconds) || !validLockSeconds(r.MaxHoldSeconds) {
 			return r, ErrInvalid
 		}
+		if _, present := fields["lifecycle_budgets"]; present {
+			return r, ErrInvalid
+		}
 		return r, nil
 	}
 	for _, name := range []string{"liveness_seconds", "max_hold_seconds"} {
@@ -250,8 +265,17 @@ func DecodeResource(data []byte) (ResourceSpec, error) {
 			return r, ErrInvalid
 		}
 	}
-	if r.Schema != "haepari.resource/v1" || r.ExecutionMode != "managed" || r.Kind == "external" {
+	if (r.Schema != "haepari.resource/v1" && r.Schema != "haepari.resource/v2") || r.ExecutionMode != "managed" || r.Kind == "external" {
 		return r, fmt.Errorf("%w: resource schema or execution mode", ErrUnsupported)
+	}
+	rawBudgets, hasBudgets := fields["lifecycle_budgets"]
+	if r.Schema == "haepari.resource/v1" {
+		if hasBudgets {
+			return r, ErrInvalid
+		}
+	} else if !hasBudgets || string(rawBudgets) == "null" || r.LifecycleBudgets == nil ||
+		!positive(r.LifecycleBudgets.QueueSeconds, r.LifecycleBudgets.PrepareSeconds, r.LifecycleBudgets.RunSeconds, r.LifecycleBudgets.ManualSeconds, r.LifecycleBudgets.CollectSeconds, r.LifecycleBudgets.CleanupSeconds) {
+		return r, ErrInvalid
 	}
 	if !identifier.MatchString(r.ID) || r.Capacity <= 0 || r.Revision <= 0 || r.ExecutionMode != "managed" || r.Adapter.QualificationReference == "" {
 		return r, ErrInvalid
@@ -468,7 +492,7 @@ func validDigest(value string) bool {
 }
 func positive(values ...int64) bool {
 	for _, v := range values {
-		if v <= 0 || v > 366*24*60*60 {
+		if v <= 0 || v > productPhaseCeiling {
 			return false
 		}
 	}

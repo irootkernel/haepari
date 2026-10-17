@@ -6,13 +6,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/irootkernel/haepari/internal/store/sqlite"
-	"github.com/onsi/ginkgo/v2"
-	"github.com/onsi/gomega"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/irootkernel/haepari/internal/config"
+	"github.com/irootkernel/haepari/internal/store/sqlite"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
 var _ = ginkgo.Describe("Task019ActualSchema9Migration", ginkgo.Label("integration"), func() {
@@ -45,7 +48,7 @@ var _ = ginkgo.Describe("Task019ActualSchema9Migration", ginkgo.Label("integrati
 		l, err := NewLedger(db, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(10))
+		gomega.Expect(version).To(gomega.Equal(12))
 		actual, err := l.BindInstallation("different-seed")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(actual).To(gomega.Equal(installation))
@@ -146,4 +149,76 @@ var _ = ginkgo.Describe("Task019LegacyHoldMigration", ginkgo.Label("integration"
 			gomega.Expect(current.JobState).To(gomega.Equal("reconciling"))
 		})
 	}
+})
+
+var _ = ginkgo.Describe("Task023BindManualVMBounds", ginkgo.Label("integration"), func() {
+	ginkgo.It("refuses a new VM binding when current bounds are missing or malformed and keeps exact replay", func() {
+		t := ginkgo.GinkgoT()
+		db, ledger := openLedger(t, filepath.Join(t.TempDir(), "manual-bind.sqlite"), 1)
+		defer db.Close()
+		vmScheduling(t, ledger, "manual-vm", 1, "started", false)
+		job := validJob()
+		job.ResourceID, job.Mode = "manual-vm", "manual"
+		job.Manual = &Manual{ScenarioDocument: "source/scenarios.txt", RequiredScenarios: []string{"check"}}
+		job.Input.SelectedFiles = []string{"source/scenarios.txt"}
+		job.Deadlines.RunSeconds, job.Deadlines.ManualSeconds = 0, 60
+		admitted, err := ledger.Admit(encode(t, job), digest, "manual-bind-key", "manual-bind-job")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		admitted, err = reserveScheduling(ledger, admitted, vmGuard(t, db, 1))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		id, err := ledger.LocalIdentity(admitted.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		id.RunID = "manual-bind-run"
+		admitted, err = ledger.ClaimVMRun(id, admitted.JobRevision, json.RawMessage(`{}`))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		deadline := time.Unix(1_700_000_000, 0).UTC()
+		bind := func(workspace string) error {
+			return ledger.BindManualVM(id, deadline, "manual-bind-install", workspace)
+		}
+		workspace := "/var/haepari/jobs/manual-bind-job/workspace"
+		for _, fault := range []string{"missing", "malformed"} {
+			state, spec, evidence, occupancy, events, admissions := jobEffect(db, admitted.JobID)
+			sessions := countQuery(db, `SELECT COUNT(*) FROM managed_manual_sessions`)
+			if fault == "missing" {
+				_, err = db.Exec(`DELETE FROM managed_job_bounds WHERE job_id=?`, admitted.JobID)
+			} else {
+				_, err = db.Exec(`UPDATE managed_job_bounds SET request_bytes=? WHERE job_id=?`, config.MaxRequestBytes+1, admitted.JobID)
+			}
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			err = bind(workspace)
+			gomega.Expect(errors.Is(err, ErrBlocked)).To(gomega.BeTrue(), fault)
+			gomega.Expect(err.Error()).To(gomega.ContainSubstring("occupancy and protected evidence stay unchanged"), fault)
+			afterState, afterSpec, afterEvidence, afterOccupancy, afterEvents, afterAdmissions := jobEffect(db, admitted.JobID)
+			gomega.Expect(afterState).To(gomega.Equal(state), fault)
+			gomega.Expect(afterSpec).To(gomega.Equal(spec), fault)
+			gomega.Expect(afterEvidence).To(gomega.Equal(evidence), fault)
+			gomega.Expect(afterOccupancy).To(gomega.Equal(occupancy), fault)
+			gomega.Expect(afterEvents).To(gomega.Equal(events), fault)
+			gomega.Expect(afterAdmissions).To(gomega.Equal(admissions), fault)
+			gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM managed_manual_sessions`)).To(gomega.Equal(sessions), fault)
+			if fault == "missing" {
+				_, err = db.Exec(`INSERT INTO managed_job_bounds(job_id,request_bytes,log_bytes,artifact_bytes,artifact_count,event_retention_days,result_retention_days,config_revision,config_digest,policy_source) VALUES(?,?,?,?,?,?,?,NULL,NULL,'legacy_defaults')`, admitted.JobID, config.MaxRequestBytes, config.MaxLogBytes, config.MaxArtifactBytes, config.MaxArtifactCount, 30, 90)
+			} else {
+				// restoreLegacyBound checks its own SQL result. The ErrBlocked from bind must not remain.
+				restoreLegacyBound(db, admitted.JobID)
+				err = nil
+			}
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		}
+		gomega.Expect(bind(workspace)).To(gomega.Succeed())
+		session, err := ledger.ManualSession(admitted.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = db.Exec(`DELETE FROM managed_job_bounds WHERE job_id=?`, admitted.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(bind(workspace)).To(gomega.Succeed())
+		replayed, err := ledger.ManualSession(admitted.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(replayed).To(gomega.Equal(session))
+		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM managed_manual_sessions`)).To(gomega.Equal(1))
+		err = bind(workspace + "-other")
+		gomega.Expect(errors.Is(err, ErrConflict)).To(gomega.BeTrue())
+		conflicted, err := ledger.ManualSession(admitted.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(conflicted).To(gomega.Equal(session))
+	})
 })

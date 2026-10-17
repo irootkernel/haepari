@@ -264,6 +264,9 @@ func (l *Ledger) RecordQueueBlocker(jobID string, revision int64, blocker QueueB
 	if priorReason == blocker.Reason && string(priorDetails) == string(blocker.Details) {
 		return nil
 	}
+	if err := requireJobBoundsTx(tx, jobID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`INSERT INTO managed_queue_blockers VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET reason=excluded.reason,details_json=excluded.details_json`, jobID, blocker.Reason, blocker.Details); err != nil {
 		return err
 	}
@@ -283,7 +286,10 @@ func (l *Ledger) QueueBlocker(jobID string) (*QueueBlocker, error) {
 }
 
 // The final occupied slot return is the only release that advances the UTC idle clock.
-func releaseSlotTx(tx *sql.Tx, resourceID string) error {
+func releaseSlotTx(tx *sql.Tx, jobID, resourceID string) error {
+	if err := requireJobBoundsTx(tx, jobID); err != nil {
+		return err
+	}
 	updated, err := tx.Exec(`UPDATE managed_resources SET idle_since_ns=CASE WHEN occupancy=1 THEN ? ELSE idle_since_ns END,occupancy=occupancy-1 WHERE id=? AND occupancy>0`, time.Now().UTC().UnixNano(), resourceID)
 	if err != nil {
 		return err

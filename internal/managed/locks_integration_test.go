@@ -574,7 +574,7 @@ var _ = ginkgo.Describe("AdvisoryLocks", ginkgo.Label("integration"), func() {
 			gomega.Expect(err).To(gomega.HaveOccurred())
 			var version int
 			gomega.Expect(other.db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-			gomega.Expect(version).To(gomega.Equal(10))
+			gomega.Expect(version).To(gomega.Equal(12))
 		}
 	})
 	ginkgo.It("replays a newly granted waiter with its queued receipt and original policy, then expires at maximum hold", func() {

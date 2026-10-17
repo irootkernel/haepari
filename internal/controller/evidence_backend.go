@@ -97,12 +97,17 @@ func (b localEvidenceBackend) Collect(j managed.EvidenceRecoveryJob, destination
 	if err != nil || root != j.Root {
 		return collectionAttempt{}
 	}
-	a, complete, expired := collectOutputs(filepath.Join(b.s.root.Path, "jobs", j.JobID, "workspace"), destination, j.Outputs, j.CollectDeadline)
+	_, _, artifactBytes, artifactCount, _, err := b.s.jobCollectionBounds(j.JobID)
+	if err != nil {
+		return collectionAttempt{}
+	}
+	// Required files use the pin before any copy. This path does not collect output.log.
+	collected := collectOutputDetails(filepath.Join(b.s.root.Path, "jobs", j.JobID, "workspace"), destination, j.Outputs, j.CollectDeadline, artifactBytes, int(artifactCount), copyUntil)
 	root, err = b.Observe(j.Identity, "recollect")
 	if err != nil || root != j.Root {
-		return collectionAttempt{artifacts: a, expired: expired, rootConflict: true}
+		return collectionAttempt{artifacts: collected.artifacts, expired: collected.expired, rootConflict: true}
 	}
-	return collectionAttempt{artifacts: a, complete: complete, expired: expired}
+	return collectionAttempt{artifacts: collected.artifacts, complete: collected.complete, expired: collected.expired}
 }
 
 func (b localEvidenceBackend) Cleanup(j managed.EvidenceRecoveryJob) error {
@@ -212,7 +217,14 @@ func (b vmEvidenceBackend) Collect(j managed.EvidenceRecoveryJob, destination st
 		return collectionAttempt{}
 	}
 	q.Root = &j.Root
-	collected := b.s.collectVM(q, j.Outputs, destination, j.CollectDeadline)
+	_, hasRequest, artifactBytes, artifactCount, _, err := b.s.jobCollectionBounds(j.JobID)
+	if err != nil {
+		return collectionAttempt{}
+	}
+	collected := b.s.collectVM(q, j.Outputs, destination, j.CollectDeadline, artifactBytes, artifactCount)
+	if collected.complete && !hasRequest {
+		collected.complete = false
+	}
 	if collected.complete {
 		if err := b.s.collectVMLog(q, j.CollectDeadline); err != nil {
 			collected.complete = false

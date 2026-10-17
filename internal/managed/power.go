@@ -434,6 +434,9 @@ func (l *Ledger) claimPowerEffect(identity PowerTransitionIdentity, effect strin
 	if jobState != "preparing" || availability != "available" {
 		return ErrBlocked
 	}
+	if err := requireJobBoundsTx(tx, identity.TargetJobID); err != nil {
+		return err
+	}
 	readyEffect, ready := p.ReadyEffect()
 	if !ready || readyEffect != effect {
 		return ErrBlocked
@@ -497,6 +500,9 @@ func (l *Ledger) RecordPowerCommandReturn(identity PowerTransitionIdentity, effe
 			stage = PowerStopUncertain
 		}
 	}
+	if err := requireJobBoundsTx(tx, identity.TargetJobID); err != nil {
+		return err
+	}
 	proof := PowerConfirmation{Identity: identity, ExpectedStage: stage, EvidenceDigest: digest, CommandReturned: success, CommandReturnRequired: true}
 	raw, _ := json.Marshal(proof)
 	if _, err := tx.Exec(`UPDATE managed_power_progress SET stage=?,observation_json=? WHERE operation_generation=?`, stage, raw, identity.OperationGeneration); err != nil {
@@ -557,6 +563,9 @@ func (l *Ledger) ConfirmPower(q PowerConfirmation) error {
 	if q.NoEffectProven && q.TargetPower == "stopped" && ((oneOf(p.Stage, PowerStartIssued, PowerStartUncertain) && (q.Identity.VictimResourceID == "" || q.VictimPower == "stopped")) || (oneOf(p.Stage, PowerStopIssued, PowerStopUncertain) && q.VictimPower == "started")) {
 		state, stage = "reconciled", PowerFailedNoEffect
 	}
+	if err := requireJobBoundsTx(tx, q.Identity.TargetJobID); err != nil {
+		return err
+	}
 	raw, _ := json.Marshal(q)
 	if _, err := tx.Exec(`UPDATE managed_power_progress SET stage=?,observation_json=? WHERE operation_generation=?`, stage, raw, q.Identity.OperationGeneration); err != nil {
 		return err
@@ -600,6 +609,9 @@ func (l *Ledger) RecordPowerRefusal(id PowerTransitionIdentity, digest string) e
 	}
 	if p.State != "pending" || p.Stage != PowerStartIssued || !p.commandReturnRequired || p.CommandReturned() {
 		return ErrStale
+	}
+	if err := requireJobBoundsTx(tx, id.TargetJobID); err != nil {
+		return err
 	}
 	proof := PowerConfirmation{Identity: id, ExpectedStage: p.Stage, EvidenceDigest: digest, CommandReturned: true, CommandReturnRequired: true, NoEffectProven: true}
 	raw, _ := json.Marshal(proof)

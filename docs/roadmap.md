@@ -75,7 +75,7 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-020](roadmap/EPIC-005.md#task-020) | Validate the generic consumer loop; freeze the integration contract | TASK-018, TASK-019 | Active | Accepted |
 | [TASK-021](roadmap/EPIC-006.md#task-021) | Complete concurrency and crash qualification | TASK-011, TASK-019, TASK-035 | Active | Accepted |
 | [TASK-022](roadmap/EPIC-006.md#task-022) | Harden trust, privacy and external-effect boundaries | TASK-021 | Active | Accepted |
-| [TASK-023](roadmap/EPIC-006.md#task-023) | Measure bounds and qualify supported platforms | TASK-021 | Active | Planned |
+| [TASK-023](roadmap/EPIC-006.md#task-023) | Measure bounds and qualify supported platforms | TASK-021 | Active | Accepted |
 | [TASK-024](roadmap/EPIC-006.md#task-024) | Qualify storage compatibility and self-test isolation | TASK-005, TASK-021 | Active | Planned |
 | [TASK-025](roadmap/EPIC-007.md#task-025) | Package the release, user services and paired skill | TASK-020, TASK-022, TASK-023, TASK-024 | Active | Planned |
 | [TASK-026](roadmap/EPIC-007.md#task-026) | Finalize operator and developer documentation | TASK-025 | Active | Planned |

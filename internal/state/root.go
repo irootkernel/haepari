@@ -21,6 +21,16 @@ type Root struct {
 	DBPath     string
 }
 
+// ResolvePreferred selects the CLI root when it is set, then the environment
+// root, then the default root. Both paths use Resolve and refuse an unsafe
+// root before Prepare.
+func ResolvePreferred(cliRoot, environment string) (Root, error) {
+	if cliRoot != "" {
+		return Resolve(cliRoot)
+	}
+	return Resolve(environment)
+}
+
 func Resolve(override string) (Root, error) {
 	path := override
 	if path == "" {

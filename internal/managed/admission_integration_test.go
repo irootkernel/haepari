@@ -245,7 +245,7 @@ var _ = ginkgo.Describe("DurableAdmissions", ginkgo.Label("integration"), func()
 		_, err = l.CancelQueued(admitted.JobID, 1, "end-retained")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(l.RetainAdmissionTombstone(admitted.JobID)).To(gomega.Succeed())
-		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_jobs"} {
+		for _, table := range []string{"managed_job_inputs", "managed_runs", "managed_events", "managed_event_owners", "managed_event_progress", "managed_job_bounds", "managed_jobs"} {
 			_, err := db.Exec("DELETE FROM " + table)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
@@ -286,6 +286,8 @@ var _ = ginkgo.Describe("DurableAdmissions", ginkgo.Label("integration"), func()
 		_, err := l.Admit(data, digest, "damaged-key", "damaged-job")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		_, err = db.Exec(`DELETE FROM managed_job_inputs`)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = db.Exec(`DELETE FROM managed_job_bounds`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		_, err = db.Exec(`DELETE FROM managed_jobs`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -328,7 +330,7 @@ var _ = ginkgo.Describe("DurableAdmissions", ginkgo.Label("integration"), func()
 		gomega.Expect(replay.ResourceConfigRevision).To(gomega.Equal(int64(2)))
 		var version int
 		gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(10))
+		gomega.Expect(version).To(gomega.Equal(12))
 	})
 	ginkgo.It("leaves failed database admission keys reusable and storage errors uncertain", func() {
 		t := ginkgo.GinkgoT()

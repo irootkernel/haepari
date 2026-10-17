@@ -94,6 +94,9 @@ func (l *Ledger) RecordRunnerReceipt(identity LocalIdentity, kind string, payloa
 			return ErrBlocked
 		}
 	}
+	if err := requireJobBoundsTx(tx, identity.JobID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`INSERT INTO managed_runner_receipts(job_id,run_id,kind,digest,payload_json) VALUES(?,?,?,?,?)`, identity.JobID, identity.RunID, kind, digest, payload); err != nil {
 		return err
 	}
