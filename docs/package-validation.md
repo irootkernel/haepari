@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (696 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (701 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |
@@ -42,6 +42,8 @@ The package also holds 81 Markdown documents, 13 JSON design templates, nine uns
 ## Limits of these checks
 
 Automated checks cover syntax, links, counts, declared scope/ownership, per-requirement case references and the historical/current DAG distinction. They do not interpret arbitrary release or approval prose. Semantic review separately compares those statements with the approved plan; its disposition is recorded in [review disposition](review-disposition.md#local-development-scope-agreement-design-revision-35). Historical observations remain unchanged, and optional skill/migration or DF-001–004 limitations do not become passing evidence. Go/runtime tests, actual VM/service observations, providers, external messages and the Aquarium inspector are outside this change. The broader Design Revision 3.2 comparison below remains historical.
+
+The TASK-024 M1 common gate, on the package before this wording, passed its documentation stage with manifest integrity, did not run standalone JSON Schema, and listed 11 collision lines as informational. This wording records that gate and the synthetic-fixture M1. It does not accept TASK-024 or check its criteria.
 
 ## Design-package changes since Design Revision 3.2
 

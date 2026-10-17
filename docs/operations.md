@@ -104,6 +104,8 @@ Pause admission or resources and drain/reconcile active work. Take a quiesced, c
 
 Haepari development uses a separate `HAEPARI_HOME`, socket, artifact area, and synthetic resources or a guest installation. Never test a candidate by replacing the stable controller managing its own VM campaign.
 
+TASK-024 M1 did not replace a stable controller and did not downgrade a live store. Its canary and candidate each used an isolated state root and socket. Storage checks used synthetic prior-schema fixtures, a quiesced backup, an injected boundary failure, and restore. There is no public predecessor, so that observation is not a prior-public-release upgrade. Automatic downgrade remains unsupported.
+
 ## Retire Aquarium's old development channel
 
 Haepari never performs this as an installation side effect. The consumer rollout first proves Aquarium and each producer's new VM path, then detaches exact owned post-commit markers, stops/retires producer-owned development services, checks open workers/sessions, and settles preservation needs. Remove the shared launcher/MCP references/runtime only after all consumers no longer need them. The final removal of `~/.aquarium-dev/` has a separate explicit destructive-action boundary.

@@ -236,12 +236,12 @@ Acceptance: Disable those products and demonstrate Haepari status, cancel, wait 
 Implementation owner: `TASK-023`.
 
 ### HP-REQ-052
-- [ ] Version Haepari storage and support safe startup migration and schema-too-new rejection.
+- [x] Version Haepari storage and support safe startup migration and schema-too-new rejection.
 Acceptance: A quiesced backup and injected failed upgrade preserve a recoverable prior store; automatic downgrade is refused.
 Implementation owner: `TASK-024`.
 
 ### HP-REQ-053
-- [ ] Keep the production Haepari controller separate from candidate Haepari testing.
+- [x] Keep the production Haepari controller separate from candidate Haepari testing.
 Acceptance: Self-tests use an isolated state root or guest, unique socket, and synthetic resources; they cannot replace or stop the stable controller running the campaign.
 Implementation owner: `TASK-024`.
 

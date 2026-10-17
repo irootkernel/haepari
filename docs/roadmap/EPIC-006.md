@@ -84,22 +84,22 @@ Requirement coverage: `HP-REQ-050`, `HP-REQ-051`.
 Requirement coverage: `HP-REQ-052`, `HP-REQ-053`.
 
 #### Implement
-- [ ] Exercise Haepari schema migration under exclusive ownership, consistent backup/recovery, too-new rejection and candidate execution with an isolated state/socket.
-- [ ] Review repeated migration/replay authority and retained-event allowlists from the [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition). Preserve existing-store and legacy-evidence safety; this plan does not authorize deleting migration history.
+- [x] Exercise Haepari schema migration under exclusive ownership, consistent backup/recovery, too-new rejection and candidate execution with an isolated state/socket.
+- [x] Review repeated migration/replay authority and retained-event allowlists from the [feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition). Preserve existing-store and legacy-evidence safety; this plan does not authorize deleting migration history.
 
 #### Do not
-- [ ] Do not replace the stable controller running its own campaign or downgrade a live SQLite store.
+- [x] Do not replace the stable controller running its own campaign or downgrade a live SQLite store.
 
 #### Verify
-- [ ] Test initial schema creation, unsupported newer schema rejection and synthetic migration-framework fixtures. An actual prior-public-release upgrade is not applicable until a predecessor exists.
-- [ ] Create synthetic prior-schema fixtures, fail each migration boundary, restore safely and verify production controller/state/lease identities are unchanged.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Test initial schema creation, unsupported newer schema rejection and synthetic migration-framework fixtures. An actual prior-public-release upgrade is not applicable until a predecessor exists.
+- [x] Create synthetic prior-schema fixtures, fail each migration boundary, restore safely and verify production controller/state/lease identities are unchanged.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## Epic acceptance
 

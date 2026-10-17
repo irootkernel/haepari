@@ -67,6 +67,8 @@ Design Revision 3.5. This table is bidirectional: search by requirement, impleme
 
 TASK-033 implements the first slice of HP-REQ-007, 009, 010, 011, 012, 014, 015 and 016; the owning tasks harden the same path. TASK-034 contributes the UTM probe observations to HP-REQ-006 and HP-REQ-026. Freeze gates F1 (TASK-012), F2 (TASK-016) and F3 (TASK-020) complete HP-REQ-062.
 
+TASK-024 M1 observed synthetic prior-schema backup, failed-boundary restore, and too-new rejection for HP-REQ-052, and an isolated canary beside a candidate controller for HP-REQ-053. V32 and V33 remain planned case definitions and were not executed design cases. HP-REQ-052 and HP-REQ-053 have the TASK-024 qualification recorded in TESTING.md. There is no public predecessor and no live-store downgrade.
+
 For requirements owned by TASK-013 through TASK-015 and TASK-017 through TASK-020, focused implementation checks use local resources or the fake UTM/SSH backend. TASK-016 retains historical backend qualification; TASK-038 adds corrected-candidate operational qualification, TASK-039 adds a small isolated native caller-e2e cycle under the 2026-10-12 scope revision, and TASK-027 qualifies the exact release. TASK-036–039 are corrective contributions, not replacements for the original owners. TASK-039 local observations do not claim the real-VM or full consumer integration coverage owned by TASK-038 and TASK-017–020. The [dossier campaign](TODO-VM-OPERATIONAL-READINESS.md#campaign-and-acceptance-matrix) extends the listed V-case assertions with task-specific scenarios without claiming them executed.
 
 ## Consumer-owned optional traceability
