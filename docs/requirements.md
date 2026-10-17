@@ -256,12 +256,12 @@ Acceptance: The consumer checks declared schema, backend, wait, manual, and reco
 Implementation owner: `TASK-025`.
 
 ### HP-REQ-056
-- [ ] Document the supported VM setup, automatic/manual tests, ordinary recovery and decommissioning.
+- [x] Document the supported VM setup, automatic/manual tests, ordinary recovery and decommissioning.
 Acceptance: The runbook supports one already-running registered VM with precise prerequisites and documented current commands. Product-specific skill and migration guidance is clearly optional consumer material; no power/logout/lease-expiry experiment is required for setup.
 Implementation owner: `TASK-026`.
 
 ### HP-REQ-057
-- [ ] Preserve provider and consumer repository ownership.
+- [x] Preserve provider and consumer repository ownership.
 Acceptance: Sample integration uses project-owned tests; Haepari documentation does not create mandatory product-specific branches or a central integration-test repository.
 Implementation owner: `TASK-026`.
 

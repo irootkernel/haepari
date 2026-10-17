@@ -10,10 +10,12 @@ roots, already-running registered persistent VMs (never reset by Haepari).
 
 ## 1. Verify the package
 
-The sidecar `<archive>.tar.gz.sha256` is basename-relative: keep the archive
-and sidecar together and `shasum -a 256 -c` works from any directory. It binds
-the whole archive (including `SHA256SUMS`). `SHA256SUMS` inside the archive
-lists every file **except itself**.
+The sidecar `<archive>.tar.gz.sha256` records the archive's bare file name:
+keep the archive and sidecar together and run
+`shasum -a 256 -c` from the directory holding both — checksum entries
+resolve against the current working directory, not the sidecar's own path.
+It binds the whole archive (including `SHA256SUMS`). `SHA256SUMS` inside
+the archive lists every file **except itself**.
 
 ```sh
 shasum -a 256 -c haepari-<version>-darwin-arm64.tar.gz.sha256   # archive digest

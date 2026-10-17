@@ -35,21 +35,21 @@ Requirement coverage: `HP-REQ-054`, `HP-REQ-055`.
 Requirement coverage: `HP-REQ-056`, `HP-REQ-057`.
 
 #### Implement
-- [ ] Reconcile requirements, architecture, CLI help, examples, security guidance, project-owned testing, optional consumer skill/migration guidance and legacy-retirement boundaries against implemented behavior.
-- [ ] Reconcile stale implementation/candidate wording and command availability across public and maintainer documents, using the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) without rewriting historical records as current observations.
+- [x] Reconcile requirements, architecture, CLI help, examples, security guidance, project-owned testing, optional consumer skill/migration guidance and legacy-retirement boundaries against implemented behavior.
+- [x] Reconcile stale implementation/candidate wording and command availability across public and maintainer documents, using the [operational feedback disposition](../TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition) without rewriting historical records as current observations.
 
 #### Do not
-- [ ] Do not describe planned capabilities as shipped or leave executable-looking unmarked placeholders.
+- [x] Do not describe planned capabilities as shipped or leave executable-looking unmarked placeholders.
 
 #### Verify
-- [ ] Validate local links/examples, inspect command help, follow the runbook in a disposable environment and record unresolved setup limitations.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Validate local links/examples, inspect command help, follow the runbook in a disposable environment and record unresolved setup limitations.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-027
 
