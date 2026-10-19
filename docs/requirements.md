@@ -276,12 +276,12 @@ Acceptance: Run real local-command Jobs and the small already-running single-VM 
 Implementation owner: `TASK-027`.
 
 ### HP-REQ-060
-- [ ] Deliver a managed consumer handoff sufficient for Aquarium to begin its managed-first pilot.
+- [x] Deliver a managed consumer handoff sufficient for Aquarium to begin its managed-first pilot.
 Acceptance: The handoff includes exact release identities, test evidence, frozen managed schemas and capabilities, protocol examples, known limits, and prerequisite gaps. Haepari implementation completion depends on no Aquarium change. The Aquarium-side plan alignment listed in [external requests](to-external.md) is a named consumer prerequisite, not a Haepari dependency.
 Implementation owner: `TASK-028`.
 
 ### HP-REQ-061
-- [ ] Keep the old Aquarium development-channel cleanup outside Haepari product execution.
+- [x] Keep the old Aquarium development-channel cleanup outside Haepari product execution.
 Acceptance: No Haepari installer or default job deletes ~/.aquarium-dev, edits foreign Git hooks, removes Sorage data, or replaces host skills.
 Implementation owner: `TASK-028`.
 

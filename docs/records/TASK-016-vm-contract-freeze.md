@@ -1,5 +1,7 @@
 # TASK-016 VM contract freeze decision
 
+Current scope note (2026-10-19): Haepari has no VM power issuer. `vm.allow_automatic_stop` is accepted and inert, including a stored `true`. Current behavior is the [resource and runner contract](../contracts/resource-and-runner.md), [operations](../operations.md), and the accepted [TASK-027 record](TASK-027-release-acceptance.md). The [TASK-028 handoff](TASK-028-producer-handoff.md) uses that scope. The 2026-10-12 note and every historical table and observation below stay unchanged.
+
 Current scope note (2026-10-12): [ADR-0020](../architecture-decision-records/0020-local-development-scope.md) narrows current release obligations. Product-specific installation/skill/migration assertions and DF-001–004 live experiments are optional. This note preserves the original decision, frozen F1/F2 runtime semantics and all historical observations below.
 
 Decision date: 2026-10-05; qualification and recovery candidate updated 2026-10-08. Effective when TASK-016 becomes Accepted in the [canonical roadmap](../roadmap.md). This record defines the candidate F2 boundary; it does not independently accept the Task or Epic. The accepted Task commit and its review/verification evidence identify the exact frozen bytes.

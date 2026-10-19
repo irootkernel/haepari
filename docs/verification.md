@@ -2,7 +2,7 @@
 
 No case in this document is marked executed. The TASK-034 host probe ([record](records/TASK-034-utm-probe.md)) observed some of the behavior behind V47 and V58, but it is not a case execution. Each implementation task supplies focused evidence; the final release combines the exact artifact identities and results. Passing unit tests does not prove the required real-VM loop or human observations. Consumer-specific installed-skill and migration cases are optional.
 
-The in-progress [TASK-027 release record](records/TASK-027-release-acceptance.md) separates observed local/package evidence from pending current-candidate VM and human observations, with an assertion mapping for each mandatory invariant. It does not change the case definitions or claim Task acceptance.
+The accepted [TASK-027 release record](records/TASK-027-release-acceptance.md) holds the exact-candidate local, package, running-VM, and human observations, with an assertion mapping for each mandatory invariant. It does not change the case definitions in this document. No case below is marked executed by that acceptance.
 
 ## Operational readiness before consumer integration
 

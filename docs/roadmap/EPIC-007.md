@@ -82,21 +82,21 @@ Requirement coverage: `HP-REQ-031`, `HP-REQ-058`, `HP-REQ-059`.
 Requirement coverage: `HP-REQ-060`, `HP-REQ-061`.
 
 #### Implement
-- [ ] Deliver the managed schemas, real local/UTM evidence, the advisory lock contract that Mulgae's review queuing needs, and the managed-first Mulgae VM adoption packet. External lease schemas and evidence are deferred.
-- [ ] Complete the capability and artifact handoff with verified examples, VM prerequisites, operator actions, known limits and the independent installation path. Supply the implementation-complete result without changing Aquarium.
+- [x] Deliver the managed schemas, real local/UTM evidence, the advisory lock contract that Mulgae's review queuing needs, and the managed-first Mulgae VM adoption packet. External lease schemas and evidence are deferred.
+- [x] Complete the capability and artifact handoff with verified examples, VM prerequisites, operator actions, known limits and the independent installation path. Supply the implementation-complete result without changing Aquarium.
 
 #### Do not
-- [ ] Do not require Aquarium adoption to complete Haepari, send Sorage messages without the current authorized delivery scope, or remove aquarium-dev state.
+- [x] Do not require Aquarium adoption to complete Haepari, send Sorage messages without the current authorized delivery scope, or remove aquarium-dev state.
 
 #### Verify
-- [ ] Review the handoff against the frozen managed contract and ensure Aquarium can start Aquarium:TASK-086 without a future Haepari capability. State the Aquarium-side plan alignment in [external requests](../to-external.md) as a consumer prerequisite, not a Haepari completion dependency. Preserve publication/install as separate effects.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Review the handoff against the frozen managed contract and ensure Aquarium can start Aquarium:TASK-086 without a future Haepari capability. State the Aquarium-side plan alignment in [external requests](../to-external.md) as a consumer prerequisite, not a Haepari completion dependency. Preserve publication/install as separate effects.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## Epic acceptance
 

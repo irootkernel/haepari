@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (729 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (773 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |
@@ -37,7 +37,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | ADRs | 20 | 18 | 0 | 2 |
 | Verification cases | 85 | 58 | 7 | 20 |
 
-The package also holds 84 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
+The package also holds 85 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
 
 ## Limits of these checks
 
@@ -115,7 +115,7 @@ This historical comparison is against commit `91a874d` (Design Revision 3.2). It
 
 ## Remaining gaps
 
-**Bounded host observations and remaining gaps.** TASK-004 observed the Aqua LaunchAgent keys, SQLite `fullfsync` driver setting/readback, socket path limit, and owned process-group behavior on one macOS 27.0 arm64 host; see [its decision record](records/TASK-004-macos-supervision.md). TASK-016 and TASK-038 retain accepted candidate-bound backend and operating observations, including the stated screen-lock/SSH/cleanup limits; TASK-034 retains its host probe. Actual DHCP expiry, logout/post-login recovery, multi-day lease currency and two-VM qualification remain unobserved optional DF-001–004 hardening, not release gaps. Power-loss durability and other macOS releases remain unqualified limits. TASK-027 still needs its exact packaged candidate's small running-VM loop; historical evidence does not supply that new observation.
+**Bounded host observations and remaining gaps.** TASK-004 observed the Aqua LaunchAgent keys, SQLite `fullfsync` driver setting/readback, socket path limit, and owned process-group behavior on one macOS 27.0 arm64 host; see [its decision record](records/TASK-004-macos-supervision.md). TASK-016 and TASK-038 retain accepted candidate-bound backend and operating observations, including the stated screen-lock/SSH/cleanup limits; TASK-034 retains its host probe. Actual DHCP expiry, logout/post-login recovery, multi-day lease currency and two-VM qualification remain unobserved optional DF-001–004 hardening, not release gaps. Power-loss durability and other macOS releases remain unqualified limits. The accepted [TASK-027 record](records/TASK-027-release-acceptance.md) holds that exact packaged candidate's small running-VM loop; publication and the producer handoff remain separate.
 
 **Owned by Mulgae.** The lock integration and the behavior when Haepari is unavailable are Mulgae decisions; see [external requests](to-external.md) §2.1.
 

@@ -2,6 +2,7 @@
 
 - [Haepari implementation prompt](implementation-prompt.md) starts the independent product implementation.
 - [Haepari to Aquarium](haepari-to-aquarium.md) defines the exact producer completion packet.
+- [TASK-028 producer handoff](../records/TASK-028-producer-handoff.md) is the current producer record. The templates in this directory stay templates.
 - [Producer completion report template](producer-completion-template.md) defines the response expected for each external adoption task.
 - [Aquarium adoption copy](../aquarium-adoption.md) gives the coordination order.
 - [External requests](../to-external.md) lists the changes Haepari needs from Aquarium and Mulgae; they are applied by those repositories' owners.

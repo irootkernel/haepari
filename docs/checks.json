@@ -17,7 +17,7 @@
     "worktree_diff_check": "passed",
     "schema_validation": "not run; no standalone JSON Schema documents exist (Go decoder tests are separate)",
     "stated_counts_match": "passed",
-    "collision_id_review_lines": "11 lines listed for manual review (not a failure)"
+    "collision_id_review_lines": "12 lines listed for manual review (not a failure)"
   },
   "roadmap_dag": {
     "sinks": [
@@ -64,10 +64,10 @@
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 84,
+    "markdown_documents": 85,
     "json_templates": 13,
     "producer_request_drafts": 9,
-    "relative_links_checked": 729
+    "relative_links_checked": 773
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",
