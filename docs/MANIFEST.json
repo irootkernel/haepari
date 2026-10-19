@@ -175,7 +175,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "4d1c9cb5b5cc355d91b162ef14bee087dbd3b2cc0dc781e51e849eaf69a4e467"
+      "sha256": "c7f6c83be169cad9b04f4ee6237b947903bfa914678d1ba38b32e29cde0e6f9f"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -209,8 +209,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 57690,
-      "sha256": "a6acc846a8b7dd645d5bd40d646a12d2d0d85120bde49f6bb6f5b4834c9ff5b0"
+      "bytes": 57741,
+      "sha256": "5cd358b8432300961ce79bb9b2d932730e42c55613154ea3b2e9995de64de0ba"
     },
     {
       "path": "deferred-feedback.md",
@@ -389,13 +389,13 @@
     },
     {
       "path": "records/TASK-027-release-acceptance.md",
-      "bytes": 36833,
-      "sha256": "33f50dc9abfa18f9ca0b6971afefaca31b8639f602a29ce48a30c8a61c3b4dba"
+      "bytes": 39922,
+      "sha256": "7408dec519c9427bc321cb5fb49133e668753094f9a497f867eddf1d20ba99f4"
     },
     {
       "path": "records/TASK-028-producer-handoff.md",
-      "bytes": 14603,
-      "sha256": "dd9b9bc74fa96898032ef8097918023a700d883dc35f8e854482591a991f8d58"
+      "bytes": 15369,
+      "sha256": "023f1256baf04b441bd7410e4b139eb2c71a7064ae8da2f5fbb965fb3ab99590"
     },
     {
       "path": "records/TASK-034-utm-probe.md",

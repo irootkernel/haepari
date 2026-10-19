@@ -621,14 +621,76 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		gomega.Expect(status.Availability).To(gomega.Equal("available"))
 	})
 
+	ginkgo.It("keeps a delayed ordinary reboot probe on its five second clock without recovery authority", func() {
+		f, r := previousBootVMFixture()
+		installInProcessGuestRecoveryObservations(f)
+		before, err := f.s.ledger.RecoverySnapshot(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		receipts := map[string][]byte{}
+		for _, name := range []string{"guest.json", "request.json", "intent.json", "start.json"} {
+			raw, err := os.ReadFile(filepath.Join(f.guest, r.JobID, name))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			receipts[name] = raw
+		}
+		// This prior-boot fixture deliberately has no outcome or exit proof.
+		for _, name := range []string{"outcome.json", "exit.json"} {
+			_, err := os.Stat(filepath.Join(f.guest, r.JobID, name))
+			gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		}
+		native := f.s.sshCommand
+		probes := 0
+		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
+			q := vmTransportRequest(input)
+			if q.Schema == "haepari.guest-recovery-request/v2" && q.Operation == "probe" {
+				probes++
+				timer := time.NewTimer(6 * time.Second)
+				defer timer.Stop()
+				select {
+				case <-ctx.Done():
+					return utm.CommandResult{}, ctx.Err()
+				case <-timer.C:
+				}
+			}
+			return native(ctx, exe, args, input)
+		}
+		started := time.Now()
+		plan, err := f.s.planJobRecovery(r.JobID, "reconcile")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(plan.Unknowns).NotTo(gomega.BeEmpty())
+		gomega.Expect(plan.PlanToken).To(gomega.BeEmpty())
+		gomega.Expect(probes).To(gomega.Equal(1))
+		gomega.Expect(time.Since(started)).To(gomega.BeNumerically(">=", 5*time.Second))
+		gomega.Expect(time.Since(started)).To(gomega.BeNumerically("<", 8*time.Second))
+		after, err := f.s.ledger.RecoverySnapshot(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(after.Identity).To(gomega.Equal(before.Identity))
+		gomega.Expect(after.Receipt.JobState).To(gomega.Equal(before.Receipt.JobState))
+		gomega.Expect(after.Receipt.GlobalOccupancy).To(gomega.Equal(before.Receipt.GlobalOccupancy))
+		gomega.Expect(after.Receipt.ResourceAvailability).To(gomega.Equal(before.Receipt.ResourceAvailability))
+		for name, raw := range receipts {
+			gomega.Expect(os.ReadFile(filepath.Join(f.guest, r.JobID, name))).To(gomega.Equal(raw))
+		}
+		for _, name := range []string{"outcome.json", "exit.json"} {
+			_, err := os.Stat(filepath.Join(f.guest, r.JobID, name))
+			gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		}
+		gomega.Expect(os.ReadFile(filepath.Join(f.guest, r.JobID, "workspace/source/once.txt"))).To(gomega.Equal([]byte("once")))
+		_, err = os.Stat(filepath.Join(f.s.root.Path, "jobs", r.JobID, "guest-reboot-recovery.json"))
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		expectNoPower(f)
+	})
+
 	for _, boundary := range []string{"guest-reboot-host-intent", "guest-reboot-host-collect-recorded", "guest-reboot-host-cleanup-recorded"} {
 		boundary := boundary
 		ginkgo.It("resumes only committed reboot settlement after a stopped controller at "+boundary, func() {
 			f, r := previousBootVMFixture()
+			installInProcessGuestRecoveryObservations(f)
 			original, err := f.s.ledger.RecoverySnapshot(r.JobID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			plan, err := f.s.planJobRecovery(r.JobID, "reconcile")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(plan.Unknowns).To(gomega.BeEmpty(), "reboot recovery observation is incomplete: %v", plan.Unknowns)
+			gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
 			old := f.s
 			priorBoundary := retentionBoundary
 			cut := false
@@ -639,10 +701,10 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 				}
 			}
 			ginkgo.DeferCleanup(func() { retentionBoundary = priorBoundary })
-			_ = recoveryHTTP(old, "/v1/jobs/"+r.JobID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: "reboot-interrupted-host"})
+			response := recoveryHTTP(old, "/v1/jobs/"+r.JobID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: "reboot-interrupted-host"})
 			old.workers.Wait()
 			retentionBoundary = priorBoundary
-			gomega.Expect(cut).To(gomega.BeTrue())
+			gomega.Expect(cut).To(gomega.BeTrue(), "crash boundary %s was not reached: %s", boundary, response.Body.String())
 			gomega.Expect(old.ledger.MarkInterrupted()).To(gomega.Succeed())
 			interrupted, err := old.ledger.RecoverySnapshot(r.JobID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())

@@ -114,7 +114,7 @@ func (s *runtimeServer) guestAttestationBasis(id string) (managed.ResourceRecove
 		if e != nil {
 			return snap, nil, e
 		}
-		q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: time.Now().Add(5 * time.Second)}
+		q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: time.Now().Add(recoveryObservationBudget)}
 		reply, e := s.vmRecoveryCall(q)
 		if e != nil {
 			q.Schema = "haepari.guest-recovery-request/v2"

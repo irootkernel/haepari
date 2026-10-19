@@ -13,6 +13,10 @@ The candidate's reported source base is `ab5d70193d9cecd2b630bec0b10d166ad5516dd
 
 `compiled_backends` is `["local"]`. `qualified_backends` is empty. The accepted running-VM observation is a separate digest-bound profile. It does not rewrite the frozen capability output. The six capability names are `managed-execution/v1`, `durable-observation/v1`, `advisory-lock/v1`, `managed-recovery/v1`, `artifact-delivery/v1`, and `evidence-retention/v1`.
 
+## Source correction after this handoff
+
+On 2026-10-20, the source corrected the guest-stopped attestation basis from a private five-second clock to the existing shared fifteen-second recovery observation budget. The frozen package and private producer packet identified above are unchanged and exclude that correction. Their source correspondence is to the stated historical commit, not to a later corrected checkout. A build from corrected source has a new identity and needs its own applicable package and local/VM qualification before final release readiness. Existing native observations are not transferred to a different binary. Epic closeout remains on hold; this source correction performs no package publication, service replacement or consumer delivery.
+
 ## Frozen contract map
 
 | Gate | Current handoff and accepted deltas |

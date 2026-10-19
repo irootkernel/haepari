@@ -304,6 +304,9 @@ func attestedVMFixture() *vmJobFixture {
 	return f
 }
 func guestEvidence(plan resourceRecoveryPlan) managed.RecoveryEvidence {
+	ginkgo.GinkgoHelper()
+	gomega.Expect(plan.Unknowns).To(gomega.BeEmpty(), "guest attestation observation is incomplete: %v", plan.Unknowns)
+	gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty(), "guest attestation observation produced no plan token")
 	raw, _ := json.Marshal(plan.Observation)
 	var replies []runner.GuestRecoveryReply
 	gomega.Expect(json.Unmarshal(raw, &replies)).To(gomega.Succeed())
