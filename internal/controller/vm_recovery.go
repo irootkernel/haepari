@@ -99,6 +99,14 @@ func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, e
 			return s.planVMPreflightRecovery(p)
 		}
 	}
+	disposition, err := s.ledger.GuestPowerDisposition(p.Snapshot.Identity)
+	if err != nil {
+		return p, err
+	}
+	if disposition != "clear" {
+		p.Unknowns = append(p.Unknowns, "historical pre-guest claim requires protected automatic settlement")
+		return p, nil
+	}
 	q, facts, err := s.observeVMRecovery(p.Snapshot)
 	_ = q
 	p.Observation = facts
@@ -141,7 +149,7 @@ func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, e
 	if len(p.Unknowns) == 0 {
 		p.Effects = []string{"commit exact guest and revision-bound recovery intent", "observe the original run without another prepare or start", "collect before owned Job cleanup, or retain evidence and quarantine"}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), p.Snapshot.Identity.JobID, p.Action, managed.RecoveryDigest(p.Snapshot), managed.RecoveryDigest(facts), p.ExpiresAt})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), p.Snapshot.Identity.JobID, p.Action, managed.RecoveryDigest(p.Snapshot), managed.RecoveryDigest(facts), p.ExpiresAt, ""})
 	}
 	return p, nil
 }
@@ -150,6 +158,13 @@ func (s *runtimeServer) recoverVMInterrupted(snapshot managed.RecoverySnapshot, 
 		if _, err := s.ledger.VMPreflightCessation(snapshot.Identity); err == nil {
 			return s.recoverVMPreflight(snapshot, automatic, attestation, plan, key, clientDigest)
 		}
+	}
+	disposition, err := s.ledger.GuestPowerDisposition(snapshot.Identity)
+	if err != nil {
+		return err
+	}
+	if disposition == "no_guest" || disposition == "protected" {
+		return managed.ErrBlocked
 	}
 	if snapshot.Receipt.JobState != "reconciling" || len(snapshot.AdapterIntents) > 0 || s.jobWorkerAlive(snapshot.Identity.JobID) {
 		return managed.ErrBlocked

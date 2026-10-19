@@ -68,7 +68,7 @@ func (s *runtimeServer) planPowerRecovery(id string) (powerRecoveryPlan, error) 
 	if len(p.Unknowns) == 0 {
 		p.Effects = []string{"record scoped operator proof that the original command, descendants and framework effects cannot execute late", "retire this exact transfer without issuing another power command", "retain Job occupancy, native receipts and resource quarantine until separate Job and resource recovery"}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, p.Action, managed.RecoveryDigest(p.Snapshot), managed.RecoveryDigest(p.Observation), p.ExpiresAt})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, p.Action, managed.RecoveryDigest(p.Snapshot), managed.RecoveryDigest(p.Observation), p.ExpiresAt, ""})
 	}
 	return p, nil
 }
@@ -148,7 +148,7 @@ func (s *runtimeServer) planVMPreflightRecovery(p jobRecoveryPlan) (jobRecoveryP
 	if len(p.Unknowns) == 0 {
 		p.Effects = []string{"record exact pre-guest boundary and existing operator power cessation provenance", "settle the original Job INCOMPLETE with no workload execution or guest cleanup", "return Job capacity while retaining resource quarantine for independent readiness verification"}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), p.Snapshot.Identity.JobID, p.Action, managed.RecoveryDigest(p.Snapshot), managed.RecoveryDigest(observation), p.ExpiresAt})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), p.Snapshot.Identity.JobID, p.Action, managed.RecoveryDigest(p.Snapshot), managed.RecoveryDigest(observation), p.ExpiresAt, ""})
 	}
 	return p, nil
 }

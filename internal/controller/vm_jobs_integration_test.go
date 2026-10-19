@@ -24,6 +24,7 @@ import (
 	"github.com/irootkernel/haepari/internal/platform"
 	"github.com/irootkernel/haepari/internal/runner"
 	"github.com/irootkernel/haepari/internal/snapshot"
+	"github.com/irootkernel/haepari/internal/store/sqlite"
 	"github.com/irootkernel/haepari/internal/utm"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -39,6 +40,10 @@ type vmJobFixture struct {
 }
 
 func nativeVMFixture(t ginkgo.FullGinkgoTInterface, script string) *vmJobFixture {
+	return nativeVMConfiguredFixture(t, script, nil)
+}
+
+func nativeVMConfiguredFixture(t ginkgo.FullGinkgoTInterface, script string, configure func(*managed.ResourceSpec)) *vmJobFixture {
 	s, _, _ := availabilityFixture(t)
 	spec := vmControllerSpec(t, "vm-native", 1, false)
 	guest, err := filepath.EvalSymlinks(t.TempDir())
@@ -63,6 +68,9 @@ func nativeVMFixture(t ginkgo.FullGinkgoTInterface, script string) *vmJobFixture
 	gomega.Expect(os.WriteFile(file, mapping, 0600)).To(gomega.Succeed())
 	sum := sha256.Sum256(mapping)
 	spec.Guest.ConnectionReference = "sha256:" + hex.EncodeToString(sum[:]) + ":" + file
+	if configure != nil {
+		configure(&spec)
+	}
 	gomega.Expect(s.ledger.RegisterResource(mustJSONScheduling(spec))).To(gomega.Succeed())
 	f := &fakeUTMControl{states: map[string]string{spec.VM.UTMVMUUID: "started"}}
 	s.utmCommand = f.command
@@ -195,7 +203,7 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		blocker, err := f.s.ledger.QueueBlocker(blocked.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(blocker).NotTo(gomega.BeNil())
-		gomega.Expect(blocker.Reason).To(gomega.Equal("host_capacity_no_eligible_victim"))
+		gomega.Expect(blocker.Reason).To(gomega.Equal("vm_not_started"))
 		f.control.mu.Lock()
 		effects := append([]string(nil), f.control.effects...)
 		f.control.mu.Unlock()
@@ -725,17 +733,24 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		_, err = os.Stat(filepath.Join(f.guest, r.JobID))
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 	}, ginkgo.Entry("during membership lookup", "list"), ginkgo.Entry("during VM status", "status"))
-	ginkgo.It("settles a returned framework capacity rejection without quarantine or guest preparation", func() {
+	ginkgo.It("settles an original returned framework refusal without a new power command or guest preparation", func() {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "false")
+		r, err := f.reserve(f.admit("vm-framework-limit"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		db, err := sqlite.Open(f.s.root.DBPath)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer db.Close()
+		id := seedControllerHistoricalPower(db, r, f.spec, nil, managed.PowerStartReady)
+		gomega.Expect(f.s.ledger.ClaimHostPowerEffect(id, "start")).To(gomega.Succeed())
+		gomega.Expect(f.s.ledger.RecordPowerRefusal(id, strings.Repeat("a", 64))).To(gomega.Succeed())
 		f.control.states[f.spec.VM.UTMVMUUID] = "stopped"
-		native := f.control.command
-		f.s.utmCommand = func(ctx context.Context, exe string, args ...string) (utm.CommandResult, error) {
-			if args[0] == "start" {
-				return utm.CommandResult{Stderr: "Error from event: The operation couldn’t be completed. (VZErrorDomain error 6.)", ExitCode: 0}, nil
-			}
-			return native(ctx, exe, args...)
+		f.s.sshCommand = func(context.Context, string, []string, []byte) (utm.CommandResult, error) {
+			ginkgo.Fail("returned no-effect refusal must not call SSH")
+			return utm.CommandResult{}, managed.ErrBlocked
 		}
-		result := f.run("vm-framework-limit")
+		gomega.Expect(f.s.executeVM(r, f.job, f.object, time.Now().Add(10*time.Second))).To(gomega.Succeed())
+		result, err := f.s.ledger.Result(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Incomplete))
 		gomega.Expect(result.CleanupOutcome).To(gomega.Equal(managed.CleanupOutcome("not_needed")))
 		gomega.Expect(result.ResourceAvailability).To(gomega.Equal("paused"))
@@ -743,8 +758,9 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(status.Reason).To(gomega.Equal("host_vm_limit"))
 		gomega.Expect(status.Occupancy).To(gomega.BeZero())
-		_, err = os.Stat(filepath.Join(f.guest, "vm-framework-limit"))
+		_, err = os.Stat(filepath.Join(f.guest, r.JobID))
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		gomega.Expect(f.control.effects).To(gomega.BeEmpty())
 	})
 
 })
@@ -790,6 +806,18 @@ var _ = ginkgo.Describe("Task016VMAdapterTimings", ginkgo.Label("integration"), 
 		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf timed > ../results/output.txt")
 		if !started {
 			f.control.states[f.spec.VM.UTMVMUUID] = "stopped"
+			queued := f.admit("vm-timings")
+			_, err := f.reserve(queued)
+			var blocked *managed.HostCapacityBlocked
+			gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
+			gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("vm_not_started"))
+			observed, err := f.s.ledger.Snapshot(queued.JobID)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(observed.JobState).To(gomega.Equal("queued"))
+			gomega.Expect(observed.LeaseGeneration).To(gomega.BeZero())
+			gomega.Expect(f.control.effects).To(gomega.BeEmpty())
+			// This fixture represents an operator action, never an adapter command.
+			f.control.states[f.spec.VM.UTMVMUUID] = "started"
 		}
 		native := f.s.sshCommand
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
@@ -810,9 +838,6 @@ var _ = ginkgo.Describe("Task016VMAdapterTimings", ginkgo.Label("integration"), 
 			}
 		}
 		expected := []string{"ssh_ready", "transfer", "collect", "cleanup"}
-		if !started {
-			expected = append([]string{"vm_start"}, expected...)
-		}
 		gomega.Expect(names).To(gomega.Equal(expected))
 		phases, err := f.s.ledger.LocalPhases(result.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -825,5 +850,5 @@ var _ = ginkgo.Describe("Task016VMAdapterTimings", ginkgo.Label("integration"), 
 		again, err := f.s.ledger.Result(result.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(again).To(gomega.Equal(result))
-	}, ginkgo.Entry("already running VM", true), ginkgo.Entry("required fenced VM start", false))
+	}, ginkgo.Entry("already running VM", true), ginkgo.Entry("operator-started VM after queued observation", false))
 })

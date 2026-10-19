@@ -4,7 +4,7 @@ Target: v0.1.0, Design Revision 3.5. Requirement IDs and historical acceptance e
 
 ## Scope and ownership
 
-The release supports general automatic and manual tests on one local macOS arm64 machine, one OS user and one already-running registered persistent UTM macOS VM. Haepari owns sealed inputs, scheduling, execution/observation, declared evidence collection, manual completion and safe Job cleanup. Consumer recipes own product installation, compatibility, skill discovery/behavior, migrations and their functional assertions. Existing VM power and cross-boot recovery implementation and deterministic fixtures remain; operating those optional paths is not required to develop or release this supported profile.
+The release supports general automatic and manual tests on one local macOS arm64 machine, one OS user and one already-running registered persistent UTM macOS VM. Haepari owns sealed inputs, scheduling, execution/observation, declared evidence collection, manual completion and safe Job cleanup. Consumer recipes own product installation, compatibility, skill discovery/behavior, migrations and their functional assertions. The operator alone starts and stops the VM. Haepari issues no VM power command; retained legacy power claims remain protected and are reconciled without reissuing them. Deterministic cross-boot recovery fixtures remain; operating optional cross-boot scenarios is not required to develop or release this supported profile.
 
 [ADR-0020](architecture-decision-records/0020-local-development-scope.md) records the scope, evidence and authorization decision. The Requirements section is mandatory; Consumer-owned optional requirements and Deferred external-execution requirements do not count toward v0.1.0. Unobserved optional scenarios are limits, never passing evidence.
 
@@ -62,7 +62,7 @@ Implementation owner: `TASK-006`.
 
 ### HP-REQ-011
 - [ ] Schedule FIFO within each resource and enforce resource capacity plus a controller-wide occupancy limit across reserved, active and unresolved managed Jobs.
-Acceptance: Competing submitters cannot exceed managed or host VM capacity, including concurrent starts and uncertain power effects. A paused or unavailable resource does not prevent another eligible resource from progressing; a paused VM is not an automatic-stop victim. A caller whose parent context occupies capacity cannot submit a job or block-wait on a non-terminal job; nested acquisition is rejected before admission.
+Acceptance: Competing submitters cannot exceed managed global or per-resource capacity. VM dispatch requires the selected registered VM to be observed started; otherwise its Job stays queued under its original deadline with reason `vm_not_started`, without a lease or power intent. Unrelated running VMs do not consume a Haepari Job slot. Historical uncertain power claims still protect their resources. A paused or unavailable resource does not prevent another eligible resource from progressing. A caller whose parent context occupies capacity cannot submit a job or block-wait on a non-terminal job; nested acquisition is rejected before admission.
 Implementation owner: `TASK-007`.
 
 ### HP-REQ-012
@@ -136,8 +136,8 @@ Acceptance: After verified cleanup, a second job on the same VM finds none of th
 Implementation owner: `TASK-013`.
 
 ### HP-REQ-026
-- [ ] Use host-side UTM automation for VM lifecycle and SSH/SFTP for macOS guest operations.
-Acceptance: The adapter works without assuming a QEMU Guest Agent or guest IP query is available; it controls UTM only through `utmctl` and treats `Error from event` on stderr as a failure even with exit 0. Unavailable automation reports a prerequisite gap.
+- [ ] Observe host-side UTM inventory/status and use SSH/SFTP for macOS guest operations.
+Acceptance: The adapter works without assuming a QEMU Guest Agent or guest IP query is available; it observes UTM only through `utmctl list/status`, issues no VM start/stop, and treats `Error from event` on stderr as a failure even with exit 0. Unavailable automation reports a prerequisite gap.
 Implementation owner: `TASK-014`.
 
 ### HP-REQ-027
@@ -161,7 +161,7 @@ Acceptance: No VM job mounts the host home, live skills, plugin cache, source ch
 Implementation owner: `TASK-015`.
 
 ### HP-REQ-031
-- [ ] Prove the supported already-running UTM Job loop on one real macOS guest before advertising that backend.
+- [x] Prove the supported already-running UTM Job loop on one real macOS guest before advertising that backend.
 Acceptance: Retain observed authenticated success, meaningful failure, cancellation/timeout, logs/outputs, verified cleanup and successor reuse. Record phase timings from the tested candidate. Deterministic fixtures cover identity refusal and power/reboot boundaries; separate live experiments are optional. Historical TASK-016 and TASK-038 observations remain scoped evidence; TASK-027 owns the exact release candidate's small running-VM loop.
 Implementation owner: `TASK-016`, `TASK-027`.
 
@@ -191,12 +191,12 @@ Acceptance: Arbitrary regular candidate/test files, including a skill-only paylo
 Implementation owner: `TASK-018`.
 
 ### HP-REQ-040
-- [ ] Support hands-on jobs that retain exclusive ownership until a recorded outcome and cleanup.
+- [x] Support hands-on jobs that retain exclusive ownership until a recorded outcome and cleanup.
 Acceptance: Environment-ready is never PASS. Manual completion includes observer, candidate, scenario outcomes, and omissions; stale revisions or conflicting repeated completion are rejected.
 Implementation owner: `TASK-019`.
 
 ### HP-REQ-041
-- [ ] Do not auto-grade skill behavior or invoke paid providers by default.
+- [x] Do not auto-grade skill behavior or invoke paid providers by default.
 Acceptance: Offline, live automatic, and human observations remain distinguishable. Missing human observations or unapproved required live checks result in INCOMPLETE.
 Implementation owner: `TASK-019`.
 
@@ -266,12 +266,12 @@ Acceptance: Sample integration uses project-owned tests; Haepari documentation d
 Implementation owner: `TASK-026`.
 
 ### HP-REQ-058
-- [ ] Bind release acceptance to exact binaries, skill trees, protocol versions, and observed tests.
+- [x] Bind release acceptance to exact binaries, skill trees, protocol versions, and observed tests.
 Acceptance: A changed artifact digest invalidates the old artifact claim; prerelease local builds are not represented as official distribution evidence.
 Implementation owner: `TASK-027`.
 
 ### HP-REQ-059
-- [ ] Qualify at least two distinct managed resource use cases before calling the queue general purpose.
+- [x] Qualify at least two distinct managed resource use cases before calling the queue general purpose.
 Acceptance: Run real local-command Jobs and the small already-running single-VM release loop through the same scheduling ledger; record distinct resource occupancy and cleanup evidence. The historical thirty-Job/50 MiB campaign is optional tooling, not a release requirement.
 Implementation owner: `TASK-027`.
 

@@ -183,7 +183,7 @@ var _ = ginkgo.Describe("Task023EffectiveConfig", ginkgo.Label("integration"), f
 		db, ledger = openLedger(t, path, 1)
 		var version, jobs, rows int
 		gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(12))
+		gomega.Expect(version).To(gomega.Equal(13))
 		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_jobs`).Scan(&jobs)).To(gomega.Succeed())
 		gomega.Expect(jobs).To(gomega.Equal(1))
 		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_effective_config`).Scan(&rows)).To(gomega.Succeed())

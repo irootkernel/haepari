@@ -175,3 +175,70 @@ def test_policy_message_names_omitted_group(project_root, field, changes):
     policy = json.loads((project_root / "project/project.json").read_text())["inputs"]
     with pytest.raises(module["Refusal"], match=field):
         module["capture_inputs"](project_root / "project", project_root / "missing-group", dict(policy, **changes))
+
+
+@pytest.mark.parametrize("saved_legacy_budget", [False, True])
+def test_project_cleanup_budget_and_immutable_saved_replay(project_root, saved_legacy_budget):
+    project = project_root / "project"
+    helper = project / "haepari_inputs.py"
+    current_helper = helper.read_bytes()
+    if saved_legacy_budget:
+        # Simulate the actual older producer before admission, then replace it.
+        helper.write_bytes(current_helper.replace(b'"collect_seconds": 90, "cleanup_seconds": 90',
+                                                  b'"collect_seconds": 5, "cleanup_seconds": 5'))
+    counter = project_root / "budget-executions"
+    policy_path = project / "project.json"
+    policy = json.loads(policy_path.read_text())
+    policy["suites"]["regression"]["environment"] = {"COUNT_PATH": str(counter)}
+    policy_path.write_text(json.dumps(policy))
+    with _controller() as (parent, env, owned, _):
+        register(parent, env)
+        run = project_root / "budget-run"
+        result = host(project_root, env, run)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        record = jobs(run, owned)
+        spec_bytes = (run / "spec-0.json").read_bytes()
+        expected = 5 if saved_legacy_budget else 90
+        assert json.loads(spec_bytes)["deadlines"] == {"queue_seconds": 30, "prepare_seconds": 10,
+                                                      "run_seconds": 10, "collect_seconds": expected,
+                                                      "cleanup_seconds": expected}
+        helper.write_bytes(current_helper)
+        replay = host(project_root, env, run)
+        assert replay.returncode == 0, (replay.stdout, replay.stderr)
+        assert (run / "spec-0.json").read_bytes() == spec_bytes
+        assert jobs(run, owned)["jobs"][0]["request_key"] == record["jobs"][0]["request_key"]
+        assert jobs(run, owned)["jobs"][0]["job_id"] == record["jobs"][0]["job_id"]
+        assert counter.read_bytes() == b"x"
+
+
+def test_project_budget_above_resource_ceiling_does_not_consume_request_key(project_root):
+    module = helpers()
+    project = project_root / "project"
+    policy = json.loads((project / "project.json").read_text())
+    inputs = module["capture_inputs"](project, project_root / "budget-bundle", policy["inputs"])
+    spec = module["job_spec"](inputs, "project-local", "regression", "auto", policy["suites"]["regression"])
+    assert spec["deadlines"]["collect_seconds"] == spec["deadlines"]["cleanup_seconds"] == 90
+    with _controller() as (parent, env, owned, _):
+        resource = {"schema": "haepari.resource/v2", "id": "project-local", "kind": "local",
+                    "execution_mode": "managed", "capacity": 1, "revision": 1,
+                    "adapter": {"qualification_reference": "isolated-project-budget"},
+                    "cleanup": {"policy_reference": "owned-workspace"},
+                    "lifecycle_budgets": {"queue_seconds": 180, "prepare_seconds": 180, "run_seconds": 60,
+                                          "manual_seconds": 3600, "collect_seconds": 30, "cleanup_seconds": 30}}
+        resource_file = parent / "bounded-resource.json"
+        resource_file.write_text(json.dumps(resource))
+        _response(_run(BINARY, env, "resource", "register", "--file", str(resource_file), "--json"))
+        spec_file = parent / "reference-budget-spec.json"
+        spec_file.write_text(json.dumps(spec))
+        key = "reference-budget-admission"
+        refusal = _response(_run(BINARY, env, "submit", "--spec", str(spec_file), "--request-key", key, "--json"), 2)
+        assert not refusal["ok"]
+        assert _response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"] == []
+        # A distinct valid request can still use the unconsumed key.
+        spec["deadlines"]["collect_seconds"] = spec["deadlines"]["cleanup_seconds"] = 5
+        spec_file.write_text(json.dumps(spec))
+        admitted = _response(_run(BINARY, env, "submit", "--spec", str(spec_file), "--request-key", key, "--json"))["data"]
+        owned.append(admitted["job_id"])
+        _response(_run(BINARY, env, "wait", admitted["job_id"], "--timeout", "15s", "--json"))
+        replay = _response(_run(BINARY, env, "submit", "--spec", str(spec_file), "--request-key", key, "--json"))["data"]
+        assert replay["job_id"] == admitted["job_id"]

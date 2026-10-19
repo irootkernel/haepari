@@ -93,7 +93,7 @@ var _ = ginkgo.Describe("Task011Restart", ginkgo.Label("integration"), func() {
 		gomega.Expect(lost.PlanToken).To(gomega.BeEmpty())
 		gomega.Expect(fresh.tryRecoverInterrupted(r.JobID, false, &evidence)).To(gomega.MatchError(managed.ErrBlocked))
 		// Exercise the full public apply fence as well as direct startup recovery.
-		token := fresh.signRecoveryToken(recoveryToken{fresh.installationID(), r.JobID, lost.Action, managed.RecoveryDigest(lost.Snapshot), managed.RecoveryDigest(lost.Observation), time.Now().Add(time.Minute)})
+		token := fresh.signRecoveryToken(recoveryToken{fresh.installationID(), r.JobID, lost.Action, managed.RecoveryDigest(lost.Snapshot), managed.RecoveryDigest(lost.Observation), time.Now().Add(time.Minute), ""})
 		w := recoveryHTTP(fresh, "/v1/jobs/"+r.JobID+"/recover", managed.RecoveryRequest{PlanToken: token, MutationKey: "lost-live-owner", Evidence: &evidence})
 		// Apply re-observes the exact native state before the liveness fence.
 		// A changed observation can reject this synthetic token as stale first.

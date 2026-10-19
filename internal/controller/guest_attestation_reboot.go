@@ -74,7 +74,14 @@ func (s *runtimeServer) vmRebootAttestation(guest runner.GuestRequest) (runner.G
 }
 
 func (s *runtimeServer) observeVMRebootRecovery(guest runner.GuestRequest) (runner.GuestRequest, vmRecoveryFacts, error) {
+	return s.observeVMRebootRecoveryUntil(guest, time.Now().Add(5*time.Second))
+}
+
+func (s *runtimeServer) observeVMRebootRecoveryUntil(guest runner.GuestRequest, until time.Time) (runner.GuestRequest, vmRecoveryFacts, error) {
 	facts := vmRecoveryFacts{}
+	if until.IsZero() || !time.Now().Before(until) {
+		return guest, facts, managed.ErrBlocked
+	}
 	spec, err := s.vmSpec(guest.Request.Identity.ResourceID)
 	if err != nil {
 		return guest, facts, err
@@ -83,7 +90,7 @@ func (s *runtimeServer) observeVMRebootRecovery(guest runner.GuestRequest) (runn
 	if err != nil {
 		return guest, facts, err
 	}
-	q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v2", Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: time.Now().Add(5 * time.Second)}
+	q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v2", Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: until}
 	if saved, found, e := s.rebootIntent(guest); e != nil {
 		return guest, facts, e
 	} else if found {

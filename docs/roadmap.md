@@ -79,7 +79,7 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-024](roadmap/EPIC-006.md#task-024) | Qualify storage compatibility and self-test isolation | TASK-005, TASK-021 | Active | Accepted |
 | [TASK-025](roadmap/EPIC-007.md#task-025) | Package the release, user services and paired skill | TASK-020, TASK-022, TASK-023, TASK-024 | Active | Accepted |
 | [TASK-026](roadmap/EPIC-007.md#task-026) | Finalize operator and developer documentation | TASK-025 | Active | Accepted |
-| [TASK-027](roadmap/EPIC-007.md#task-027) | Run exact release acceptance | TASK-016, TASK-019, TASK-020, TASK-025, TASK-026 | Active | Planned |
+| [TASK-027](roadmap/EPIC-007.md#task-027) | Run exact release acceptance | TASK-016, TASK-019, TASK-020, TASK-025, TASK-026 | Active | Accepted |
 | [TASK-028](roadmap/EPIC-007.md#task-028) | Deliver the Aquarium consumer handoff | TASK-027 | Active | Planned |
 | [TASK-029](roadmap/EPIC-008.md#task-029) | Implement external admission, activation and dispatch claims | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-030](roadmap/EPIC-008.md#task-030) | Implement native execution binding, release and reconciliation | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |

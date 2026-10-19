@@ -77,13 +77,16 @@ func vmControllerSpec(t ginkgo.FullGinkgoTInterface, id string, n int, allowStop
 		Guest:   &managed.Guest{ConnectionReference: "task014-mapping", KnownHostsReference: "sha256:" + hex.EncodeToString(sum[:]) + ":" + filename}}
 }
 
-func reserveControllerVM(s *runtimeServer, id, jobID string, guard *managed.VMReservationGuard) (managed.Receipt, error) {
+func reserveControllerVM(s *runtimeServer, id, jobID string, guard *managed.VMReservationGuard, configure ...func(*managed.JobSpec)) (managed.Receipt, error) {
 	digest := strings.Repeat("a", 64)
 	j := managed.JobSpec{Schema: "haepari.job/v1", ExecutionMode: "managed", ResourceID: id, Mode: "auto", Suite: "utm-control",
 		Input: managed.Input{Root: "/tmp/isolated-vm-input", InventoryDigest: digest}, Environment: managed.Environment{ProfileID: "development", ProfileDigest: digest},
 		Workload:  managed.Workload{Argv: []string{"/usr/bin/true"}, CWD: "source", RequiredOutputs: []string{"results/output"}},
 		Deadlines: managed.Deadlines{QueueSeconds: 600, PrepareSeconds: 10, RunSeconds: 10, CollectSeconds: 10, CleanupSeconds: 10},
 		Effects:   managed.Effects{Mode: "offline", AuthorizationReference: "fake-task013"}, Provenance: managed.Provenance{CandidateDigest: digest, TestsDigest: digest, TargetProfileDigest: digest, EvidenceClass: "development"}}
+	for _, fn := range configure {
+		fn(&j)
+	}
 	r, err := s.ledger.Admit(mustJSONScheduling(j), digest, "key-"+jobID, jobID)
 	if err != nil {
 		return r, err
@@ -326,220 +329,116 @@ var _ = ginkgo.Describe("Task013UTMController", ginkgo.Label("integration"), fun
 		gomega.Expect(f.effects).To(gomega.BeEmpty())
 	})
 
-	ginkgo.It("claims a transfer once and retains command-return proof through uncertain observations", func() {
-		s, c, db := availabilityFixture(ginkgo.GinkgoT())
-		victim := vmControllerSpec(ginkgo.GinkgoT(), "victim", 1, true)
-		target := vmControllerSpec(ginkgo.GinkgoT(), "target", 2, false)
-		f := &fakeUTMControl{states: map[string]string{victim.VM.UTMVMUUID: "started", target.VM.UTMVMUUID: "stopped"}}
-		s.utmCommand = f.command
-		for _, spec := range []managed.ResourceSpec{victim, target} {
-			_, err := c.Register(context.Background(), mustJSONScheduling(spec))
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		guard, err := s.observeVMs(context.Background(), 1)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = reserveControllerVM(s, target.ID, "transfer", guard)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		var generation int64
-		gomega.Expect(db.QueryRow(`SELECT operation_generation FROM managed_power_transitions WHERE target_resource_id='target'`).Scan(&generation)).To(gomega.Succeed())
-		p, err := s.ledger.PowerIntent(generation)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		identity := p.Identity
-		stale := identity
+	ginkgo.It("observes a historical returned stop through uncertainty without issuing another effect", func() {
+		s, _, f, id := orphanPowerFixture("stop")
+		gomega.Expect(s.ledger.RecordPowerCommandReturn(id, "stop", true, strings.Repeat("a", 64))).To(gomega.Succeed())
+		stale := id
 		stale.TargetConfigRevision++
-		_, err = s.advanceVMPower(context.Background(), stale)
+		_, err := s.advanceVMPower(context.Background(), stale)
 		gomega.Expect(errors.Is(err, managed.ErrStale)).To(gomega.BeTrue())
-		f.failStatus = map[string]bool{victim.VM.UTMVMUUID: true}
-		p, err = s.advanceVMPower(context.Background(), identity)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.Stage).To(gomega.Equal("stop_uncertain"))
-		p, err = s.advanceVMPower(context.Background(), identity)
+		f.failStatus = map[string]bool{id.VictimVMUUID: true}
+		p, err := s.advanceVMPower(context.Background(), id)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(p.State).To(gomega.Equal("uncertain"))
-		_, _, err = c.UpdateVMResource(context.Background(), victim.ID, mustJSONScheduling(func() managed.ResourceSpec { v := victim; v.Revision++; return v }()), 1, 1)
-		var issue *client.Issue
-		gomega.Expect(errors.As(err, &issue)).To(gomega.BeTrue())
-		gomega.Expect(issue.Code).To(gomega.Equal("RESOURCE_BUSY"))
-		f.mu.Lock()
-		f.failStatus = nil
-		f.mu.Unlock()
-		gomega.Expect(db.Close()).To(gomega.Succeed())
+		gomega.Expect(p.CommandReturned()).To(gomega.BeTrue())
 		reopened, err := sqlite.Open(s.root.DBPath)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		defer reopened.Close()
 		s.ledger, err = managed.NewLedger(reopened, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		p, err = s.ledger.PowerIntent(generation)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.CommandReturned()).To(gomega.BeTrue())
-		p, err = s.advanceVMPower(context.Background(), identity)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.Stage).To(gomega.Equal("start_ready"))
-		gomega.Expect(p.CommandReturned()).To(gomega.BeFalse())
-		gomega.Expect(errors.Is(s.ledger.ClaimPowerEffect(identity, "start"), managed.ErrBlocked)).To(gomega.BeTrue())
+		f.failStatus = nil
+		f.states[id.VictimVMUUID] = "stopped"
 		var wg sync.WaitGroup
 		for range 2 {
-			wg.Go(func() { _, _ = s.advanceVMPower(context.Background(), identity) })
+			wg.Go(func() { _, _ = s.advanceVMPower(context.Background(), id) })
 		}
 		wg.Wait()
-		p, err = s.advanceVMPower(context.Background(), identity)
+		p, err = s.advanceVMPower(context.Background(), id)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(p.State).To(gomega.Equal("reconciled"))
-		gomega.Expect(f.effects).To(gomega.Equal([]string{"stop " + victim.VM.UTMVMUUID, "start " + target.VM.UTMVMUUID}))
+		gomega.Expect(p.Stage).To(gomega.Equal(managed.PowerStopRetained))
+		gomega.Expect(f.effects).To(gomega.BeEmpty())
 	})
 
 	ginkgo.It("retains uncertain command protection across reopen despite a later stopped status", func() {
-		s, c, db := availabilityFixture(ginkgo.GinkgoT())
-		victim := vmControllerSpec(ginkgo.GinkgoT(), "victim", 1, true)
-		target := vmControllerSpec(ginkgo.GinkgoT(), "target", 2, false)
-		f := &fakeUTMControl{states: map[string]string{victim.VM.UTMVMUUID: "started", target.VM.UTMVMUUID: "stopped"}, failEffect: true}
-		s.utmCommand = f.command
-		for _, spec := range []managed.ResourceSpec{victim, target} {
-			_, err := c.Register(context.Background(), mustJSONScheduling(spec))
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		guard, err := s.observeVMs(context.Background(), 1)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = reserveControllerVM(s, target.ID, "uncertain-transfer", guard)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		var generation int64
-		gomega.Expect(db.QueryRow(`SELECT operation_generation FROM managed_power_transitions WHERE target_resource_id='target'`).Scan(&generation)).To(gomega.Succeed())
-		p, err := s.ledger.PowerIntent(generation)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		p, err = s.advanceVMPower(context.Background(), p.Identity)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.Stage).To(gomega.Equal(managed.PowerStopUncertain))
-		f.states[victim.VM.UTMVMUUID] = "stopped"
-		f.failEffect = false
-		gomega.Expect(db.Close()).To(gomega.Succeed())
+		s, _, f, id := orphanPowerFixture("stop")
+		gomega.Expect(s.ledger.RecordPowerCommandReturn(id, "stop", false, strings.Repeat("a", 64))).To(gomega.Succeed())
+		f.states[id.VictimVMUUID] = "stopped"
 		reopened, err := sqlite.Open(s.root.DBPath)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		defer reopened.Close()
 		s.ledger, err = managed.NewLedger(reopened, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		for range 2 {
-			p, err = s.advanceVMPower(context.Background(), p.Identity)
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			p, e := s.advanceVMPower(context.Background(), id)
+			gomega.Expect(e).NotTo(gomega.HaveOccurred())
 			gomega.Expect(p.Stage).To(gomega.Equal(managed.PowerStopUncertain))
 			gomega.Expect(p.CommandReturned()).To(gomega.BeFalse())
 		}
-		gomega.Expect(f.effects).To(gomega.Equal([]string{"stop " + victim.VM.UTMVMUUID}))
-		victim.Revision++
-		gomega.Expect(errors.Is(s.ledger.UpdateResource(mustJSONScheduling(victim), 1, 1), managed.ErrBusy)).To(gomega.BeTrue())
+		gomega.Expect(f.effects).To(gomega.BeEmpty())
 	})
 
-	ginkgo.DescribeTable("retains protection while a claimed command is delayed before its effect", func(effect string, corruptGuard bool) {
-		s, c, db := availabilityFixture(ginkgo.GinkgoT())
-		victim := vmControllerSpec(ginkgo.GinkgoT(), "victim", 1, true)
-		target := vmControllerSpec(ginkgo.GinkgoT(), "target", 2, false)
-		f := &fakeUTMControl{states: map[string]string{victim.VM.UTMVMUUID: "started", target.VM.UTMVMUUID: "stopped"}}
-		if effect == "start" {
-			f.states[victim.VM.UTMVMUUID] = "stopped"
-		}
-		entered, release := make(chan struct{}), make(chan struct{})
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		s.utmCommand = func(ctx context.Context, executable string, args ...string) (utm.CommandResult, error) {
-			if args[0] == effect {
-				close(entered)
-				select {
-				case <-release:
-				case <-ctx.Done():
-					return utm.CommandResult{}, ctx.Err()
-				}
-			}
-			return f.command(ctx, executable, args...)
-		}
-		for _, spec := range []managed.ResourceSpec{victim, target} {
-			_, err := c.Register(ctx, mustJSONScheduling(spec))
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		guard, err := s.observeVMs(ctx, 1)
+	ginkgo.DescribeTable("protects historical claims whose original command may still take effect", func(effect string, corruptGuard bool) {
+		s, _, f, id := orphanPowerFixture(effect)
+		db, err := sqlite.Open(s.root.DBPath)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = reserveControllerVM(s, target.ID, "delayed-transfer", guard)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		var generation int64
-		gomega.Expect(db.QueryRow(`SELECT operation_generation FROM managed_power_transitions WHERE target_resource_id='target'`).Scan(&generation)).To(gomega.Succeed())
-		p, err := s.ledger.PowerIntent(generation)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		done := make(chan error, 1)
-		go func() { _, err := s.advanceVMPower(ctx, p.Identity); done <- err }()
-		defer func() {
-			close(release)
-			select {
-			case <-done:
-			case <-ctx.Done():
-			}
-		}()
-		gomega.Eventually(entered).Should(gomega.BeClosed())
+		defer db.Close()
+		issued, _ := managed.IssuedPowerStage(effect)
 		if corruptGuard {
-			proof := managed.PowerConfirmation{Identity: p.Identity, ExpectedStage: managed.PowerStartIssued}
-			if effect == "stop" {
-				proof.ExpectedStage = managed.PowerStopIssued
-			}
-			_, err = db.Exec(`UPDATE managed_power_progress SET observation_json=? WHERE operation_generation=?`, mustJSONScheduling(proof), generation)
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			gomega.Expect(db.Close()).To(gomega.Succeed())
-			reopened, err := sqlite.Open(s.root.DBPath)
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			ginkgo.DeferCleanup(reopened.Close)
-			s.ledger, err = managed.NewLedger(reopened, 1)
+			proof := managed.PowerConfirmation{Identity: id, ExpectedStage: issued}
+			_, err = db.Exec(`UPDATE managed_power_progress SET observation_json=? WHERE operation_generation=?`, mustJSONScheduling(proof), id.OperationGeneration)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
-		// An operator effect is positive power evidence, but cannot establish that
-		// the earlier claimed command has finished or cannot execute later.
-		f.mu.Lock()
+		s.ledger, err = managed.NewLedger(db, 1)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// Positive operator power status cannot prove the original issuer has ceased.
 		if effect == "stop" {
-			f.states[victim.VM.UTMVMUUID] = "stopped"
+			f.states[id.VictimVMUUID] = "stopped"
 		} else {
-			f.states[target.VM.UTMVMUUID] = "started"
+			f.states[id.TargetVMUUID] = "started"
 		}
-		f.mu.Unlock()
 		for range 2 {
-			_, err = s.advanceVMPower(ctx, p.Identity)
+			_, err = s.advanceVMPower(context.Background(), id)
 			if corruptGuard {
 				gomega.Expect(errors.Is(err, managed.ErrBlocked)).To(gomega.BeTrue())
 			} else {
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			}
 		}
-		current, err := s.ledger.PowerIntent(generation)
-		if corruptGuard {
-			gomega.Expect(errors.Is(err, managed.ErrBlocked)).To(gomega.BeTrue())
-		} else {
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-		issued, _ := managed.IssuedPowerStage(effect)
-		gomega.Expect(current.Stage).To(gomega.Equal(issued))
-		q := managed.PowerConfirmation{Identity: p.Identity, ExpectedStage: issued, VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: strings.Repeat("a", 64)}
+		q := managed.PowerConfirmation{Identity: id, ExpectedStage: issued, VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: strings.Repeat("a", 64)}
 		if effect == "start" {
 			q.TargetPower = "started"
 		}
 		gomega.Expect(errors.Is(s.ledger.ConfirmPower(q), managed.ErrBlocked)).To(gomega.BeTrue())
-		f.mu.Lock()
-		effects := append([]string(nil), f.effects...)
-		f.mu.Unlock()
-		gomega.Expect(effects).To(gomega.BeEmpty())
-		protected := victim
-		if effect == "start" {
-			protected = target
+		var stage, state string
+		gomega.Expect(db.QueryRow(`SELECT stage,state FROM managed_power_progress JOIN managed_power_transitions USING(operation_generation) WHERE operation_generation=?`, id.OperationGeneration).Scan(&stage, &state)).To(gomega.Succeed())
+		gomega.Expect(stage).To(gomega.Equal(issued))
+		gomega.Expect(state).To(gomega.Equal("pending"))
+		protectedID := id.TargetResourceID
+		if effect == "stop" {
+			protectedID = id.VictimResourceID
 		}
+		protected, _, err := s.ledger.ResourceDocument(protectedID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		status, err := s.ledger.ResourceStatus(protectedID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		protected.Revision++
-		err = s.ledger.UpdateResource(mustJSONScheduling(protected), 1, 1)
-		gomega.Expect(errors.Is(err, managed.ErrBusy)).To(gomega.BeTrue())
+		gomega.Expect(errors.Is(s.ledger.UpdateResource(mustJSONScheduling(protected), status.ConfigRevision, status.AvailabilityRevision), managed.ErrBusy)).To(gomega.BeTrue())
+		gomega.Expect(f.effects).To(gomega.BeEmpty())
 	}, ginkgo.Entry("stop", "stop", false), ginkgo.Entry("start", "start", false), ginkgo.Entry("stop with lost guard after reopen", "stop", true), ginkgo.Entry("start with lost guard after reopen", "start", true))
 
 	ginkgo.It("keeps a host claim protected after reopen when command return was never recorded", func() {
 		s, c, db := availabilityFixture(ginkgo.GinkgoT())
 		a := vmControllerSpec(ginkgo.GinkgoT(), "target", 1, false)
-		f := &fakeUTMControl{states: map[string]string{a.VM.UTMVMUUID: "stopped"}}
+		f := &fakeUTMControl{states: map[string]string{a.VM.UTMVMUUID: "started"}}
 		s.utmCommand = f.command
 		_, err := c.Register(context.Background(), mustJSONScheduling(a))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		guard, err := s.observeVMs(context.Background(), 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = reserveControllerVM(s, a.ID, "lost-return", guard)
+		reserved, err := reserveControllerVM(s, a.ID, "lost-return", guard)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		seedControllerHistoricalPower(db, reserved, a, nil, managed.PowerStartReady)
 		var generation int64
 		gomega.Expect(db.QueryRow(`SELECT operation_generation FROM managed_power_transitions WHERE target_resource_id='target'`).Scan(&generation)).To(gomega.Succeed())
 		p, err := s.ledger.PowerIntent(generation)
@@ -564,14 +463,15 @@ var _ = ginkgo.Describe("Task013UTMController", ginkgo.Label("integration"), fun
 	ginkgo.DescribeTable("refuses corrupt or unrelated durable host command proofs", func(corruption string) {
 		s, c, db := availabilityFixture(ginkgo.GinkgoT())
 		a := vmControllerSpec(ginkgo.GinkgoT(), "target", 1, false)
-		f := &fakeUTMControl{states: map[string]string{a.VM.UTMVMUUID: "stopped"}}
+		f := &fakeUTMControl{states: map[string]string{a.VM.UTMVMUUID: "started"}}
 		s.utmCommand = f.command
 		_, err := c.Register(context.Background(), mustJSONScheduling(a))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		guard, err := s.observeVMs(context.Background(), 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = reserveControllerVM(s, a.ID, "corrupt-return", guard)
+		reserved, err := reserveControllerVM(s, a.ID, "corrupt-return", guard)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		seedControllerHistoricalPower(db, reserved, a, nil, managed.PowerStartReady)
 		var generation int64
 		gomega.Expect(db.QueryRow(`SELECT operation_generation FROM managed_power_transitions WHERE target_resource_id='target'`).Scan(&generation)).To(gomega.Succeed())
 		p, err := s.ledger.PowerIntent(generation)

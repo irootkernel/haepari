@@ -18,15 +18,53 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// recoveryObservationBudget is the internal per-Job VM recovery observation
+// clock. It is not a wire field and does not change saved phase deadlines.
+const recoveryObservationBudget = 15 * time.Second
+
+// recoveryObservationUntil returns the earlier of one fresh observation budget
+// and a saved phase deadline. A zero or elapsed limit opens no guest exchange.
+func recoveryObservationUntil(limit time.Time) (time.Time, bool) {
+	now := time.Now()
+	if limit.IsZero() || !now.Before(limit) {
+		return time.Time{}, false
+	}
+	until := now.Add(recoveryObservationBudget)
+	if limit.Before(until) {
+		until = limit
+	}
+	return until, true
+}
+
 // A failed SSH observer is not a stopped collector. Read its exact durable
 // worker receipt before deciding whether incomplete collection can settle.
 func (s *runtimeServer) vmWorkerStopped(q runner.GuestRequest) bool {
+	return s.probeVMWorkerStopped(q, time.Now().Add(5*time.Second))
+}
+
+// vmWorkerStoppedUntil is the resource-recovery cessation probe. Ordinary Job
+// and manual callers keep vmWorkerStopped. An elapsed phase opens no SSH.
+func (s *runtimeServer) vmWorkerStoppedUntil(q runner.GuestRequest, until time.Time) bool {
+	if !time.Now().Before(until) {
+		return false
+	}
+	deadline := time.Now().Add(recoveryObservationBudget)
+	if until.Before(deadline) {
+		deadline = until
+	}
+	return s.probeVMWorkerStopped(q, deadline)
+}
+
+func (s *runtimeServer) probeVMWorkerStopped(q runner.GuestRequest, deadline time.Time) bool {
+	if deadline.IsZero() || !time.Now().Before(deadline) {
+		return false
+	}
 	q.Operation = "state"
 	q.Files = nil
 	q.Inventory = nil
 	q.Offset = 0
 	q.Path = ""
-	q.Deadline = time.Now().Add(5 * time.Second)
+	q.Deadline = deadline
 	reply, err := s.vmCall(q)
 	return err == nil && reply.Control != nil && reply.Control.Stopped
 }
@@ -196,6 +234,10 @@ func syncVMParentsUntil(name, stop string, deadline time.Time) error {
 	}
 }
 func (s *runtimeServer) collectVM(q runner.GuestRequest, required []string, destination string, deadline time.Time, byteLimit, countLimit int64) collectionAttempt {
+	return s.collectVMWithStop(q, required, destination, deadline, byteLimit, countLimit, s.vmWorkerStopped)
+}
+
+func (s *runtimeServer) collectVMWithStop(q runner.GuestRequest, required []string, destination string, deadline time.Time, byteLimit, countLimit int64, stopped func(runner.GuestRequest) bool) collectionAttempt {
 	a := collectionAttempt{complete: true}
 	if byteLimit < 1 || countLimit < 1 || int64(len(required)) > countLimit {
 		return collectionAttempt{}
@@ -218,7 +260,7 @@ func (s *runtimeServer) collectVM(q runner.GuestRequest, required []string, dest
 			if errors.Is(err, errOutputAbsent) {
 				a.absent = append(a.absent, name)
 			}
-			if errors.Is(err, utm.ErrGuestUncertain) && !s.vmWorkerStopped(q) {
+			if errors.Is(err, utm.ErrGuestUncertain) && !stopped(q) {
 				a.unproven = true
 				return a
 			}

@@ -330,7 +330,7 @@ var _ = ginkgo.Describe("DurableAdmissions", ginkgo.Label("integration"), func()
 		gomega.Expect(replay.ResourceConfigRevision).To(gomega.Equal(int64(2)))
 		var version int
 		gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(12))
+		gomega.Expect(version).To(gomega.Equal(13))
 	})
 	ginkgo.It("leaves failed database admission keys reusable and storage errors uncertain", func() {
 		t := ginkgo.GinkgoT()

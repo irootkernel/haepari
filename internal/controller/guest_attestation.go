@@ -154,7 +154,7 @@ func (s *runtimeServer) planGuestAttestation(id string) (resourceRecoveryPlan, e
 	}
 	p.Effects = []string{"persist scoped operator attestation outside the original guest Job directory", "retire the original guest start path without upgrading native proof", "preserve all original receipts, evidence and terminal Job results; recollect and health require separate plans"}
 	p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-	p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, p.Action, managed.RecoveryDigest(snap), managed.RecoveryDigest(basis), p.ExpiresAt})
+	p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, p.Action, managed.RecoveryDigest(snap), managed.RecoveryDigest(basis), p.ExpiresAt, ""})
 	return p, nil
 }
 func (s *runtimeServer) applyGuestAttestation(w http.ResponseWriter, r *http.Request, id string, request managed.RecoveryRequest, token recoveryToken) {

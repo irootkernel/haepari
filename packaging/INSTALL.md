@@ -6,7 +6,8 @@ exercised examples, and the MIT `LICENSE`. Nothing here installs itself, enrolls
 UTM VM, or requires an MCP transport.
 
 Supported scope (v0.1.0): one macOS arm64 machine, one OS user, private state
-roots, already-running registered persistent VMs (never reset by Haepari).
+roots, one already-running registered persistent VM (never reset by Haepari).
+The operator alone starts and stops it; Haepari issues no VM power command.
 
 ## 1. Verify the package
 

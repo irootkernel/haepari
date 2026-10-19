@@ -278,51 +278,51 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	if err != nil {
 		return err
 	}
-	// A power effect already has its durable claim. Advance only its next effect;
-	// uncertainty never permits resubmission, even before any guest Job exists.
-	steps := []managed.ResultStep{}
+	// Historical power rows are drained before any guest operation. A returned
+	// command may still be confirmed from status. No product path issues start
+	// or stop, and a drained no-guest generation does not open SSH.
+	if err = s.ledger.DrainHistoricalPower(); err != nil {
+		return err
+	}
+	snapshot, err = s.ledger.RecoverySnapshot(r.JobID)
+	if err != nil {
+		return err
+	}
 	powerContext, cancelPower := context.WithDeadline(context.Background(), prepareDeadline)
 	defer cancelPower()
 	for _, p := range snapshot.AdapterIntents {
-		var startAt time.Time
-		for p.State != "reconciled" && time.Now().Before(prepareDeadline) {
-			if e := s.vmPreflightState(c); e != nil {
-				// Cancellation may still observe an already returned command,
-				// but cannot issue another power effect or guess a lost return.
-				if !errors.Is(e, errVMReadinessCancelled) || !p.CommandReturned() {
-					return e
-				}
-				if _, ready := p.ReadyEffect(); ready {
-					return managed.ErrBlocked
-				}
-			}
-			if p.Stage == managed.PowerStartReady && startAt.IsZero() {
-				startAt = time.Now()
-			}
-			prior := managed.RecoveryDigest(p)
-			p, err = s.advanceVMPower(powerContext, p.Identity)
-			if err != nil {
-				return err
-			}
-			if managed.RecoveryDigest(p) == prior {
-				if !p.CommandReturned() {
-					return managed.ErrBlocked
-				}
-				if err = s.waitVMPreparation(c, prepareDeadline, 100*time.Millisecond); err != nil {
-					return err
-				}
-			}
+		if e := s.vmPreflightState(c); e != nil {
+			return e
 		}
-		if p.State != "reconciled" {
+		full, err := s.ledger.PowerIntent(p.Identity.OperationGeneration)
+		if err != nil {
+			return err
+		}
+		if !full.CommandReturned() {
 			return managed.ErrBlocked
 		}
-		if p.Stage == managed.PowerFailedNoEffect {
-			return s.vmNoEffect(c, "prepare_failure", false, "host_vm_limit", nil)
+		full, err = s.advanceVMPower(powerContext, p.Identity)
+		if err != nil {
+			return err
 		}
-		if !startAt.IsZero() && p.Stage == managed.PowerDone {
-			steps = append(steps, managed.ResultStep{Step: "vm_start", DurationMillis: time.Since(startAt).Milliseconds()})
+		if full.State != "reconciled" {
+			return managed.ErrBlocked
+		}
+		if full.Stage == managed.PowerFailedNoEffect {
+			return s.vmDrainedNoEffect(c)
 		}
 	}
+	disposition, err := s.ledger.GuestPowerDisposition(c.identity)
+	if err != nil {
+		return err
+	}
+	if disposition == "no_guest" {
+		return s.vmDrainedNoEffect(c)
+	}
+	if disposition == "protected" {
+		return managed.ErrBlocked
+	}
+	steps := []managed.ResultStep{}
 	transport, err := s.vmSSH(spec)
 	if err != nil {
 		return s.vmNoEffect(c, "prepare_failure", true, "", err)
@@ -671,7 +671,35 @@ func (s *runtimeServer) vmPreparationStopped(c *localRunControl, job managed.Job
 	}
 	return s.settleVMPhases(c, job, q, out)
 }
+func (s *runtimeServer) vmDrainedNoEffect(c *localRunControl) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	owned, err := s.inspectRecoveryRoot(c.identity)
+	if err != nil {
+		return err
+	}
+	if owned || c.effects {
+		return managed.ErrBlocked
+	}
+	boundary, err := s.ledger.DrainedVMPreflight(c.identity)
+	if err != nil {
+		return err
+	}
+	r, err := s.ledger.SettleDrainedVMPreflight(managed.DrainedVMSettlementRequest{Identity: c.identity, BoundaryDigest: boundary.EvidenceDigest(), MutationKey: "vm-no-effect-" + c.identity.JobID})
+	if err == nil {
+		c.receipt = r
+	}
+	return err
+}
+
 func (s *runtimeServer) vmNoEffect(c *localRunControl, failure string, unavailable bool, hostReason string, cause error) error {
+	return s.vmNoEffectObserved(c, failure, unavailable, hostReason, "authenticated-vm-preflight-before-guest-claim", vmEvidence(struct {
+		Identity managed.LocalIdentity
+		Cause    string
+	}{c.identity, errorString(cause)}))
+}
+
+func (s *runtimeServer) vmNoEffectObserved(c *localRunControl, failure string, unavailable bool, hostReason, mechanism, digest string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.identity.RunID == "" && !c.effects {
@@ -689,10 +717,7 @@ func (s *runtimeServer) vmNoEffect(c *localRunControl, failure string, unavailab
 		}
 	}
 	proof := managed.NoEffectProof{ObservationReference: "vm-preflight:" + c.identity.JobID, NoOwnedJobEffect: true, NoUnprovenProcess: true, NoProtectedPath: true, PowerReconciled: true}
-	r, err := s.ledger.RecordNoEffectObservation(managed.NoEffectObservationRequest{JobID: c.identity.JobID, ExpectedJobRevision: c.receipt.JobRevision, ResourceID: c.identity.ResourceID, ExpectedConfigRevision: c.identity.ConfigRevision, Slot: c.identity.Slot, LeaseGeneration: c.identity.LeaseGeneration, Source: "machine", Mechanism: "authenticated-vm-preflight-before-guest-claim", EvidenceDigest: vmEvidence(struct {
-		Identity managed.LocalIdentity
-		Cause    string
-	}{c.identity, errorString(cause)}), Proof: proof, MutationKey: "vm-no-effect-" + c.identity.JobID})
+	r, err := s.ledger.RecordNoEffectObservation(managed.NoEffectObservationRequest{JobID: c.identity.JobID, ExpectedJobRevision: c.receipt.JobRevision, ResourceID: c.identity.ResourceID, ExpectedConfigRevision: c.identity.ConfigRevision, Slot: c.identity.Slot, LeaseGeneration: c.identity.LeaseGeneration, Source: "machine", Mechanism: mechanism, EvidenceDigest: digest, Proof: proof, MutationKey: "vm-no-effect-" + c.identity.JobID})
 	if err != nil {
 		return err
 	}
@@ -742,21 +767,20 @@ func (s *runtimeServer) observeVMReadiness(fence managed.AvailabilityRequest) (s
 	if limit == 0 {
 		limit = 1
 	}
-	guard, err := s.observeVMs(context.Background(), limit)
-	if err != nil {
+	if _, err = s.observeVMs(context.Background(), limit); err != nil {
 		return "", "", err
 	}
-	running := guard.UnregisteredRunning
 	resources, err := s.ledger.VMResources()
 	if err != nil {
 		return "", "", err
 	}
+	selectedPower := ""
 	for _, v := range resources {
-		if v.Power != "stopped" {
-			running++
+		if v.Spec.ID == spec.ID {
+			selectedPower = v.Power
 		}
 	}
-	if running > limit {
+	if selectedPower != "started" {
 		return "", "", managed.ErrBlocked
 	}
 	facts, err := json.Marshal(struct {

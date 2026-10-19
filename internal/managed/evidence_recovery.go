@@ -2,8 +2,11 @@ package managed
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -42,6 +45,92 @@ type EvidenceRecoveryJob struct {
 	CleanupDeadline    time.Time               `json:"cleanup_deadline"`
 }
 
+// RecoveryBudget is the closed budget signed into a haepari.recovery-plan/v3.
+// Seconds come from the registered resource lifecycle ceilings.
+type RecoveryBudget struct {
+	Schema                    string `json:"schema"`
+	Basis                     string `json:"basis"`
+	CollectSeconds            int64  `json:"collect_seconds"`
+	CleanupSeconds            int64  `json:"cleanup_seconds"`
+	SourceConfigRevision      int64  `json:"source_config_revision"`
+	SourceConfigurationDigest string `json:"source_configuration_digest"`
+}
+
+func validRecoveryBudget(b *RecoveryBudget) bool {
+	if b == nil || b.Schema != "haepari.recovery-budget/v1" || b.Basis != "resource_lifecycle_budgets" ||
+		b.CollectSeconds <= 0 || b.CleanupSeconds <= 0 || b.CollectSeconds > productPhaseCeiling || b.CleanupSeconds > productPhaseCeiling ||
+		b.SourceConfigRevision <= 0 || len(b.SourceConfigurationDigest) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(b.SourceConfigurationDigest)
+	return err == nil
+}
+
+// ResourceRecoveryBudget is the closed budget for one registered resource v2.
+// A resource v1 has no lifecycle object and must not receive a synthesized one.
+func ResourceRecoveryBudget(spec ResourceSpec, configurationDigest string) (RecoveryBudget, error) {
+	if spec.Schema != "haepari.resource/v2" || spec.LifecycleBudgets == nil || spec.Revision <= 0 || len(configurationDigest) != 64 {
+		return RecoveryBudget{}, ErrInvalid
+	}
+	b := RecoveryBudget{Schema: "haepari.recovery-budget/v1", Basis: "resource_lifecycle_budgets", CollectSeconds: spec.LifecycleBudgets.CollectSeconds, CleanupSeconds: spec.LifecycleBudgets.CleanupSeconds, SourceConfigRevision: spec.Revision, SourceConfigurationDigest: configurationDigest}
+	if !validRecoveryBudget(&b) {
+		return RecoveryBudget{}, ErrInvalid
+	}
+	return b, nil
+}
+
+func resourceSpecTx(tx *sql.Tx, id string) (ResourceSpec, string, error) {
+	var raw []byte
+	if err := tx.QueryRow(`SELECT spec_json FROM managed_resources WHERE id=?`, id).Scan(&raw); err != nil {
+		return ResourceSpec{}, "", mapNoRows(err)
+	}
+	spec, err := DecodeResource(raw)
+	if err != nil {
+		return ResourceSpec{}, "", err
+	}
+	sum := sha256.Sum256(raw)
+	return spec, hex.EncodeToString(sum[:]), nil
+}
+
+// ResourceDocument returns the stored resource spec and the SHA-256 hex of those exact bytes.
+func (l *Ledger) ResourceDocument(id string) (ResourceSpec, string, error) {
+	tx, err := l.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return ResourceSpec{}, "", err
+	}
+	defer tx.Rollback()
+	return resourceSpecTx(tx, id)
+}
+
+func recoveryBudgetMatches(spec ResourceSpec, digest string, q EvidenceRecoveryIntent) error {
+	if spec.LifecycleBudgets == nil || q.Budget == nil || q.Budget.CollectSeconds != spec.LifecycleBudgets.CollectSeconds || q.Budget.CleanupSeconds != spec.LifecycleBudgets.CleanupSeconds || q.Budget.SourceConfigRevision != spec.Revision || q.Budget.SourceConfigRevision != q.ResourceConfigRevision || q.Budget.SourceConfigurationDigest != digest {
+		return ErrStale
+	}
+	return nil
+}
+
+func checkEvidenceBudgetSchemaTx(tx *sql.Tx) error {
+	var identity string
+	if err := tx.QueryRow(`SELECT identity FROM schema_migrations WHERE version=13`).Scan(&identity); err != nil || identity != "evidence-recovery-budget-v13" {
+		return fmt.Errorf("managed schema13 evidence recovery budget identity: %v", err)
+	}
+	return nil
+}
+
+func initEvidenceBudgetTx(tx *sql.Tx, version int) error {
+	if version >= 13 {
+		return nil
+	}
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO schema_migrations(version,identity) VALUES(13,'evidence-recovery-budget-v13')`); err != nil {
+		return err
+	}
+	if err := checkEvidenceBudgetSchemaTx(tx); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`PRAGMA user_version=13`)
+	return err
+}
+
 type EvidenceRecoveryIntent struct {
 	Schema                       string                   `json:"schema"`
 	ResourceID                   string                   `json:"resource_id"`
@@ -54,6 +143,7 @@ type EvidenceRecoveryIntent struct {
 	AuthorityReference           string                   `json:"authority_reference,omitempty"`
 	RecordedAt                   time.Time                `json:"recorded_at"`
 	Owner                        platform.ProcessIdentity `json:"owner"`
+	Budget                       *RecoveryBudget          `json:"budget,omitempty"`
 	Jobs                         []EvidenceRecoveryJob    `json:"jobs"`
 }
 
@@ -159,10 +249,13 @@ func evidenceResolvedTx(tx *sql.Tx, result Result) (bool, error) {
 }
 
 func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
-	if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v1", "haepari.evidence-recovery-intent/v2") || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose", "attest-guest-stopped") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
+	if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v1", "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3") || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose", "attest-guest-stopped") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
 		return false
 	}
 	if q.RecordedAt.IsZero() || q.Action == "dispose" && q.AuthorityReference != "request:"+q.MutationKey {
+		return false
+	}
+	if q.Schema == "haepari.evidence-recovery-intent/v3" && !oneOf(q.Action, "recollect", "dispose") {
 		return false
 	}
 	seen := map[string]bool{}
@@ -174,9 +267,19 @@ func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
 		if j.GuestLogLimitBytes < 0 || j.GuestLogLimitBytes > GuestRecoveryLogBytes || (q.Action == "attest-guest-stopped") != (len(j.GuestAttestation) > 0) || len(j.GuestAttestation) > 2<<20 {
 			return false
 		}
+		if q.Schema == "haepari.evidence-recovery-intent/v3" {
+			if !validRecoveryBudget(q.Budget) {
+				return false
+			}
+			collect := q.RecordedAt.Add(time.Duration(q.Budget.CollectSeconds) * time.Second)
+			cleanup := collect.Add(time.Duration(q.Budget.CleanupSeconds) * time.Second)
+			if !j.CollectDeadline.Equal(collect) || !j.CleanupDeadline.Equal(cleanup) {
+				return false
+			}
+		}
 		if b := j.AbsenceBinding; b != nil {
 			hasAbsenceBinding = true
-			if q.Schema != "haepari.evidence-recovery-intent/v2" || q.Action != "recollect" || j.Identity.RunID == "" ||
+			if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3") || q.Action != "recollect" || j.Identity.RunID == "" ||
 				b.WorkspaceRoot.Path != "workspace" || !b.WorkspaceRoot.Directory || b.WorkspaceRoot.Inode == 0 ||
 				!validRecoveryDigest(b.AttestationDigest) || b.OriginalBoot == "" || b.RecoveryBoot == "" || b.OriginalBoot == b.RecoveryBoot ||
 				!b.Cessation.valid() || !(b.Cessation.Source == "machine-observed" && b.Cessation.Mechanism == "guest-reboot-observed" || b.Cessation.Source == "operator-attested" && b.Cessation.Mechanism == "guest-workload-and-descendants-stopped") ||
@@ -186,7 +289,14 @@ func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
 		}
 		seen[j.JobID] = true
 	}
-	return (q.Schema == "haepari.evidence-recovery-intent/v2") == hasAbsenceBinding
+	switch q.Schema {
+	case "haepari.evidence-recovery-intent/v1":
+		return !hasAbsenceBinding && q.Budget == nil
+	case "haepari.evidence-recovery-intent/v2":
+		return hasAbsenceBinding && q.Budget == nil
+	default:
+		return validRecoveryBudget(q.Budget)
+	}
 }
 
 func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) bool {
@@ -196,6 +306,9 @@ func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) b
 	expectedSchema := "haepari.evidence-recovery-receipt/v1"
 	if q.Schema == "haepari.evidence-recovery-intent/v2" {
 		expectedSchema = "haepari.evidence-recovery-receipt/v2"
+	}
+	if q.Schema == "haepari.evidence-recovery-intent/v3" {
+		expectedSchema = "haepari.evidence-recovery-receipt/v3"
 	}
 	if r.Schema != expectedSchema || r.MutationKey != q.MutationKey || !r.Observation.valid() || r.Observation.Source != "machine-observed" || len(r.Jobs) != len(q.Jobs) {
 		return false
@@ -245,7 +358,7 @@ func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) b
 		if len(paths) > 0 && !uniquePaths(paths) {
 			return false
 		}
-		if len(o.AbsentOutputs) > 0 && (q.Schema != "haepari.evidence-recovery-intent/v2" || j.AbsenceBinding == nil || q.Action != "recollect" || o.Stage == "pending" || o.ArtifactRoot == "") {
+		if len(o.AbsentOutputs) > 0 && (!oneOf(q.Schema, "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3") || j.AbsenceBinding == nil || q.Action != "recollect" || o.Stage == "pending" || o.ArtifactRoot == "") {
 			return false
 		}
 		for _, absent := range o.AbsentOutputs {
@@ -310,12 +423,31 @@ func (l *Ledger) BeginEvidenceRecovery(q EvidenceRecoveryIntent) error {
 	if s.Resource.Availability != "quarantined" || len(s.AdapterIntents) > 0 {
 		return ErrBlocked
 	}
+	spec, specDigest, err := resourceSpecTx(tx, q.ResourceID)
+	if err != nil {
+		return err
+	}
+	if q.Schema == "haepari.evidence-recovery-intent/v3" {
+		if spec.Schema != "haepari.resource/v2" {
+			return ErrStale
+		}
+		if err = recoveryBudgetMatches(spec, specDigest, q); err != nil {
+			return err
+		}
+	} else if spec.Schema == "haepari.resource/v2" && oneOf(q.Action, "recollect", "dispose") {
+		return ErrStale
+	}
 	for _, j := range q.Jobs {
 		b, err := l.bulkSnapshotTx(tx, j.JobID)
 		if err != nil {
 			return err
 		}
-		if b.Receipt.ResultStatus == "unavailable" || b.Result.ResourceID != q.ResourceID || b.Identity == nil || *b.Identity != j.Identity || RecoveryDigest(b.Result) != j.ResultDigest || !reflect.DeepEqual(b.Result.ProtectedEvidence, j.Protected) || !reflect.DeepEqual(b.Spec.Workload.RequiredOutputs, j.Outputs) || !j.CollectDeadline.Equal(q.RecordedAt.Add(time.Duration(b.Spec.Deadlines.CollectSeconds)*time.Second)) || !j.CleanupDeadline.Equal(j.CollectDeadline.Add(time.Duration(b.Spec.Deadlines.CleanupSeconds)*time.Second)) {
+		deadlinesMatch := j.CollectDeadline.Equal(q.RecordedAt.Add(time.Duration(b.Spec.Deadlines.CollectSeconds)*time.Second)) && j.CleanupDeadline.Equal(j.CollectDeadline.Add(time.Duration(b.Spec.Deadlines.CleanupSeconds)*time.Second))
+		if q.Schema == "haepari.evidence-recovery-intent/v3" {
+			collect := q.RecordedAt.Add(time.Duration(q.Budget.CollectSeconds) * time.Second)
+			deadlinesMatch = j.CollectDeadline.Equal(collect) && j.CleanupDeadline.Equal(collect.Add(time.Duration(q.Budget.CleanupSeconds)*time.Second))
+		}
+		if b.Receipt.ResultStatus == "unavailable" || b.Result.ResourceID != q.ResourceID || b.Identity == nil || *b.Identity != j.Identity || RecoveryDigest(b.Result) != j.ResultDigest || !reflect.DeepEqual(b.Result.ProtectedEvidence, j.Protected) || !reflect.DeepEqual(b.Spec.Workload.RequiredOutputs, j.Outputs) || !deadlinesMatch {
 			return ErrStale
 		}
 		if j.AbsenceBinding != nil && (s.Resource.Kind != "utm-macos" || !AbsenceAware(b.Spec)) {

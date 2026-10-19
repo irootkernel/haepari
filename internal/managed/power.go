@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -126,10 +125,7 @@ func reserveVMHostPlaceTx(tx *sql.Tx, jobID, resourceID string, lease int64, gua
 	if len(guard.ObservationRevisions) != len(vms) {
 		return ErrStale
 	}
-	count := guard.UnregisteredRunning
 	var target *vmSchedulingRow
-	var candidates []vmSchedulingRow
-	details := map[string][]string{"policy": {}, "pause": {}, "occupation": {}, "transition": {}, "unknown_idle": {}, "uncertain": {}}
 	for i := range vms {
 		v := &vms[i]
 		v.pending, err = pendingPowerTx(tx, v.id)
@@ -139,93 +135,23 @@ func reserveVMHostPlaceTx(tx *sql.Tx, jobID, resourceID string, lease int64, gua
 		if v.id == resourceID {
 			target = v
 		}
-		if v.power != "stopped" {
-			count++
-		}
-		// A transferred claim initially consumes the victim's still occupied place.
-		// After observed stop, and for a direct start, it consumes its own place.
-		if v.pending && v.power == "stopped" {
-			var stage string
-			err := tx.QueryRow(`SELECT g.stage FROM managed_power_transitions p JOIN managed_power_progress g USING(operation_generation) WHERE p.target_resource_id=? AND p.state IN ('pending','uncertain')`, v.id).Scan(&stage)
-			if err == nil && stage != PowerStopReady && stage != PowerStopIssued && stage != PowerStopUncertain {
-				count++
-			} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-		}
-		if v.id == resourceID || v.power == "stopped" {
-			continue
-		}
-		switch {
-		case v.pending:
-			details["transition"] = append(details["transition"], v.id)
-		case v.power != "started":
-			details["uncertain"] = append(details["uncertain"], v.id)
-		case v.occupancy != 0:
-			details["occupation"] = append(details["occupation"], v.id)
-		case v.availability != "available":
-			details["pause"] = append(details["pause"], v.id)
-		case v.spec.VM == nil || !v.spec.VM.AllowAutomaticStop:
-			details["policy"] = append(details["policy"], v.id)
-		case !v.idle.Valid:
-			details["unknown_idle"] = append(details["unknown_idle"], v.id)
-		default:
-			candidates = append(candidates, *v)
-		}
 	}
 	if target == nil {
 		return ErrStale
 	}
+	if target.pending {
+		return ErrBlocked
+	}
 	if target.power == "started" {
 		return nil
 	}
-	if target.power != "stopped" {
-		return ErrBlocked
-	}
-	var victim *vmSchedulingRow
-	if count >= guard.HostLimit {
-		// A single stop cannot repair an already over-limit host.
-		if count == guard.HostLimit {
-			for i := range candidates {
-				c := &candidates[i]
-				if victim == nil || c.idle.Int64 < victim.idle.Int64 || (c.idle.Int64 == victim.idle.Int64 && c.id < victim.id) {
-					victim = c
-				}
-			}
-		}
-		if victim == nil {
-			// Bound diagnostics even for an already over-limit host. Preserve category
-			// samples and report omitted counts; never turn capacity blocking into invalid input.
-			for category, ids := range details {
-				if len(ids) > 4 {
-					details[category] = append(ids[:4:4], fmt.Sprintf("%d additional resources", len(ids)-4))
-				}
-			}
-			raw, _ := json.Marshal(details)
-			return &HostCapacityBlocked{QueueBlocker{"host_capacity_no_eligible_victim", raw}}
-		}
-	}
-	var generation int64
-	if err := tx.QueryRow(`SELECT COALESCE(MAX(operation_generation),0)+1 FROM managed_power_transitions`).Scan(&generation); err != nil {
+	raw, err := json.Marshal(map[string]string{
+		"schema": "haepari.vm-not-started/v1", "resource_id": resourceID, "observation": target.power,
+	})
+	if err != nil {
 		return err
 	}
-	identity := PowerTransitionIdentity{OperationGeneration: generation, TargetJobID: jobID, TargetLeaseGeneration: lease, TargetResourceID: resourceID, TargetConfigRevision: target.config, TargetVMUUID: target.uuid}
-	stage := PowerStartReady
-	if victim != nil {
-		identity.VictimResourceID = victim.id
-		identity.VictimConfigRevision = victim.config
-		identity.VictimVMUUID = victim.uuid
-		stage = PowerStopReady
-	}
-	raw, _ := json.Marshal(identity)
-	if _, err := tx.Exec(`INSERT INTO managed_power_transitions(operation_generation,victim_resource_id,target_resource_id,identity_json,state) VALUES(?,?,?,?,'pending')`, generation, identity.VictimResourceID, resourceID, raw); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`INSERT INTO managed_power_progress(operation_generation,stage) VALUES(?,?)`, generation, stage); err != nil {
-		return err
-	}
-	_, err = addEvent(tx, jobID, "power_reserved", identity)
-	return err
+	return &HostCapacityBlocked{QueueBlocker{"vm_not_started", raw}}
 }
 
 type PowerIntent struct {
@@ -287,6 +213,7 @@ const (
 	PowerDone           = "done"
 	PowerFailedNoEffect = "failed_no_effect"
 	PowerAbandoned      = "abandoned"
+	PowerStopRetained   = "stop_retained"
 )
 
 func (p PowerIntent) ReadyEffect() (string, bool) {
@@ -339,7 +266,7 @@ func powerIntentTx(q rowQuerier, generation int64) (PowerIntent, error) {
 		return p, nil
 	}
 	var proof PowerConfirmation
-	if json.Unmarshal(observation, &proof) != nil || proof.Identity != p.Identity {
+	if decodeClosed(observation, &proof) != nil || proof.Identity != p.Identity {
 		return p, ErrBlocked
 	}
 	if proof.CommandReturnRequired != p.hostControlled {
@@ -350,7 +277,9 @@ func powerIntentTx(q rowQuerier, generation int64) (PowerIntent, error) {
 		p.commandReturned = proof.CommandReturned
 		p.noEffectReturned = proof.NoEffectProven && proof.CommandReturned
 	} else if !((p.Stage == PowerStartReady && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain)) ||
+		(p.Stage == PowerStopRetained && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain)) ||
 		(p.Stage == PowerDone && oneOf(proof.ExpectedStage, PowerStartIssued, PowerStartUncertain)) ||
+		(p.Stage == PowerAbandoned && proof.ExpectedStage == "no_command" && !proof.CommandReturned) ||
 		(oneOf(p.Stage, PowerFailedNoEffect, PowerAbandoned) && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain, PowerStartIssued, PowerStartUncertain))) {
 		return p, ErrBlocked
 	}
@@ -518,7 +447,8 @@ func (l *Ledger) RecordPowerCommandReturn(identity PowerTransitionIdentity, effe
 }
 
 // ConfirmPower consumes a fresh, identity-bound adapter observation. Uncertain
-// effects retain both protections. Only a confirmed stop enables target start.
+// effects retain both protections. A confirmed stop stays stopped. PowerDone
+// requires the original command return plus the existing start fences.
 func (l *Ledger) ConfirmPower(q PowerConfirmation) error {
 	if !q.Identity.Valid() || !validDigest(q.EvidenceDigest) || !oneOf(q.TargetPower, "started", "stopped", "uncertain") || (q.Identity.VictimResourceID != "" && !oneOf(q.VictimPower, "started", "stopped", "uncertain")) {
 		return ErrInvalid
@@ -535,10 +465,9 @@ func (l *Ledger) ConfirmPower(q PowerConfirmation) error {
 	if p.Stage != q.ExpectedStage || p.State == "reconciled" {
 		return ErrStale
 	}
-	// The host controller requires durable cessation of the claimed command in
-	// addition to fresh power observations. Other qualified adapters retain their
-	// existing responsibility to supply reconciled evidence to this trusted API.
-	if p.commandReturnRequired && !p.CommandReturned() {
+	// A fresh power observation does not prove that the original command returned.
+	// PowerDone and stop_retained both require that durable return.
+	if !p.CommandReturned() || q.NoEffectProven != p.RefusedWithoutEffect() {
 		return ErrBlocked
 	}
 	q.CommandReturnRequired = p.commandReturnRequired
@@ -550,7 +479,7 @@ func (l *Ledger) ConfirmPower(q PowerConfirmation) error {
 		}
 		stage = PowerStopUncertain
 		if q.VictimPower == "stopped" {
-			state, stage = "pending", PowerStartReady
+			state, stage = "reconciled", PowerStopRetained
 		}
 	} else if oneOf(p.Stage, PowerStartIssued, PowerStartUncertain) {
 		stage = PowerStartUncertain
@@ -622,4 +551,321 @@ func (l *Ledger) RecordPowerRefusal(id PowerTransitionIdentity, digest string) e
 		return err
 	}
 	return l.commit(tx)
+}
+
+// DrainHistoricalPower reconciles only an established unissued ready row, or a
+// start_ready row whose stored proof is the original returned stop. A present
+// malformed, mismatched, unreturned, or return-required contradiction stays
+// pending and byte-identical. Issued and uncertain rows are not selected.
+func (l *Ledger) DrainHistoricalPower() error {
+	tx, err := l.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT p.operation_generation,p.identity_json,g.stage,g.observation_json,g.observation_json IS NOT NULL FROM managed_power_transitions p JOIN managed_power_progress g USING(operation_generation) WHERE p.state='pending' AND g.stage IN (?,?) ORDER BY p.operation_generation`, PowerStartReady, PowerStopReady)
+	if err != nil {
+		return err
+	}
+	type readyRow struct {
+		generation  int64
+		identity    PowerTransitionIdentity
+		stage       string
+		observation []byte
+		has         bool
+	}
+	var ready []readyRow
+	for rows.Next() {
+		var item readyRow
+		var raw []byte
+		if err = rows.Scan(&item.generation, &raw, &item.stage, &item.observation, &item.has); err != nil {
+			rows.Close()
+			return err
+		}
+		record, err := decodePowerTransition(raw)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		item.identity = record.PowerTransitionIdentity
+		ready = append(ready, item)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, item := range ready {
+		var jobState string
+		if err = tx.QueryRow(`SELECT state FROM managed_jobs WHERE id=?`, item.identity.TargetJobID).Scan(&jobState); err != nil {
+			return mapNoRows(err)
+		}
+		if jobState == "finished" {
+			continue
+		}
+		if err = requireJobBoundsTx(tx, item.identity.TargetJobID); err != nil {
+			return err
+		}
+		intent, fenceErr := powerFenceTx(tx, item.identity)
+		if fenceErr != nil || intent.State != "pending" || !oneOf(intent.Stage, PowerStartReady, PowerStopReady) {
+			continue
+		}
+		var observation []byte
+		var has bool
+		if err = tx.QueryRow(`SELECT observation_json, observation_json IS NOT NULL FROM managed_power_progress WHERE operation_generation=?`, item.generation).Scan(&observation, &has); err != nil {
+			return err
+		}
+		stage := ""
+		next := observation
+		if has {
+			var proof PowerConfirmation
+			if decodeClosed(observation, &proof) != nil || intent.Stage != PowerStartReady || !validRetainedStopProof(intent, proof) {
+				continue
+			}
+			stage = PowerStopRetained
+		} else if intent.hostControlled || intent.commandReturnRequired {
+			continue
+		} else {
+			stage = PowerAbandoned
+			next, _ = json.Marshal(PowerConfirmation{Identity: item.identity, ExpectedStage: "no_command"})
+		}
+		if _, err = tx.Exec(`UPDATE managed_power_progress SET stage=?,observation_json=? WHERE operation_generation=?`, stage, next, item.generation); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(`UPDATE managed_power_transitions SET state='reconciled',reconciled_at_ns=? WHERE operation_generation=?`, time.Now().UTC().UnixNano(), item.generation); err != nil {
+			return err
+		}
+		if _, err = addEvent(tx, item.identity.TargetJobID, "power_observed", map[string]any{"identity": item.identity, "state": "reconciled", "stage": stage, "no_command": stage == PowerAbandoned}); err != nil {
+			return err
+		}
+	}
+	return l.commit(tx)
+}
+
+// DrainedVMPreflight binds the no-guest decision to the complete current lease
+// and original durable generation. Raw stored evidence is included in its digest.
+type DrainedVMPreflight struct {
+	Identity      LocalIdentity
+	PowerIdentity PowerTransitionIdentity
+	Stage         string
+	Transition    json.RawMessage
+	Observation   json.RawMessage
+	Refusal       json.RawMessage
+	ReconciledAt  int64
+}
+
+func (b DrainedVMPreflight) EvidenceDigest() string {
+	return strings.TrimPrefix(RecoveryDigest(b), "sha256:")
+}
+
+const DrainedVMPreflightMechanism = "historical-power-drained-before-guest/v1"
+
+func (l *Ledger) DrainedVMPreflight(id LocalIdentity) (DrainedVMPreflight, error) {
+	tx, err := l.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return DrainedVMPreflight{}, err
+	}
+	defer tx.Rollback()
+	return drainedVMPreflightTx(tx, id)
+}
+
+func drainedVMPreflightTx(tx *sql.Tx, id LocalIdentity) (DrainedVMPreflight, error) {
+	var boundary DrainedVMPreflight
+	if id.RunID != "" {
+		return boundary, ErrBlocked
+	}
+	if err := matchLocalIdentityTx(tx, id); err != nil {
+		return boundary, err
+	}
+	rows, err := tx.Query(`SELECT p.operation_generation,p.identity_json FROM managed_power_transitions p WHERE p.target_resource_id=? ORDER BY p.operation_generation`, id.ResourceID)
+	if err != nil {
+		return boundary, err
+	}
+	var matches []PowerTransitionIdentity
+	for rows.Next() {
+		var generation int64
+		var raw []byte
+		if err = rows.Scan(&generation, &raw); err != nil {
+			rows.Close()
+			return boundary, err
+		}
+		record, e := decodePowerTransition(raw)
+		if e != nil {
+			rows.Close()
+			return boundary, e
+		}
+		identity := record.PowerTransitionIdentity
+		if identity.TargetJobID == id.JobID && identity.TargetLeaseGeneration == id.LeaseGeneration && identity.TargetConfigRevision == id.ConfigRevision && identity.TargetResourceID == id.ResourceID {
+			if identity.OperationGeneration != generation {
+				rows.Close()
+				return boundary, ErrBlocked
+			}
+			matches = append(matches, identity)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return boundary, err
+	}
+	if len(matches) == 0 {
+		return boundary, ErrNotFound
+	}
+	if len(matches) != 1 {
+		return boundary, ErrBlocked
+	}
+	intent, err := powerFenceTx(tx, matches[0])
+	if err != nil {
+		return boundary, err
+	}
+	if intent.State == "reconciled" && intent.Stage == PowerDone {
+		return boundary, ErrNotFound
+	}
+	var claims int
+	if err := tx.QueryRow(`SELECT (SELECT COUNT(*) FROM managed_runs WHERE job_id=?)+(SELECT COUNT(*) FROM managed_runner_receipts WHERE job_id=?)+(SELECT COUNT(*) FROM managed_events WHERE job_id=? AND kind IN ('vm_plan','vm_prepared','vm_retained','vm_retire_intent'))`, id.JobID, id.JobID, id.JobID).Scan(&claims); err != nil {
+		return boundary, err
+	}
+	if claims != 0 {
+		return boundary, ErrBlocked
+	}
+	if intent.State != "reconciled" || !oneOf(intent.Stage, PowerAbandoned, PowerStopRetained, PowerFailedNoEffect) {
+		return boundary, ErrBlocked
+	}
+	boundary.Identity, boundary.PowerIdentity, boundary.Stage = id, intent.Identity, intent.Stage
+	if err = tx.QueryRow(`SELECT p.identity_json,g.observation_json,p.reconciled_at_ns FROM managed_power_transitions p JOIN managed_power_progress g USING(operation_generation) WHERE p.operation_generation=?`, intent.Identity.OperationGeneration).Scan(&boundary.Transition, &boundary.Observation, &boundary.ReconciledAt); err != nil {
+		return boundary, err
+	}
+	var proof PowerConfirmation
+	if decodeClosed(boundary.Observation, &proof) != nil || proof.Identity != intent.Identity || boundary.ReconciledAt <= 0 || boundary.ReconciledAt > time.Now().UnixNano() {
+		return boundary, ErrBlocked
+	}
+	switch intent.Stage {
+	case PowerAbandoned:
+		if intent.hostControlled || proof != (PowerConfirmation{Identity: intent.Identity, ExpectedStage: "no_command"}) {
+			return boundary, ErrBlocked
+		}
+	case PowerStopRetained:
+		if !validRetainedStopProof(intent, proof) {
+			return boundary, ErrBlocked
+		}
+	case PowerFailedNoEffect:
+		if !validRefusedStartProof(intent, proof) {
+			return boundary, ErrBlocked
+		}
+		if err = tx.QueryRow(`SELECT payload_json FROM managed_events WHERE job_id=? AND kind='power_start_refused' AND json_extract(payload_json,'$.identity.operation_generation')=? ORDER BY cursor DESC LIMIT 1`, id.JobID, intent.Identity.OperationGeneration).Scan(&boundary.Refusal); err != nil {
+			return boundary, ErrBlocked
+		}
+		var refusal struct {
+			Identity       PowerTransitionIdentity `json:"identity"`
+			EvidenceDigest string                  `json:"evidence_digest"`
+		}
+		if decodeClosed(boundary.Refusal, &refusal) != nil || refusal.Identity != intent.Identity || !validDigest(refusal.EvidenceDigest) {
+			return boundary, ErrBlocked
+		}
+	}
+	return boundary, nil
+}
+
+func validRetainedStopProof(intent PowerIntent, proof PowerConfirmation) bool {
+	return proof.Identity == intent.Identity && intent.Identity.VictimResourceID != "" && intent.hostControlled && proof.CommandReturned && proof.CommandReturnRequired && !proof.NoEffectProven && validDigest(proof.EvidenceDigest) && oneOf(proof.ExpectedStage, PowerStopIssued, PowerStopUncertain) && proof.TargetPower == "stopped" && proof.VictimPower == "stopped"
+}
+
+func validRefusedStartProof(intent PowerIntent, proof PowerConfirmation) bool {
+	victim := proof.VictimPower == "stopped"
+	if intent.Identity.VictimResourceID == "" {
+		victim = proof.VictimPower == ""
+	}
+	return proof.Identity == intent.Identity && intent.hostControlled && proof.CommandReturned && proof.CommandReturnRequired && proof.NoEffectProven && validDigest(proof.EvidenceDigest) && oneOf(proof.ExpectedStage, PowerStartIssued, PowerStartUncertain) && proof.TargetPower == "stopped" && victim
+}
+
+// DrainedVMSettlementRequest is immutable across controller restart. Current
+// revisions and cancellation are checked inside the same commit as settlement.
+type DrainedVMSettlementRequest struct {
+	Identity       LocalIdentity
+	BoundaryDigest string
+	MutationKey    string
+}
+
+func (l *Ledger) SettleDrainedVMPreflight(q DrainedVMSettlementRequest) (Receipt, error) {
+	if q.Identity.RunID != "" || q.Identity.JobID == "" || q.Identity.LeaseGeneration <= 0 || q.Identity.Nonce == "" || !validDigest(q.BoundaryDigest) || q.MutationKey != "vm-no-effect-"+q.Identity.JobID {
+		return Receipt{}, ErrInvalid
+	}
+	return l.mutate("settle_drained_vm_preflight", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
+		if err := requireJobBoundsTx(tx, q.Identity.JobID); err != nil {
+			return Receipt{}, err
+		}
+		boundary, err := drainedVMPreflightTx(tx, q.Identity)
+		if err != nil {
+			return Receipt{}, err
+		}
+		if boundary.EvidenceDigest() != q.BoundaryDigest {
+			return Receipt{}, ErrStale
+		}
+		r, err := l.snapshotTx(tx, q.Identity.JobID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		status, err := cancellationStatusTx(tx, q.Identity.JobID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		failure := "prepare_failure"
+		if status.Requested {
+			failure = "cancel"
+		}
+		proof := NoEffectProof{ObservationReference: "vm-preflight:" + q.Identity.JobID, NoOwnedJobEffect: true, NoUnprovenProcess: true, NoProtectedPath: true, PowerReconciled: true}
+		r, err = l.recordNoEffectObservationTx(tx, NoEffectObservationRequest{JobID: r.JobID, ExpectedJobRevision: r.JobRevision, ResourceID: r.ResourceID, ExpectedConfigRevision: r.ResourceConfigRevision, Slot: r.Slot, LeaseGeneration: r.LeaseGeneration, Source: "machine", Mechanism: DrainedVMPreflightMechanism, EvidenceDigest: q.BoundaryDigest, Proof: proof})
+		if err != nil {
+			return Receipt{}, err
+		}
+		hostReason := ""
+		if boundary.Stage == PowerFailedNoEffect {
+			hostReason = "host_vm_limit"
+		}
+		r, err = l.classifyNoEffectTx(tx, ClassifyNoEffectRequest{JobID: r.JobID, ExpectedJobRevision: r.JobRevision, ResourceID: r.ResourceID, ExpectedConfigRevision: r.ResourceConfigRevision, ExpectedAvailabilityRevision: r.ResourceAvailabilityRevision, Slot: r.Slot, LeaseGeneration: r.LeaseGeneration, FailureKind: failure, HostPauseReason: hostReason, Proof: proof})
+		if err != nil {
+			return Receipt{}, err
+		}
+		return l.settleNoEffectTx(tx, SettleNoEffectRequest{JobID: r.JobID, ExpectedJobRevision: r.JobRevision, ResourceID: r.ResourceID, ExpectedConfigRevision: r.ResourceConfigRevision, ExpectedAvailabilityRevision: r.ResourceAvailabilityRevision, Slot: r.Slot, LeaseGeneration: r.LeaseGeneration})
+	})
+}
+
+// GuestPowerDisposition never turns malformed or unresolved historical claims
+// into permission for guest activity. Only absence of a matching claim is clear.
+func (l *Ledger) GuestPowerDisposition(id LocalIdentity) (string, error) {
+	if id.JobID == "" || id.LeaseGeneration <= 0 {
+		return "protected", nil
+	}
+	if id.RunID != "" {
+		return "clear", nil
+	}
+	_, err := l.DrainedVMPreflight(id)
+	if err == nil {
+		return "no_guest", nil
+	}
+	if errors.Is(err, ErrNotFound) {
+		return "clear", nil
+	}
+	if errors.Is(err, ErrBlocked) || errors.Is(err, ErrStale) {
+		return "protected", nil
+	}
+	return "", err
+}
+
+func drainedVMObservationTx(tx *sql.Tx, jobID string) bool {
+	raw, err := localIdentityTx(tx, jobID)
+	if err != nil {
+		return false
+	}
+	var id LocalIdentity
+	if json.Unmarshal(raw, &id) != nil {
+		return false
+	}
+	boundary, err := drainedVMPreflightTx(tx, id)
+	if err != nil {
+		return false
+	}
+	var count int
+	err = tx.QueryRow(`SELECT count(*) FROM managed_no_effect_observations WHERE job_id=? AND mechanism=? AND evidence_digest=?`, jobID, DrainedVMPreflightMechanism, boundary.EvidenceDigest()).Scan(&count)
+	return err == nil && count == 1
 }

@@ -62,15 +62,16 @@ var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
 			state, err := c.Status(context.Background(), canonicalID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(state).To(gomega.Equal("started"))
-			gomega.Expect(c.Power(context.Background(), canonicalID, "start")).To(gomega.Succeed())
-			gomega.Expect(c.Power(context.Background(), canonicalID, "stop")).To(gomega.Succeed())
 			var commands [][]string
 			for _, call := range calls {
 				if call[0] != "list" {
 					commands = append(commands, call)
 				}
 			}
-			gomega.Expect(commands).To(gomega.Equal([][]string{{"status", nativeID}, {"start", nativeID}, {"stop", nativeID}}))
+			gomega.Expect(commands).To(gomega.Equal([][]string{{"status", nativeID}}))
+			for _, args := range calls {
+				gomega.Expect(args[0]).NotTo(gomega.BeElementOf("start", "stop"))
+			}
 		}
 	})
 
@@ -84,10 +85,7 @@ var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
 			}}
 			_, err := c.Status(context.Background(), strings.ToLower(nativeID))
 			gomega.Expect(errors.Is(err, ErrUnavailable)).To(gomega.BeTrue())
-			for _, operation := range []string{"start", "stop"} {
-				gomega.Expect(errors.Is(c.Power(context.Background(), nativeID, operation), ErrUnavailable)).To(gomega.BeTrue())
-			}
-			gomega.Expect(calls).To(gomega.Equal([][]string{{"list"}, {"list"}, {"list"}}))
+			gomega.Expect(calls).To(gomega.Equal([][]string{{"list"}}))
 		}
 	})
 
@@ -108,16 +106,7 @@ var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
 		gomega.Expect(vm.UUID).To(gomega.Equal(vmID))
 		_, err = c.Inspect(context.Background(), "33333333-3333-4333-8333-333333333333")
 		gomega.Expect(errors.Is(err, ErrUnavailable)).To(gomega.BeTrue())
-		for _, op := range []string{"start", "stop"} {
-			gomega.Expect(c.Power(context.Background(), vmID, op)).To(gomega.Succeed())
-		}
-		before := len(calls)
-		for _, op := range []string{"delete", "clone", "ip-address", "stop --request"} {
-			gomega.Expect(c.Power(context.Background(), vmID, op)).NotTo(gomega.Succeed())
-		}
-		gomega.Expect(c.Power(context.Background(), "name; command", "start")).NotTo(gomega.Succeed())
-		gomega.Expect(len(calls)).To(gomega.Equal(before))
-		gomega.Expect(calls[2:]).To(gomega.Equal([][]string{{"list"}, {"start", vmID}, {"list"}, {"stop", vmID}}))
+		gomega.Expect(calls).To(gomega.Equal([][]string{{"list"}, {"list"}}))
 	})
 
 	ginkgo.It("rejects exit-zero automation errors, nonzero, loss and excessive output without retry", func() {
@@ -137,7 +126,8 @@ var _ = ginkgo.Describe("UTMCommandBoundary", ginkgo.Label("unit"), func() {
 		c := Control{Executable: "/utmctl", Run: func(context.Context, string, ...string) (CommandResult, error) {
 			return CommandResult{}, context.DeadlineExceeded
 		}}
-		gomega.Expect(c.Power(context.Background(), vmID, "start")).NotTo(gomega.Succeed())
+		_, err := c.List(context.Background())
+		gomega.Expect(err).To(gomega.HaveOccurred())
 	})
 
 	ginkgo.It("rejects malformed membership and unqualified power states", func() {

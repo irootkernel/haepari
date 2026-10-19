@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -24,6 +25,7 @@ type recoveryToken struct {
 	SnapshotDigest    string    `json:"snapshot_digest"`
 	ObservationDigest string    `json:"observation_digest"`
 	ExpiresAt         time.Time `json:"expires_at"`
+	BudgetDigest      string    `json:"budget_digest,omitempty"`
 }
 
 type jobRecoveryPlan struct {
@@ -72,6 +74,24 @@ func (s *runtimeServer) readRecoveryToken(raw string) (recoveryToken, error) {
 	d.DisallowUnknownFields()
 	if managed.ValidateUniqueJSONKeys(data) != nil || d.Decode(&t) != nil || t.Installation != s.installationID() {
 		return t, managed.ErrInvalid
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil {
+		return t, managed.ErrInvalid
+	}
+	for name := range fields {
+		if name != "budget_digest" && strings.EqualFold(name, "budget_digest") {
+			return t, managed.ErrInvalid
+		}
+	}
+	if _, present := fields["budget_digest"]; present {
+		digest, prefixed := strings.CutPrefix(t.BudgetDigest, "sha256:")
+		if !prefixed || len(digest) != 64 || strings.ToLower(digest) != digest {
+			return t, managed.ErrInvalid
+		}
+		if _, err := hex.DecodeString(digest); err != nil {
+			return t, managed.ErrInvalid
+		}
 	}
 	return t, nil
 }
@@ -179,7 +199,7 @@ func (s *runtimeServer) planJobRecovery(jobID, action string) (jobRecoveryPlan, 
 			p.Effects[1] = "record scoped operator termination evidence; keep workload outcome inconclusive"
 		}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), jobID, action, managed.RecoveryDigest(snap), managed.RecoveryDigest(observation), p.ExpiresAt})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), jobID, action, managed.RecoveryDigest(snap), managed.RecoveryDigest(observation), p.ExpiresAt, ""})
 	}
 	return p, nil
 }

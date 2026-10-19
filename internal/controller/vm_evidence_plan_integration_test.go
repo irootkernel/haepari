@@ -67,11 +67,11 @@ var _ = ginkgo.Describe("Task015VMNativeEvidencePlan", ginkgo.Label("integration
 			return r, err
 		}
 		b := vmEvidenceBackend{f.s, f.spec.ID}
-		_, err = b.Observe(q.Request.Identity, "dispose")
+		_, err = b.Observe(q.Request.Identity, "dispose", time.Now().Add(recoveryObservationBudget))
 		gomega.Expect(err).To(gomega.HaveOccurred())
 		gomega.Expect(lost).To(gomega.BeTrue())
 		gomega.Expect(os.ReadFile(control)).To(gomega.Equal(before))
-		root, err := b.Observe(q.Request.Identity, "dispose")
+		root, err := b.Observe(q.Request.Identity, "dispose", time.Now().Add(recoveryObservationBudget))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(root).To(gomega.Equal(*q.Root))
 		current, err := f.s.ledger.Result(original.JobID)
@@ -88,10 +88,10 @@ var _ = ginkgo.Describe("Task015VMNativeEvidencePlan", ginkgo.Label("integration
 		// Select this fixture effect budget before issuing cleanup; never renew it.
 		gomega.Expect(f.s.cleanupVM(q, time.Now().Add(30*time.Second))).To(gomega.Succeed())
 		b := vmEvidenceBackend{f.s, f.spec.ID}
-		root, err := b.Observe(q.Request.Identity, "dispose")
+		root, err := b.Observe(q.Request.Identity, "dispose", time.Now().Add(recoveryObservationBudget))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(root).To(gomega.Equal(*q.Root))
-		_, err = b.Observe(q.Request.Identity, "recollect")
+		_, err = b.Observe(q.Request.Identity, "recollect", time.Now().Add(recoveryObservationBudget))
 		gomega.Expect(err).To(gomega.HaveOccurred())
 		current, err := f.s.ledger.Result(original.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

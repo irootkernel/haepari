@@ -83,9 +83,12 @@ Job alive. A non-verdict observation error uses aggregate `UNKNOWN` and preserve
 its nonzero CLI exit; it never claims an INCOMPLETE terminal verdict. Outputs and logs remain available through normal `inspect`, `logs`
 and `export`. These are the Python wrapper's exits; Make reports a recipe failure
 with its own nonzero exit. This example's finite queue/prepare/run/collect/cleanup budgets are
-30/10/10/5/5 seconds; manual specs use 60 seconds instead of the run budget.
-Each caller wait is 15 seconds. A larger inspection budget must be chosen before
-admission, not silently extended while reconnecting.
+30/10/10/90/90 seconds; manual specs use 60 seconds instead of the run budget.
+Collect and cleanup are ordinary Job ceilings chosen before admission. They are not sleeps,
+and operator recovery does not raise them or rewrite a saved spec, digest, deadline, or result.
+A resource v2 ceiling below a requested phase refuses admission. Each caller wait is 15 seconds.
+A larger inspection budget must be chosen before admission, not silently extended while reconnecting.
+The isolated TASK-039 local e2e keeps its own recorded 30/10/10/5/5 budgets.
 
 Profile bytes are consumer data, not an installation inventory. The example
 hashes its selected `profile.json` bytes into the existing environment reference.

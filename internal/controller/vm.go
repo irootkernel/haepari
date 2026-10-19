@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"strings"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -78,7 +77,7 @@ func (s *runtimeServer) observeVMs(ctx context.Context, hostLimit int) (*managed
 	return guard, nil
 }
 
-// advanceVMPower performs at most one claimed effect, then observes both sides.
+// advanceVMPower observes historical effects without issuing a power command.
 // A successful command return must be durably recorded before observations can
 // advance it. An issued/uncertain effect without that proof remains protected.
 func (s *runtimeServer) advanceVMPower(ctx context.Context, identity managed.PowerTransitionIdentity) (managed.PowerIntent, error) {
@@ -115,42 +114,7 @@ func (s *runtimeServer) advanceVMPower(ctx context.Context, identity managed.Pow
 	if p.State == "reconciled" {
 		return p, nil
 	}
-	if effect, ready := p.ReadyEffect(); ready {
-		if err := ctx.Err(); err != nil {
-			return p, err
-		}
-		resource := identity.TargetResourceID
-		if effect == "stop" {
-			resource = identity.VictimResourceID
-		}
-		if err := s.ledger.ClaimHostPowerEffect(identity, effect); err != nil {
-			return p, err
-		}
-		commandErr := s.vmControl(byID[resource]).Power(ctx, byID[resource].VM.UTMVMUUID, effect)
-		proof := struct {
-			Identity managed.PowerTransitionIdentity
-			Effect   string
-			Success  bool
-		}{identity, effect, commandErr == nil}
-		var failure *utm.CommandFailure
-		var recordErr error
-		if effect == "start" && errors.As(commandErr, &failure) && failure.FrameworkLimit {
-			recordErr = s.ledger.RecordPowerRefusal(identity, vmEvidence(struct {
-				Identity managed.PowerTransitionIdentity
-				Failure  *utm.CommandFailure
-			}{identity, failure}))
-		} else {
-			recordErr = s.ledger.RecordPowerCommandReturn(identity, effect, proof.Success, vmEvidence(proof))
-		}
-		if recordErr != nil {
-			return p, recordErr
-		}
-		p, err = s.ledger.PowerIntent(identity.OperationGeneration)
-		if err != nil {
-			return p, err
-		}
-	}
-	if !p.CommandReturned() {
+	if _, ready := p.ReadyEffect(); ready || !p.CommandReturned() {
 		// A different caller may still be about to issue the claimed command, or
 		// its return may have been lost. Never infer its cessation from status.
 		return p, nil

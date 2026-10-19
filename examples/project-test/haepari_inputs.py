@@ -185,7 +185,7 @@ def job_spec(inputs, resource, suite, mode, recipe):
             "mode": mode, "suite": suite, **inputs,
             "workload": {"argv": recipe["argv"], "cwd": cwd, "environment": recipe.get("environment", {}),
                          "required_outputs": recipe["required_outputs"]},
-            "deadlines": {"queue_seconds": 30, "prepare_seconds": 10, "collect_seconds": 5, "cleanup_seconds": 5},
+            "deadlines": {"queue_seconds": 30, "prepare_seconds": 10, "collect_seconds": 90, "cleanup_seconds": 90},
             "effects": {"mode": "offline", "authorization_reference": recipe["authorization_reference"]}}
     if mode == "manual":
         spec["manual"] = recipe["manual"]

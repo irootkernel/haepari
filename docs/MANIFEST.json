@@ -4,7 +4,7 @@
   "revision_date": "2026-10-12",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 99,
+    "package_files_excluding_manifest": 100,
     "requirements": {
       "total": 81,
       "active": 58,
@@ -32,15 +32,15 @@
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 83,
+    "markdown_documents": 84,
     "json_templates": 13,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 16650,
-      "sha256": "20f89bdcad7ac172999ae8522250bd48b4ddbfe7312de09446c524465a8cc43f"
+      "bytes": 17342,
+      "sha256": "bf690604832f8aed5bd92a62a92a0f30a66d7997a47c3a58e94e7f1c88f3e895"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -94,8 +94,8 @@
     },
     {
       "path": "architecture-decision-records/0007-project-owned-tests.md",
-      "bytes": 1113,
-      "sha256": "5229253aa1d8cf8070b0c418b9d9ee1b1850c51ae7562bc5e23e960265416f41"
+      "bytes": 1351,
+      "sha256": "33aa8cef286bf1ea449ae4f8042ff94688aee8952639c142aabdccba0c405d2e"
     },
     {
       "path": "architecture-decision-records/0008-installation-combinations.md",
@@ -149,8 +149,8 @@
     },
     {
       "path": "architecture-decision-records/0018-persistent-vm-no-reset.md",
-      "bytes": 4685,
-      "sha256": "8f7005d1715195cada6159d87c554807e0c7f99cdcc0f0d734c0f18831b38147"
+      "bytes": 4653,
+      "sha256": "5dd6be8c259da44c574f49fae9fbdc322c3ade59719e72fcb4645b901195e72c"
     },
     {
       "path": "architecture-decision-records/0019-owned-runner-transport.md",
@@ -159,8 +159,8 @@
     },
     {
       "path": "architecture-decision-records/0020-local-development-scope.md",
-      "bytes": 5786,
-      "sha256": "215b0579b38d0989381384b77d0095107666dc1def3d2c9ccebfc45b678c4a97"
+      "bytes": 6047,
+      "sha256": "6b93e481f1358a5fb8f18b3780a70284c7b91f1d96a96501dc7944bdedb93863"
     },
     {
       "path": "architecture-decision-records/README.md",
@@ -169,13 +169,13 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 40765,
-      "sha256": "bf4f836aaa8b2dcd22d6647825ca101de0a180f00ac0477ead26ddeaeedffa58"
+      "bytes": 40562,
+      "sha256": "fad0999fdc2e360c470ca1bbccfc08f978d85713ca2d359b1e9e34b316c309d8"
     },
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "42a97117b53af00f139a0607aa6d21eee0189bd54f5b8e382694b54f072f6206"
+      "sha256": "7a5d6aa616685cdfcfa2dc8357980bb5d9b5508c55f384dc9627fd242c2459ec"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -184,13 +184,13 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 53482,
-      "sha256": "198fc159f6ff907a554c7c073c56e663d44506bdc9befe386fd48f2fd9196e29"
+      "bytes": 53713,
+      "sha256": "0892ed366fdb00be4772bb511daa3a8487fde9adec4e16fa7e54d42dffcbeb6d"
     },
     {
       "path": "contracts/configuration.md",
-      "bytes": 27143,
-      "sha256": "a8d618e88f91568a61dedfd5a05f2fbd1bafb9f8dd06d09630c04cd8017e3dc7"
+      "bytes": 27003,
+      "sha256": "8c532984249facf74ae29d8d9dabf05355de8444adc02ed54021bd58f744c0f5"
     },
     {
       "path": "contracts/external-leases.md",
@@ -204,13 +204,13 @@
     },
     {
       "path": "contracts/managed-transitions.md",
-      "bytes": 36988,
-      "sha256": "f397dc57d6b1f5ab6d7367b178601b6664c3a1e1902642b2a91f2392cd54c343"
+      "bytes": 40089,
+      "sha256": "667ac8662a367f1862b6be2c47b6d4cd79e8fb73dc8d4ccc7afcdad13e13bd61"
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 59307,
-      "sha256": "162aa9fb8e2595208c6062240f3d5ddbe4b36e023746c4bebb8fbe0848547e99"
+      "bytes": 57690,
+      "sha256": "a6acc846a8b7dd645d5bd40d646a12d2d0d85120bde49f6bb6f5b4834c9ff5b0"
     },
     {
       "path": "deferred-feedback.md",
@@ -319,13 +319,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 50783,
-      "sha256": "9c755933cc1f66fa323d4f88787ffadb0c8d9aeec2063fee3a58f994cdaff4aa"
+      "bytes": 52880,
+      "sha256": "17a1086b5e308ac2511ea223b2c4b5ccc24bc4e9724b857adfae137c50956f23"
     },
     {
       "path": "package-validation.md",
       "bytes": 8953,
-      "sha256": "1018b6d29f6bbb212a84bb087051868a7837c7884652bebcaad22c249422c58c"
+      "sha256": "2daea02e11617cab5eac7a2afc84b8ad86a733ac75f1db5ab6647f49851ba90f"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -388,6 +388,11 @@
       "sha256": "6950f75cf3eeef0580f90d6e46a8f01d06d5b2da01a69fe37be1d403e6407f93"
     },
     {
+      "path": "records/TASK-027-release-acceptance.md",
+      "bytes": 36833,
+      "sha256": "33f50dc9abfa18f9ca0b6971afefaca31b8639f602a29ce48a30c8a61c3b4dba"
+    },
+    {
       "path": "records/TASK-034-utm-probe.md",
       "bytes": 4363,
       "sha256": "167fbf6cf2702669c8ef7674f79a968ae4713d6f0d7052604c4299bfe1fc2c99"
@@ -404,8 +409,8 @@
     },
     {
       "path": "requirements.md",
-      "bytes": 35952,
-      "sha256": "6bde081ad4317b5c1f1ee2fb2db3e689bdde191c2aa17b704c08e24791f09f65"
+      "bytes": 36350,
+      "sha256": "62d73cc386c666e585272769d353a3fb2e46ee986d93b2dac566dc132bf7ddc3"
     },
     {
       "path": "review-disposition.md",
@@ -414,8 +419,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 15987,
-      "sha256": "3c289f6ca955d95f208c2927d81423b2898565e61840f18708137efebe3dcfb8"
+      "bytes": 15988,
+      "sha256": "bd113d2aaab76ca7a467b1618128bf6caa74c809956d3e9e92888023b34d8861"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -450,7 +455,7 @@
     {
       "path": "roadmap/EPIC-007.md",
       "bytes": 8267,
-      "sha256": "268f40f9bbabaf0aae3b72b01085e04fc51cb4c05bba0bd74fb94bd254a28f52"
+      "sha256": "a9049ee06ddebe60b34752535520e80e571af400f1625863f1f99a7140f3cb8d"
     },
     {
       "path": "roadmap/EPIC-008.md",
@@ -529,8 +534,8 @@
     },
     {
       "path": "verification.md",
-      "bytes": 29434,
-      "sha256": "971cfc1593503d815701af8bac1b3a41ee274e3e53eb46733777944246b1e011"
+      "bytes": 30179,
+      "sha256": "70ee3f8a0a70ba70393b352be22d3d5eb541ed4527fa85bd95be1b455096c8b5"
     }
   ]
 }

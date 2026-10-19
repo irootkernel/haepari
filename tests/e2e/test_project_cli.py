@@ -264,8 +264,12 @@ def test_reference_project_manual_spec_and_direct_doctor_contract(project_root):
         assert spec["deadlines"]["manual_seconds"] == 60 and "run_seconds" not in spec["deadlines"]
         record = jobs(run, owned)
         key = record["jobs"][0]["request_key"]
+        saved_spec = (run / "spec-0.json").read_bytes()
+        assert spec["deadlines"]["collect_seconds"] == spec["deadlines"]["cleanup_seconds"] == 90
         result = host(project_root, env, run, mode="manual")
         assert result.returncode == 5 and jobs(run, owned)["jobs"][0]["request_key"] == key
+        assert (run / "spec-0.json").read_bytes() == saved_spec
+        assert len(_response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"]) == 1
         finish_synthetic_manual(parent, env, owned, run)
         assert host(project_root, env, run, mode="manual").returncode == 0
 

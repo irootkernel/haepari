@@ -1,5 +1,5 @@
 // Package utm owns the host-side UTM command and address observation boundary.
-// Job leases and durable permission to issue power effects belong to the ledger.
+// VM power is operator-owned; this boundary permits only list and status.
 package utm
 
 import (
@@ -17,8 +17,6 @@ import (
 var ErrUnavailable = errors.New("UTM prerequisite unavailable")
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-
-var frameworkLimitPattern = regexp.MustCompile(`(?:\(VZErrorDomain error 6\.\)|Error Domain=VZErrorDomain Code=6(?: |$))`)
 
 // UTM 4.7.5 reports errAEEventNotPermitted for denied Automation, including
 // an unavailable login context. Preserve that host-wide cause separately from
@@ -63,7 +61,7 @@ func (e *CommandFailure) Error() string {
 func (e *CommandFailure) Unwrap() error { return ErrUnavailable }
 
 func (c Control) call(ctx context.Context, args ...string) (CommandResult, error) {
-	if !filepath.IsAbs(c.Executable) || filepath.Clean(c.Executable) != c.Executable {
+	if len(args) == 0 || (args[0] != "list" && args[0] != "status") || !filepath.IsAbs(c.Executable) || filepath.Clean(c.Executable) != c.Executable {
 		return CommandResult{}, ErrUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -77,11 +75,9 @@ func (c Control) call(ctx context.Context, args ...string) (CommandResult, error
 		len(r.Stdout) > commandLimit || len(r.Stderr) > commandLimit {
 		var exitFailure *exec.ExitError
 		returned := err == nil || errors.As(err, &exitFailure) && exitFailure.ExitCode() >= 0
-		refused := returned && args[0] == "start" && ctx.Err() == nil && r.ExitCode >= 0 && len(r.Stderr) <= commandLimit &&
-			frameworkLimitPattern.MatchString(r.Stderr)
 		permissionDenied := returned && ctx.Err() == nil && len(r.Stderr) <= commandLimit &&
 			strings.Contains(r.Stderr, "Error from event") && hostPermissionPattern.MatchString(r.Stderr)
-		return r, &CommandFailure{Operation: args[0], ExitCode: r.ExitCode, FrameworkLimit: refused, HostPermissionDenied: permissionDenied}
+		return r, &CommandFailure{Operation: args[0], ExitCode: r.ExitCode, HostPermissionDenied: permissionDenied}
 	}
 	return r, nil
 }
@@ -149,23 +145,6 @@ func (c Control) Status(ctx context.Context, uuid string) (string, error) {
 		return "", ErrUnavailable
 	}
 	return state, nil
-}
-
-// Power resolves current membership and issues at most one power command. The
-// controller must claim its exact durable power intent first. Cancellation or
-// command success is not effect evidence.
-func (c Control) Power(ctx context.Context, uuid, operation string) error {
-	if !uuidPattern.MatchString(uuid) || operation != "start" && operation != "stop" {
-		return ErrUnavailable
-	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	vm, err := c.Inspect(ctx, uuid)
-	if err != nil {
-		return err
-	}
-	_, err = c.call(ctx, operation, vm.commandUUID)
-	return err
 }
 
 type boundedOutput struct {

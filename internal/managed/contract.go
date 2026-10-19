@@ -324,6 +324,15 @@ func decodeClosed(data []byte, target any) error {
 	}
 	switch value := target.(type) {
 	case *EvidenceRecoveryIntent:
+		if oneOf(value.Schema, "haepari.evidence-recovery-intent/v1", "haepari.evidence-recovery-intent/v2") {
+			var fields map[string]json.RawMessage
+			if json.Unmarshal(data, &fields) != nil {
+				return ErrInvalid
+			}
+			if _, present := fields["budget"]; present {
+				return ErrInvalid
+			}
+		}
 		if value.Schema == "haepari.evidence-recovery-intent/v1" {
 			return rejectLegacyEvidenceField(data, "absence_binding")
 		}

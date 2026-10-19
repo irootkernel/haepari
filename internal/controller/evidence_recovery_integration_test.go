@@ -15,7 +15,11 @@ import (
 )
 
 func protectedLocalFixture() (*runtimeServer, managed.Receipt, managed.Result) {
-	_, s, r, job, object := cancellationRuntime(ginkgo.GinkgoT(), "mkdir -p ../results; printf recoverable > ../results/output.txt")
+	return protectedLocalResourceFixture(nil)
+}
+
+func protectedLocalResourceFixture(configure func(*managed.ResourceSpec)) (*runtimeServer, managed.Receipt, managed.Result) {
+	_, s, r, job, object := cancellationRuntimeConfigured(ginkgo.GinkgoT(), "mkdir -p ../results; printf recoverable > ../results/output.txt", "local", "cancel-job", configure)
 	c, err := s.registerLocal(r)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	defer s.unregisterLocal(c)

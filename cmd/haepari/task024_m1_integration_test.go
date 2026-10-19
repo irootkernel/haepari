@@ -350,13 +350,13 @@ func task024SeedCandidate(parent, name string, version int, trigger bool) task02
 	if version == 11 {
 		_, err = db.Exec(`DROP TABLE managed_job_bounds`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = db.Exec(`DELETE FROM schema_migrations WHERE version=12`)
+		_, err = db.Exec(`DELETE FROM schema_migrations WHERE version>=12`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		_, err = db.Exec(`PRAGMA user_version=11`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
-	if version == 13 {
-		_, err = db.Exec(`PRAGMA user_version=13`)
+	if version == 14 {
+		_, err = db.Exec(`PRAGMA user_version=14`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 	seed := task024Seed{root: root, installationID: installation, version: version, jobID: admitted.JobID}
@@ -444,6 +444,7 @@ func task024ExpectCandidate(path string, seed task024Seed, version int, migrated
 	gomega.Expect(lease).To(gomega.BeZero())
 	if migrated {
 		gomega.Expect(migrations).To(gomega.ContainSubstring("12:job-bounds-v12"))
+		gomega.Expect(migrations).To(gomega.ContainSubstring("13:evidence-recovery-budget-v13"))
 		return
 	}
 	gomega.Expect(migrations).To(gomega.Equal(seed.migrations))
@@ -725,7 +726,7 @@ var _ = ginkgo.Describe("Task024M1 isolation", ginkgo.Label("integration"), func
 		migrator := task024StartDaemon(migrated.root.Path, filepath.Join(parent, "migrate.log"))
 		daemons = append(daemons, migrator)
 		migrator.waitSocket(migrated.root.SocketPath)
-		task024ExpectCandidate(migrated.root.DBPath, migrated, 12, true)
+		task024ExpectCandidate(migrated.root.DBPath, migrated, 13, true)
 		task024ExpectCanary(canary, daemon, saved)
 		migrator.stopOwned()
 
@@ -744,7 +745,7 @@ var _ = ginkgo.Describe("Task024M1 isolation", ginkgo.Label("integration"), func
 		restart := task024StartDaemon(fault.root.Path, filepath.Join(parent, "fault-restart.log"))
 		daemons = append(daemons, restart)
 		restart.waitSocket(fault.root.SocketPath)
-		task024ExpectCandidate(fault.root.DBPath, fault, 12, true)
+		task024ExpectCandidate(fault.root.DBPath, fault, 13, true)
 		task024ExpectCanary(canary, daemon, saved)
 		restart.stopOwned()
 
@@ -754,13 +755,13 @@ var _ = ginkgo.Describe("Task024M1 isolation", ginkgo.Label("integration"), func
 		gomega.Expect(owned.output()).To(gomega.ContainSubstring("owned by another controller"))
 		task024ExpectCanary(canary, daemon, saved)
 
-		newer := task024SeedCandidate(parent, "toonew", 13, false)
+		newer := task024SeedCandidate(parent, "toonew", 14, false)
 		candidates = append(candidates, newer)
 		newerDaemon := task024StartDaemon(newer.root.Path, filepath.Join(parent, "toonew.log"))
 		daemons = append(daemons, newerDaemon)
 		gomega.Expect(newerDaemon.waitExit(20 * time.Second)).To(gomega.Equal(6))
 		gomega.Expect(newerDaemon.output()).To(gomega.ContainSubstring("UNSUPPORTED"))
-		task024ExpectCandidate(newer.root.DBPath, newer, 13, false)
+		task024ExpectCandidate(newer.root.DBPath, newer, 14, false)
 		task024ExpectCanary(canary, daemon, saved)
 	})
 })

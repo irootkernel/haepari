@@ -561,7 +561,7 @@ var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			var current int
 			gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&current)).To(gomega.Succeed())
-			gomega.Expect(current).To(gomega.Equal(12))
+			gomega.Expect(current).To(gomega.Equal(13))
 			var retained []byte
 			gomega.Expect(db.QueryRow(`SELECT receipt_json FROM managed_mutations WHERE mutation_key='legacy-reserve'`).Scan(&retained)).To(gomega.Succeed())
 			gomega.Expect(retained).To(gomega.Equal(original))
@@ -670,7 +670,7 @@ var _ = ginkgo.Describe("RequiredBaseSchemaIntegrity", ginkgo.Label("integration
 				gomega.Expect(after).To(gomega.Equal(before))
 				var version int
 				gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-				gomega.Expect(version).To(gomega.Equal(12))
+				gomega.Expect(version).To(gomega.Equal(13))
 			})
 		}
 	}
@@ -730,7 +730,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		path := filepath.Join(t.TempDir(), "state.sqlite")
 		db, l := openLedger(t, path, 1)
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 12 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 13 {
 			t.Fatalf("schema version %d: %v", version, err)
 		}
 		r := validResource()
@@ -749,7 +749,7 @@ var _ = ginkgo.Describe("InitialSchemaRejectsNewerAndDuplicateVM", ginkgo.Label(
 		if err := l.RegisterResource(encode(t, r)); !errors.Is(err, ErrConflict) {
 			t.Fatalf("duplicate VM identity: %v", err)
 		}
-		if _, err := db.Exec(`PRAGMA user_version=13`); err != nil {
+		if _, err := db.Exec(`PRAGMA user_version=14`); err != nil {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 		if err := db.Close(); err != nil {
@@ -779,7 +779,7 @@ var _ = ginkgo.Describe("ProvisionalV1PowerTableMigration", ginkgo.Label("integr
 		db, l := openLedger(t, path, 1)
 		defer db.Close()
 		var version int
-		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 12 {
+		if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 13 {
 			t.Fatalf("migrated version %d: %v", version, err)
 		}
 		var value int64

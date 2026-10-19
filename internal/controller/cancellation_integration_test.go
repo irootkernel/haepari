@@ -32,6 +32,10 @@ func cancellationRuntimeKind(t ginkgo.GinkgoTInterface, script, kind string, opt
 }
 
 func cancellationRuntimeJobKind(t ginkgo.GinkgoTInterface, script, kind, jobID string, options ...func(*managed.JobSpec)) (*sql.DB, *runtimeServer, managed.Receipt, managed.JobSpec, string) {
+	return cancellationRuntimeConfigured(t, script, kind, jobID, nil, options...)
+}
+
+func cancellationRuntimeConfigured(t ginkgo.GinkgoTInterface, script, kind, jobID string, configureResource func(*managed.ResourceSpec), options ...func(*managed.JobSpec)) (*sql.DB, *runtimeServer, managed.Receipt, managed.JobSpec, string) {
 	t.Helper()
 	root, err := state.Resolve(filepath.Join(t.TempDir(), "state"))
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -54,6 +58,9 @@ func cancellationRuntimeJobKind(t ginkgo.GinkgoTInterface, script, kind, jobID s
 		resource.Adapter.UTMCtl = "/fixture/utmctl-not-invoked"
 		resource.VM = &managed.VM{UTMVMUUID: fakeGuestUUID, MACAddress: "aa:bb:cc:dd:ee:ff", AddressDiscovery: "dhcp-lease-by-mac", GuestJobRoot: "/var/haepari/jobs"}
 		resource.Guest = &managed.Guest{ConnectionReference: "fixture-ssh-not-invoked", KnownHostsReference: "fixture-key"}
+	}
+	if configureResource != nil {
+		configureResource(&resource)
 	}
 	raw, _ := json.Marshal(resource)
 	gomega.Expect(l.RegisterResource(raw)).To(gomega.Succeed())

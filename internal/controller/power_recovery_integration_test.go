@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -16,24 +17,52 @@ import (
 	"github.com/onsi/gomega"
 )
 
+// seedControllerHistoricalPower represents an existing pre-upgrade ledger row;
+// current production reservations never create a power transition.
+func seedControllerHistoricalPower(db *sql.DB, r managed.Receipt, target managed.ResourceSpec, victim *managed.ResourceSpec, stage string) managed.PowerTransitionIdentity {
+	var generation int64
+	gomega.Expect(db.QueryRow(`SELECT COALESCE(MAX(operation_generation),0)+1 FROM managed_power_transitions`).Scan(&generation)).To(gomega.Succeed())
+	id := managed.PowerTransitionIdentity{OperationGeneration: generation, TargetJobID: r.JobID, TargetLeaseGeneration: r.LeaseGeneration, TargetResourceID: target.ID, TargetConfigRevision: target.Revision, TargetVMUUID: target.VM.UTMVMUUID}
+	if victim != nil {
+		id.VictimResourceID = victim.ID
+		id.VictimConfigRevision = victim.Revision
+		id.VictimVMUUID = victim.VM.UTMVMUUID
+	}
+	raw, err := json.Marshal(id)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	_, err = db.Exec(`INSERT INTO managed_power_transitions(operation_generation,victim_resource_id,target_resource_id,identity_json,state) VALUES(?,?,?,?,'pending')`, generation, id.VictimResourceID, target.ID, raw)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	_, err = db.Exec(`INSERT INTO managed_power_progress(operation_generation,stage) VALUES(?,?)`, generation, stage)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	return id
+}
+
 func orphanPowerFixture(effect string) (*runtimeServer, *client.Client, *fakeUTMControl, managed.PowerTransitionIdentity) {
 	t := ginkgo.GinkgoT()
-	s, c, _ := availabilityFixture(t)
+	s, c, db := availabilityFixture(t)
 	target := vmControllerSpec(t, "power-target", 2, false)
-	f := &fakeUTMControl{states: map[string]string{target.VM.UTMVMUUID: "stopped"}}
+	f := &fakeUTMControl{states: map[string]string{target.VM.UTMVMUUID: "started"}}
 	s.utmCommand = f.command
 	_, err := c.Register(context.Background(), mustJSONScheduling(target))
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	var historicalVictim *managed.ResourceSpec
 	if effect == "stop" {
 		victim := vmControllerSpec(t, "power-victim", 1, true)
+		historicalVictim = &victim
 		f.states[victim.VM.UTMVMUUID] = "started"
 		_, err = c.Register(context.Background(), mustJSONScheduling(victim))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 	guard, err := s.observeVMs(context.Background(), 1)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	_, err = reserveControllerVM(s, target.ID, "orphan-power", guard)
+	reserved, err := reserveControllerVM(s, target.ID, "orphan-power", guard)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	stage := managed.PowerStartReady
+	if effect == "stop" {
+		stage = managed.PowerStopReady
+	}
+	seedControllerHistoricalPower(db, reserved, target, historicalVictim, stage)
+	f.states[target.VM.UTMVMUUID] = "stopped"
 	snap, err := s.ledger.PowerRecoverySnapshot(target.ID)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(s.ledger.ClaimHostPowerEffect(snap.Intent.Identity, effect)).To(gomega.Succeed())
@@ -186,6 +215,7 @@ var _ = ginkgo.Describe("Task036PowerRecovery", ginkgo.Label("integration"), fun
 		gomega.Expect(resourcePlan.Unknowns).To(gomega.BeEmpty())
 		_, err = c.RecoverResource(context.Background(), id.TargetResourceID, managed.RecoveryRequest{PlanToken: resourcePlan.PlanToken, MutationKey: "saved-resource-readiness"})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		f.states[id.TargetVMUUID] = "started"
 		guard, err := s.observeVMs(context.Background(), 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		successor, err := s.ledger.Admit(mustJSONScheduling(snap.Spec), strings.Repeat("a", 64), "power-successor-key", "power-successor")

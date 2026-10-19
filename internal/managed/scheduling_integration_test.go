@@ -70,6 +70,26 @@ func vmScheduling(t ginkgo.GinkgoTInterface, l *Ledger, id string, n int, power 
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return r
 }
+func seedHistoricalPower(t ginkgo.GinkgoTInterface, db *sql.DB, job Receipt, target ResourceSpec, victim *ResourceSpec, stage string) PowerTransitionIdentity {
+	t.Helper()
+	var generation int64
+	gomega.Expect(db.QueryRow(`SELECT COALESCE(MAX(operation_generation),0)+1 FROM managed_power_transitions`).Scan(&generation)).To(gomega.Succeed())
+	identity := PowerTransitionIdentity{OperationGeneration: generation, TargetJobID: job.JobID, TargetLeaseGeneration: job.LeaseGeneration, TargetResourceID: target.ID, TargetConfigRevision: target.Revision, TargetVMUUID: target.VM.UTMVMUUID}
+	victimID := ""
+	if victim != nil {
+		identity.VictimResourceID = victim.ID
+		identity.VictimConfigRevision = victim.Revision
+		identity.VictimVMUUID = victim.VM.UTMVMUUID
+		victimID = victim.ID
+	}
+	raw, err := json.Marshal(identity)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	_, err = db.Exec(`INSERT INTO managed_power_transitions(operation_generation,victim_resource_id,target_resource_id,identity_json,state) VALUES(?,?,?,?,'pending')`, generation, victimID, target.ID, raw)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	_, err = db.Exec(`INSERT INTO managed_power_progress(operation_generation,stage) VALUES(?,?)`, generation, stage)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	return identity
+}
 func vmGuard(t ginkgo.GinkgoTInterface, db *sql.DB, limit int) *VMReservationGuard {
 	t.Helper()
 	g := &VMReservationGuard{HostLimit: limit, ObservationRevisions: map[string]int64{}}
@@ -87,11 +107,12 @@ func vmGuard(t ginkgo.GinkgoTInterface, db *sql.DB, limit int) *VMReservationGua
 }
 
 var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func() {
-	ginkgo.It("counts unregistered running guests at the host boundary and rejects negative counts", func() {
+	ginkgo.It("queues a stopped VM and reserves a started VM beside another running VM", func() {
 		t := ginkgo.GinkgoT()
 		for _, limit := range []int{1, 2} {
 			db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 3)
-			vmScheduling(t, l, "target", 1, "stopped", false)
+			target := vmScheduling(t, l, "target", 1, "stopped", false)
+			vmScheduling(t, l, "other", 2, "started", false)
 			job := admitScheduling(t, l, "target", "operator-limit")
 			guard := vmGuard(t, db, limit)
 			guard.UnregisteredRunning = -1
@@ -99,13 +120,23 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 			gomega.Expect(errors.Is(err, ErrBlocked)).To(gomega.BeTrue())
 			guard.UnregisteredRunning = limit
 			_, err = reserveScheduling(l, job, guard)
-			gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
+			var blocked *HostCapacityBlocked
+			gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
+			gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("vm_not_started"))
 			current, err := l.Snapshot(job.JobID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(current.LeaseGeneration).To(gomega.BeZero())
-			guard.UnregisteredRunning = limit - 1
+			var powerRows int
+			gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions`).Scan(&powerRows)).To(gomega.Succeed())
+			gomega.Expect(powerRows).To(gomega.BeZero())
+			_, err = l.ObserveVM(VMObservation{ResourceID: target.ID, ConfigRevision: target.Revision, VMUUID: target.VM.UTMVMUUID, Power: "started", ExpectedObservationRevision: 1, EvidenceDigest: digest})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			guard = vmGuard(t, db, limit)
+			guard.UnregisteredRunning = limit
 			_, err = reserveScheduling(l, job, guard)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions`).Scan(&powerRows)).To(gomega.Succeed())
+			gomega.Expect(powerRows).To(gomega.BeZero())
 			gomega.Expect(db.Close()).To(gomega.Succeed())
 		}
 	})
@@ -149,13 +180,13 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(status.IdleSince).NotTo(gomega.BeNil())
 	})
-	ginkgo.It("uses resource ID to break equal idle clocks and blocks victim leases and stale observation guards", func() {
+	ginkgo.It("keeps historical victim leases fenced and rejects stale observation guards", func() {
 		t := ginkgo.GinkgoT()
 		db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 3)
 		defer db.Close()
 		vmScheduling(t, l, "victim-z", 1, "started", true)
-		vmScheduling(t, l, "victim-a", 2, "started", true)
-		vmScheduling(t, l, "target", 3, "stopped", false)
+		victim := vmScheduling(t, l, "victim-a", 2, "started", true)
+		targetSpec := vmScheduling(t, l, "target", 3, "started", false)
 		_, err := db.Exec(`UPDATE managed_resources SET idle_since_ns=123 WHERE id LIKE 'victim-%'`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		target := admitScheduling(t, l, "target", "tie-target")
@@ -164,8 +195,9 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 		stale.ObservationRevisions = map[string]int64{"victim-z": 1, "victim-a": 2, "target": 1}
 		_, err = reserveScheduling(l, target, &stale)
 		gomega.Expect(errors.Is(err, ErrStale)).To(gomega.BeTrue())
-		_, err = reserveScheduling(l, target, guard)
+		reserved, err := reserveScheduling(l, target, guard)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		seedHistoricalPower(t, db, reserved, targetSpec, &victim, PowerStopReady)
 		p, err := l.PowerIntent(1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(p.Identity.VictimResourceID).To(gomega.Equal("victim-a"))
@@ -173,20 +205,22 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 		_, err = reserveScheduling(l, victimJob, guard)
 		gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
 	})
-	ginkgo.It("settles a confirmed no-start host limit failure without quarantine and pauses VM dispatch atomically", func() {
+	ginkgo.It("settles a historical proven no-start host limit failure without quarantine and pauses VM dispatch atomically", func() {
 		t := ginkgo.GinkgoT()
 		db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 3)
 		defer db.Close()
-		vmScheduling(t, l, "target", 1, "stopped", false)
+		targetSpec := vmScheduling(t, l, "target", 1, "started", false)
 		vmScheduling(t, l, "other-vm", 2, "stopped", false)
 		local := validResource()
 		gomega.Expect(l.RegisterResource(encode(t, local))).To(gomega.Succeed())
 		j := admitScheduling(t, l, "target", "failed-start")
 		j, err := reserveScheduling(l, j, vmGuard(t, db, 1))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		seedHistoricalPower(t, db, j, targetSpec, nil, PowerStartReady)
 		p, err := l.PowerIntent(1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(l.ClaimPowerEffect(p.Identity, "start")).To(gomega.Succeed())
+		gomega.Expect(l.ClaimHostPowerEffect(p.Identity, "start")).To(gomega.Succeed())
+		gomega.Expect(l.RecordPowerRefusal(p.Identity, digest)).To(gomega.Succeed())
 		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: p.Identity, ExpectedStage: "start_issued", TargetPower: "stopped", NoEffectProven: true, EvidenceDigest: digest})).To(gomega.Succeed())
 		proof := noEffectProof()
 		observed := recordObservation(t, l, j.JobID, j.JobRevision, j.ResourceID, j.Slot, j.LeaseGeneration, proof)
@@ -356,7 +390,7 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 		gomega.Expect(chain).To(gomega.HaveLen(2))
 		gomega.Expect(chain[0]).To(gomega.Equal(foreign[0]))
 	})
-	ginkgo.It("serializes concurrent direct host starts at limits one and two", func() {
+	ginkgo.It("keeps concurrent stopped VM reservations queued without power intents at either compatibility limit", func() {
 		t := ginkgo.GinkgoT()
 		for _, limit := range []int{1, 2} {
 			path := filepath.Join(t.TempDir(), "state.sqlite")
@@ -390,72 +424,77 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 					successes++
 				}
 			}
-			gomega.Expect(successes).To(gomega.BeNumerically("<=", limit))
-			gomega.Expect(successes).To(gomega.BeNumerically(">=", 1))
-			// Retry transactions that lost a SQLite write-upgrade race. The unchanged
-			// guard must still account for every already durable pending start.
+			gomega.Expect(successes).To(gomega.BeZero())
+			// Recheck transactions that lost a SQLite write-upgrade race. No
+			// stopped target acquires a lease or creates a power generation.
 			for i, j := range jobs {
 				current, err := l.Snapshot(j.JobID)
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
-				if current.JobState == "queued" {
-					_, _ = reserveScheduling(ledgers[i], current, guard)
-				}
+				gomega.Expect(current.JobState).To(gomega.Equal("queued"))
+				gomega.Expect(current.LeaseGeneration).To(gomega.BeZero())
+				_, err = reserveScheduling(ledgers[i], current, guard)
+				var blocked *HostCapacityBlocked
+				gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
+				gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("vm_not_started"))
 			}
 			var claims, occupancy int
 			gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions WHERE state='pending'`).Scan(&claims)).To(gomega.Succeed())
 			gomega.Expect(db.QueryRow(`SELECT SUM(occupancy) FROM managed_resources`).Scan(&occupancy)).To(gomega.Succeed())
-			gomega.Expect(claims).To(gomega.Equal(limit))
-			gomega.Expect(occupancy).To(gomega.Equal(limit))
+			gomega.Expect(claims).To(gomega.BeZero())
+			gomega.Expect(occupancy).To(gomega.BeZero())
 			db3.Close()
 			db2.Close()
 			db.Close()
 		}
 	})
-	ginkgo.It("transfers the oldest idle victim place only after observed stop and retains uncertainty across restart", func() {
+	ginkgo.It("does not create a power reservation for a stopped VM while another VM is running", func() {
+		t := ginkgo.GinkgoT()
+		path := filepath.Join(t.TempDir(), "state.sqlite")
+		db, l := openLedger(t, path, 4)
+		defer db.Close()
+		vmScheduling(t, l, "victim", 1, "started", true)
+		target := vmScheduling(t, l, "target", 2, "stopped", false)
+		vmScheduling(t, l, "other", 3, "stopped", false)
+		j := admitScheduling(t, l, target.ID, "target-job")
+		var deadline int64
+		gomega.Expect(db.QueryRow(`SELECT queue_deadline_ns FROM managed_jobs WHERE id=?`, j.JobID).Scan(&deadline)).To(gomega.Succeed())
+		_, err := reserveScheduling(l, j, vmGuard(t, db, 1))
+		var blocked *HostCapacityBlocked
+		gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
+		gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("vm_not_started"))
+		var after int64
+		var powerRows int
+		gomega.Expect(db.QueryRow(`SELECT queue_deadline_ns FROM managed_jobs WHERE id=?`, j.JobID).Scan(&after)).To(gomega.Succeed())
+		gomega.Expect(after).To(gomega.Equal(deadline))
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions`).Scan(&powerRows)).To(gomega.Succeed())
+		gomega.Expect(powerRows).To(gomega.BeZero())
+		current, err := l.Snapshot(j.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(current.JobState).To(gomega.Equal("queued"))
+		gomega.Expect(current.LeaseGeneration).To(gomega.BeZero())
+	})
+	ginkgo.It("historical power claims remain fenced when a ready row is seeded", func() {
 		t := ginkgo.GinkgoT()
 		path := filepath.Join(t.TempDir(), "state.sqlite")
 		db, l := openLedger(t, path, 4)
 		victim := vmScheduling(t, l, "victim", 1, "started", true)
-		target := vmScheduling(t, l, "target", 2, "stopped", false)
-		vmScheduling(t, l, "other", 3, "stopped", false)
+		target := vmScheduling(t, l, "target", 2, "started", false)
 		j := admitScheduling(t, l, target.ID, "target-job")
-		guard := vmGuard(t, db, 1)
-		reserved, err := reserveScheduling(l, j, guard)
+		reserved, err := reserveScheduling(l, j, vmGuard(t, db, 1))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(reserved.GlobalOccupancy).To(gomega.Equal(1))
-		p, err := l.PowerIntent(1)
+		p := seedHistoricalPower(t, db, reserved, target, &victim, "stop_ready")
+		intent, err := l.PowerIntent(p.OperationGeneration)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.Identity.VictimResourceID).To(gomega.Equal(victim.ID))
-		gomega.Expect(p.Stage).To(gomega.Equal("stop_ready"))
-		gomega.Expect(errors.Is(l.ClaimPowerEffect(p.Identity, "start"), ErrBlocked)).To(gomega.BeTrue())
-		gomega.Expect(l.ClaimPowerEffect(p.Identity, "stop")).To(gomega.Succeed())
-		gomega.Expect(errors.Is(l.ClaimPowerEffect(p.Identity, "stop"), ErrBlocked)).To(gomega.BeTrue())
-		_, err = l.SetAvailability(AvailabilityRequest{MutationKey: fmt.Sprintf("availability-%d", time.Now().UnixNano()), ResourceID: victim.ID, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, Reason: "maintenance"}, false)
-		gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
-		victim.Revision = 2
-		gomega.Expect(errors.Is(l.UpdateResource(encode(t, victim), 1, 1), ErrBusy)).To(gomega.BeTrue())
-		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: p.Identity, ExpectedStage: "stop_issued", VictimPower: "uncertain", TargetPower: "stopped", EvidenceDigest: digest})).To(gomega.Succeed())
+		gomega.Expect(intent.Stage).To(gomega.Equal("stop_ready"))
+		gomega.Expect(errors.Is(l.ClaimHostPowerEffect(p, "stop"), nil)).To(gomega.BeTrue())
+		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: p, ExpectedStage: "stop_issued", VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: digest})).NotTo(gomega.Succeed())
+		gomega.Expect(l.RecordPowerCommandReturn(p, "stop", true, digest)).To(gomega.Succeed())
+		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: p, ExpectedStage: "stop_issued", VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: digest})).To(gomega.Succeed())
+		intent, err = l.PowerIntent(p.OperationGeneration)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(intent.State).To(gomega.Equal("reconciled"))
+		gomega.Expect(intent.Stage).To(gomega.Equal(PowerStopRetained))
 		gomega.Expect(db.Close()).To(gomega.Succeed())
-		db, l = openLedger(t, path, 4)
-		defer db.Close()
-		gomega.Expect(errors.Is(l.ClaimPowerEffect(p.Identity, "stop"), ErrBlocked)).To(gomega.BeTrue())
-		gomega.Expect(errors.Is(l.ClaimPowerEffect(p.Identity, "start"), ErrBlocked)).To(gomega.BeTrue())
-		other := admitScheduling(t, l, "other", "other-job")
-		_, err = reserveScheduling(l, other, vmGuard(t, db, 1))
-		gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
-		stale := p.Identity
-		stale.TargetLeaseGeneration++
-		gomega.Expect(errors.Is(l.ConfirmPower(PowerConfirmation{Identity: stale, ExpectedStage: "stop_uncertain", VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: digest}), ErrStale)).To(gomega.BeTrue())
-		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: p.Identity, ExpectedStage: "stop_uncertain", VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: digest})).To(gomega.Succeed())
-		_, err = reserveScheduling(l, other, vmGuard(t, db, 1))
-		gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
-		gomega.Expect(l.ClaimPowerEffect(p.Identity, "start")).To(gomega.Succeed())
-		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: p.Identity, ExpectedStage: "start_issued", VictimPower: "stopped", TargetPower: "uncertain", EvidenceDigest: digest})).To(gomega.Succeed())
-		gomega.Expect(errors.Is(l.ClaimPowerEffect(p.Identity, "start"), ErrBlocked)).To(gomega.BeTrue())
-		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: p.Identity, ExpectedStage: "start_uncertain", VictimPower: "stopped", TargetPower: "started", EvidenceDigest: digest})).To(gomega.Succeed())
-		p, err = l.PowerIntent(1)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.State).To(gomega.Equal("reconciled"))
 	})
 	ginkgo.It("keeps a blocked VM job queued with original deadline and filters protected or unknown-idle victims", func() {
 		t := ginkgo.GinkgoT()
@@ -484,23 +523,22 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 		gomega.Expect(after).To(gomega.Equal(deadline))
 		blocker, err := l.QueueBlocker(j.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		var details map[string][]string
+		var details struct {
+			Schema      string `json:"schema"`
+			ResourceID  string `json:"resource_id"`
+			Observation string `json:"observation"`
+		}
 		gomega.Expect(json.Unmarshal(blocker.Details, &details)).To(gomega.Succeed())
-		gomega.Expect(details["unknown_idle"]).To(gomega.Equal([]string{"victim"}))
+		gomega.Expect(details.Schema).To(gomega.Equal("haepari.vm-not-started/v1"))
+		gomega.Expect(details.ResourceID).To(gomega.Equal(target.ID))
+		gomega.Expect(details.Observation).To(gomega.Equal("stopped"))
 		_, err = l.SetAvailability(AvailabilityRequest{MutationKey: fmt.Sprintf("availability-%d", time.Now().UnixNano()), ResourceID: "victim", ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, Reason: "maintenance"}, false)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(db.Exec(`UPDATE managed_resources SET idle_since_ns=? WHERE id='victim'`, time.Now().UnixNano())).Error().NotTo(gomega.HaveOccurred())
 		_, err = reserveScheduling(l, j, vmGuard(t, db, 1))
 		gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
-		gomega.Expect(json.Unmarshal(blocked.Blocker.Details, &details)).To(gomega.Succeed())
-		gomega.Expect(details["pause"]).To(gomega.Equal([]string{"victim"}))
-		_, err = l.SetAvailability(AvailabilityRequest{MutationKey: "resume-blocked-victim", ResourceID: "victim", ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 2, ReadinessDigest: digest, ObservationReference: "isolated-victim-readiness"}, true)
+		gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("vm_not_started"))
+		_, err = l.ObserveVM(VMObservation{ResourceID: target.ID, ConfigRevision: target.Revision, VMUUID: target.VM.UTMVMUUID, Power: "started", ExpectedObservationRevision: 1, EvidenceDigest: digest})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		preexisting, err := l.QueueBlocker(j.JobID)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(preexisting).NotTo(gomega.BeNil())
-		gomega.Expect(json.Unmarshal(preexisting.Details, &details)).To(gomega.Succeed())
-		gomega.Expect(details["pause"]).To(gomega.Equal([]string{"victim"}))
 		reserved, err := reserveScheduling(l, j, vmGuard(t, db, 1))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(reserved.JobState).To(gomega.Equal("preparing"))
@@ -511,27 +549,29 @@ var _ = ginkgo.Describe("Task007Scheduling", ginkgo.Label("integration"), func()
 		gomega.Expect(db.QueryRow(`SELECT queue_deadline_ns FROM managed_jobs WHERE id=?`, j.JobID).Scan(&after)).To(gomega.Succeed())
 		gomega.Expect(after).To(gomega.Equal(deadline))
 	})
-	ginkgo.It("rolls back the whole reservation when a power intent insert fails", func() {
+	ginkgo.It("reserves a started VM without inserting a power intent", func() {
 		t := ginkgo.GinkgoT()
 		db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 1)
 		defer db.Close()
-		vmScheduling(t, l, "target", 1, "stopped", false)
+		target := vmScheduling(t, l, "target", 1, "stopped", false)
 		j := admitScheduling(t, l, "target", "rollback")
 		guard := vmGuard(t, db, 1)
 		gomega.Expect(db.Exec(`CREATE TRIGGER block_power BEFORE INSERT ON managed_power_transitions BEGIN SELECT RAISE(ABORT,'simulated intent write failure'); END`)).Error().NotTo(gomega.HaveOccurred())
 		_, err := reserveScheduling(l, j, guard)
-		gomega.Expect(err).To(gomega.HaveOccurred())
+		var blocked *HostCapacityBlocked
+		gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
 		current, err := l.Snapshot(j.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(current.GlobalOccupancy).To(gomega.BeZero())
 		gomega.Expect(current.JobState).To(gomega.Equal("queued"))
-		gomega.Expect(current.LeaseGeneration).To(gomega.BeZero())
-		var count int
-		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_mutations`).Scan(&count)).To(gomega.Succeed())
-		gomega.Expect(count).To(gomega.BeZero())
-		gomega.Expect(db.Exec(`DROP TRIGGER block_power`)).Error().NotTo(gomega.HaveOccurred())
-		_, err = reserveScheduling(l, j, guard)
+		_, err = l.ObserveVM(VMObservation{ResourceID: target.ID, ConfigRevision: target.Revision, VMUUID: target.VM.UTMVMUUID, Power: "started", ExpectedObservationRevision: 1, EvidenceDigest: digest})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		reserved, err := reserveScheduling(l, j, vmGuard(t, db, 1))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(reserved.JobState).To(gomega.Equal("preparing"))
+		var powerRows int
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions`).Scan(&powerRows)).To(gomega.Succeed())
+		gomega.Expect(powerRows).To(gomega.BeZero())
 	})
 })
 
@@ -549,10 +589,14 @@ var _ = ginkgo.Describe("Task007ReviewCorrections", ginkgo.Label("integration"),
 		var blocked *HostCapacityBlocked
 		gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
 		gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
-		gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("host_capacity_no_eligible_victim"))
-		var details map[string][]string
+		gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("vm_not_started"))
+		var details struct {
+			Schema      string `json:"schema"`
+			Observation string `json:"observation"`
+		}
 		gomega.Expect(json.Unmarshal(blocked.Blocker.Details, &details)).To(gomega.Succeed())
-		gomega.Expect(details["policy"]).To(gomega.Equal([]string{"protected-victim"}))
+		gomega.Expect(details.Schema).To(gomega.Equal("haepari.vm-not-started/v1"))
+		gomega.Expect(details.Observation).To(gomega.Equal("stopped"))
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring(blocked.Blocker.Reason))
 		gomega.Expect(err.Error()).To(gomega.ContainSubstring("simulated queue blocker storage failure"))
 		current, err := l.Snapshot(job.JobID)
@@ -579,17 +623,20 @@ var _ = ginkgo.Describe("Task007ReviewCorrections", ginkgo.Label("integration"),
 		db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 1)
 		defer db.Close()
 		victim := vmScheduling(t, l, "victim", 1, "started", true)
-		target := vmScheduling(t, l, "target", 2, "stopped", false)
+		target := vmScheduling(t, l, "target", 2, "started", false)
 		job := admitScheduling(t, l, target.ID, "protected-observations")
-		_, err := reserveScheduling(l, job, vmGuard(t, db, 1))
+		reserved, err := reserveScheduling(l, job, vmGuard(t, db, 2))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		intent, err := l.PowerIntent(1)
+		seeded := seedHistoricalPower(t, db, reserved, target, &victim, "stop_ready")
+		intent, err := l.PowerIntent(seeded.OperationGeneration)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(intent.Identity.VictimResourceID).To(gomega.Equal(victim.ID))
 		if uncertain {
-			gomega.Expect(l.ClaimPowerEffect(intent.Identity, "stop")).To(gomega.Succeed())
+			gomega.Expect(l.ClaimHostPowerEffect(intent.Identity, "stop")).To(gomega.Succeed())
+			gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: intent.Identity, ExpectedStage: "stop_issued", VictimPower: "uncertain", TargetPower: "stopped", EvidenceDigest: digest})).NotTo(gomega.Succeed())
+			gomega.Expect(l.RecordPowerCommandReturn(intent.Identity, "stop", true, digest)).To(gomega.Succeed())
 			gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: intent.Identity, ExpectedStage: "stop_issued", VictimPower: "uncertain", TargetPower: "stopped", EvidenceDigest: digest})).To(gomega.Succeed())
-			intent, err = l.PowerIntent(1)
+			intent, err = l.PowerIntent(seeded.OperationGeneration)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(intent.State).To(gomega.Equal("uncertain"))
 		} else {
@@ -614,16 +661,34 @@ var _ = ginkgo.Describe("Task007ReviewCorrections", ginkgo.Label("integration"),
 				gomega.Expect(readObservation(original.ResourceID)).To(gomega.Equal(original))
 			}
 		}
-		after, err := l.PowerIntent(1)
+		after, err := l.PowerIntent(seeded.OperationGeneration)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(after).To(gomega.Equal(intent))
 		// Reconciled resources accept refreshes at their current observation fences.
 		stage := "stop_uncertain"
 		if !uncertain {
-			gomega.Expect(l.ClaimPowerEffect(intent.Identity, "stop")).To(gomega.Succeed())
+			gomega.Expect(l.ClaimHostPowerEffect(intent.Identity, "stop")).To(gomega.Succeed())
+			gomega.Expect(l.RecordPowerCommandReturn(intent.Identity, "stop", true, digest)).To(gomega.Succeed())
 			stage = "stop_issued"
 		}
-		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: intent.Identity, ExpectedStage: stage, VictimPower: "started", TargetPower: "stopped", NoEffectProven: true, EvidenceDigest: digest})).To(gomega.Succeed())
+		var returnedProof []byte
+		gomega.Expect(db.QueryRow(`SELECT observation_json FROM managed_power_progress WHERE operation_generation=?`, intent.Identity.OperationGeneration).Scan(&returnedProof)).To(gomega.Succeed())
+		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: intent.Identity, ExpectedStage: stage, VictimPower: "started", TargetPower: "stopped", NoEffectProven: true, EvidenceDigest: digest})).To(gomega.MatchError(ErrBlocked))
+		var unchanged []byte
+		gomega.Expect(db.QueryRow(`SELECT observation_json FROM managed_power_progress WHERE operation_generation=?`, intent.Identity.OperationGeneration).Scan(&unchanged)).To(gomega.Succeed())
+		gomega.Expect(unchanged).To(gomega.Equal(returnedProof))
+		for _, original := range observations {
+			gomega.Expect(readObservation(original.ResourceID)).To(gomega.Equal(original))
+		}
+		gomega.Expect(l.ConfirmPower(PowerConfirmation{Identity: intent.Identity, ExpectedStage: stage, VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: digest})).To(gomega.Succeed())
+		settled, err := l.PowerIntent(seeded.OperationGeneration)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(settled.State).To(gomega.Equal("reconciled"))
+		gomega.Expect(settled.Stage).To(gomega.Equal(PowerStopRetained))
+		gomega.Expect(l.DrainHistoricalPower()).To(gomega.Succeed())
+		replayed, err := l.PowerIntent(seeded.OperationGeneration)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(replayed).To(gomega.Equal(settled))
 		for _, resource := range []ResourceSpec{victim, target} {
 			refresh := readObservation(resource.ID)
 			revision, err := l.ObserveVM(refresh)
@@ -704,22 +769,52 @@ var _ = ginkgo.Describe("Task007ReviewCorrections", ginkgo.Label("integration"),
 		_, err = l.SetAvailability(q, true)
 		gomega.Expect(errors.Is(err, ErrConflict)).To(gomega.BeTrue())
 	})
-	ginkgo.It("keeps oversized host blockers actionable and removes them on queued termination", func() {
+	ginkgo.It("keeps bounded historical host blockers readable and removes current blockers on queued termination", func() {
 		t := ginkgo.GinkgoT()
 		db, l := openLedger(t, filepath.Join(t.TempDir(), "state.sqlite"), 2)
 		defer db.Close()
+		ids := []string{}
 		for i := 0; i < 40; i++ {
-			vmScheduling(t, l, fmt.Sprintf("vm-%03d-%s", i, strings.Repeat("x", 110)), i+1, "started", false)
+			id := fmt.Sprintf("vm-%03d-%s", i, strings.Repeat("x", 110))
+			ids = append(ids, id)
+			vmScheduling(t, l, id, i+1, "started", false)
 		}
 		vmScheduling(t, l, "target", 41, "stopped", false)
 		j := admitScheduling(t, l, "target", "oversized")
-		_, err := reserveScheduling(l, j, vmGuard(t, db, 2))
-		gomega.Expect(errors.Is(err, ErrBusy)).To(gomega.BeTrue())
+		var deadline int64
+		gomega.Expect(db.QueryRow(`SELECT queue_deadline_ns FROM managed_jobs WHERE id=?`, j.JobID).Scan(&deadline)).To(gomega.Succeed())
+		// Preserve the bounded wire shape saved by the retired host formatter.
+		legacy, err := json.Marshal(map[string][]string{"non_stoppable": append(ids[:4:4], "36 additional resources")})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(l.RecordQueueBlocker(j.JobID, j.JobRevision, QueueBlocker{Reason: "host_capacity_no_eligible_victim", Details: legacy})).To(gomega.Succeed())
 		blocker, err := l.QueueBlocker(j.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(len(blocker.Details)).To(gomega.BeNumerically("<=", 4096))
+		gomega.Expect(blocker.Details).To(gomega.Equal(json.RawMessage(legacy)))
 		gomega.Expect(string(blocker.Details)).To(gomega.ContainSubstring("36 additional resources"))
-		_, err = l.CancelQueued(j.JobID, 1, "cancel-oversized")
+		_, err = reserveScheduling(l, j, vmGuard(t, db, 2))
+		var blocked *HostCapacityBlocked
+		gomega.Expect(errors.As(err, &blocked)).To(gomega.BeTrue())
+		gomega.Expect(blocked.Blocker.Reason).To(gomega.Equal("vm_not_started"))
+		blocker, err = l.QueueBlocker(j.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(blocker.Reason).To(gomega.Equal("vm_not_started"))
+		current, err := l.Snapshot(j.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(current.JobState).To(gomega.Equal("queued"))
+		gomega.Expect(current.LeaseGeneration).To(gomega.BeZero())
+		gomega.Expect(current.GlobalOccupancy).To(gomega.BeZero())
+		var after int64
+		gomega.Expect(db.QueryRow(`SELECT queue_deadline_ns FROM managed_jobs WHERE id=?`, j.JobID).Scan(&after)).To(gomega.Succeed())
+		gomega.Expect(after).To(gomega.Equal(deadline))
+		var count int
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_admissions WHERE request_key=?`, "key-oversized").Scan(&count)).To(gomega.Succeed())
+		gomega.Expect(count).To(gomega.Equal(1))
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_mutations WHERE mutation_key=?`, "reserve-"+j.JobID).Scan(&count)).To(gomega.Succeed())
+		gomega.Expect(count).To(gomega.BeZero())
+		gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions`).Scan(&count)).To(gomega.Succeed())
+		gomega.Expect(count).To(gomega.BeZero())
+		_, err = l.CancelQueued(j.JobID, j.JobRevision, "cancel-oversized")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		remaining, err := l.QueueBlocker(j.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

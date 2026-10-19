@@ -23,12 +23,23 @@ func crashPowerOperation(l *Ledger, operation string) error {
 		return err
 	}
 	switch operation {
+	case "vm-drained-settle":
+		id, err := l.LocalIdentity("crash-job")
+		if err != nil {
+			return err
+		}
+		boundary, err := l.DrainedVMPreflight(id)
+		if err != nil {
+			return err
+		}
+		_, err = l.SettleDrainedVMPreflight(DrainedVMSettlementRequest{Identity: id, BoundaryDigest: boundary.EvidenceDigest(), MutationKey: "vm-no-effect-" + id.JobID})
+		return err
 	case "vm-stop":
-		return l.ClaimPowerEffect(p.Identity, "stop")
+		return l.ClaimHostPowerEffect(p.Identity, "stop")
 	case "vm-stopped":
 		return l.ConfirmPower(PowerConfirmation{Identity: p.Identity, ExpectedStage: "stop_issued", VictimPower: "stopped", TargetPower: "stopped", EvidenceDigest: digest})
 	case "vm-start":
-		return l.ClaimPowerEffect(p.Identity, "start")
+		return l.ClaimHostPowerEffect(p.Identity, "start")
 	case "vm-started":
 		return l.ConfirmPower(PowerConfirmation{Identity: p.Identity, ExpectedStage: "start_issued", VictimPower: "stopped", TargetPower: "started", EvidenceDigest: digest})
 	default:
@@ -43,28 +54,42 @@ var _ = ginkgo.Describe("Task007PowerCrash", ginkgo.Label("integration"), func()
 				t := ginkgo.GinkgoT()
 				path := filepath.Join(t.TempDir(), "state.sqlite")
 				db, l := openLedger(t, path, 1)
-				vmScheduling(t, l, "victim", 1, "started", true)
-				vmScheduling(t, l, "target", 2, "stopped", false)
+				victim := vmScheduling(t, l, "victim", 1, "started", true)
+				target := vmScheduling(t, l, "target", 2, "started", false)
 				job := validJob()
 				job.ResourceID = "target"
 				job.Deadlines.QueueSeconds = 600
-				_, err := l.Admit(encode(t, job), digest, "crash-key", "crash-job")
+				admitted, err := l.Admit(encode(t, job), digest, "crash-key", "crash-job")
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				before, after := "queued", "preparing"
 				if operation != "vm-reserve" {
-					gomega.Expect(crashPowerOperation(l, "vm-reserve")).To(gomega.Succeed())
-					before, after = "stop_ready", "stop_issued"
+					reserved, err := l.Reserve(ReserveRequest{JobID: admitted.JobID, ExpectedJobRevision: admitted.JobRevision, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "vm-crash-parent-reserve", VMGuard: &VMReservationGuard{HostLimit: 1, ObservationRevisions: map[string]int64{"victim": 1, "target": 1}}})
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					stage := "stop_ready"
+					var victimSpec *ResourceSpec
+					victimSpec = &victim
+					if operation == "vm-start" || operation == "vm-started" {
+						stage = "start_ready"
+						victimSpec = nil
+					}
+					seedHistoricalPower(t, db, reserved, target, victimSpec, stage)
+					before, after = stage, "stop_issued"
+					if operation == "vm-start" || operation == "vm-started" {
+						before, after = "start_ready", "start_issued"
+					}
 				}
-				if operation == "vm-stopped" || operation == "vm-start" || operation == "vm-started" {
+				if operation == "vm-stopped" {
 					gomega.Expect(crashPowerOperation(l, "vm-stop")).To(gomega.Succeed())
-					before, after = "stop_issued", "start_ready"
-				}
-				if operation == "vm-start" || operation == "vm-started" {
-					gomega.Expect(crashPowerOperation(l, "vm-stopped")).To(gomega.Succeed())
-					before, after = "start_ready", "start_issued"
+					p, err := l.PowerIntent(1)
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					gomega.Expect(l.RecordPowerCommandReturn(p.Identity, "stop", true, digest)).To(gomega.Succeed())
+					before, after = "stop_issued", PowerStopRetained
 				}
 				if operation == "vm-started" {
 					gomega.Expect(crashPowerOperation(l, "vm-start")).To(gomega.Succeed())
+					p, err := l.PowerIntent(1)
+					gomega.Expect(err).NotTo(gomega.HaveOccurred())
+					gomega.Expect(l.RecordPowerCommandReturn(p.Identity, "start", true, digest)).To(gomega.Succeed())
 					before, after = "start_issued", "done"
 				}
 				gomega.Expect(db.Close()).To(gomega.Succeed())
@@ -119,13 +144,13 @@ var _ = ginkgo.Describe("Task007PowerCrash", ginkgo.Label("integration"), func()
 					var intents, nonces int
 					gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions`).Scan(&intents)).To(gomega.Succeed())
 					gomega.Expect(db.QueryRow(`SELECT COUNT(*) FROM managed_parent_nonces`).Scan(&nonces)).To(gomega.Succeed())
-					count := 1
+					gomega.Expect(intents).To(gomega.BeZero())
+					nonceCount := 1
 					if boundary == "before_commit" {
-						count = 0
+						nonceCount = 0
 						gomega.Expect(r.GlobalOccupancy).To(gomega.BeZero())
 					}
-					gomega.Expect(intents).To(gomega.Equal(count))
-					gomega.Expect(nonces).To(gomega.Equal(count))
+					gomega.Expect(nonces).To(gomega.Equal(nonceCount))
 				} else {
 					p, err := l.PowerIntent(1)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())

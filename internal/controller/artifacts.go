@@ -355,6 +355,6 @@ func (s *runtimeServer) bindArtifactPage(id string, a managed.ResultArtifact, f 
 	if err != nil {
 		return d, err
 	}
-	d.PageToken = s.signRecoveryToken(recoveryToken{s.installationID(), id, "artifact:" + a.Path, managed.RecoveryDigest(a), managed.RecoveryDigest(facts), time.Now().UTC().Add(time.Hour)})
+	d.PageToken = s.signRecoveryToken(recoveryToken{s.installationID(), id, "artifact:" + a.Path, managed.RecoveryDigest(a), managed.RecoveryDigest(facts), time.Now().UTC().Add(time.Hour), ""})
 	return d, nil
 }

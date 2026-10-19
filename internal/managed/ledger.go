@@ -340,7 +340,7 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 12 {
+	if version > 13 {
 		return nil, fmt.Errorf("%w: managed store version %d", ErrUnsupported, version)
 	}
 	if err := checkBaseSchemaTx(tx, version); err != nil {
@@ -383,6 +383,11 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 	}
 	if version >= 12 {
 		if err := checkJobBoundsSchemaTx(tx); err != nil {
+			return nil, err
+		}
+	}
+	if version >= 13 {
+		if err := checkEvidenceBudgetSchemaTx(tx); err != nil {
 			return nil, err
 		}
 	}
@@ -457,6 +462,9 @@ func NewLedger(db *sql.DB, globalLimit int) (*Ledger, error) {
 		return nil, err
 	}
 	if err := initJobBoundsTx(tx, version); err != nil {
+		return nil, err
+	}
+	if err := initEvidenceBudgetTx(tx, version); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -854,49 +862,70 @@ func (l *Ledger) RecordNoEffectObservation(q NoEffectObservationRequest) (Receip
 		return Receipt{}, ErrInvalid
 	}
 	return l.mutate("record_no_effect_observation", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
-		var resourceID, state string
-		var revision, pinned, lease int64
-		var slot sql.NullInt64
-		err := tx.QueryRow(`SELECT resource_id,state,revision,pinned_config_revision,slot,lease_generation FROM managed_jobs WHERE id=?`, q.JobID).Scan(&resourceID, &state, &revision, &pinned, &slot, &lease)
+		return l.recordNoEffectObservationTx(tx, q)
+	})
+}
+
+func (l *Ledger) recordNoEffectObservationTx(tx *sql.Tx, q NoEffectObservationRequest) (Receipt, error) {
+	var resourceID, state string
+	var revision, pinned, lease int64
+	var slot sql.NullInt64
+	err := tx.QueryRow(`SELECT resource_id,state,revision,pinned_config_revision,slot,lease_generation FROM managed_jobs WHERE id=?`, q.JobID).Scan(&resourceID, &state, &revision, &pinned, &slot, &lease)
+	if err != nil {
+		return Receipt{}, mapNoRows(err)
+	}
+	if resourceID != q.ResourceID || revision != q.ExpectedJobRevision || pinned != q.ExpectedConfigRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration {
+		return Receipt{}, ErrStale
+	}
+	if q.Mechanism == DrainedVMPreflightMechanism {
+		raw, err := localIdentityTx(tx, q.JobID)
 		if err != nil {
-			return Receipt{}, mapNoRows(err)
+			return Receipt{}, err
 		}
-		if resourceID != q.ResourceID || revision != q.ExpectedJobRevision || pinned != q.ExpectedConfigRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration {
+		var id LocalIdentity
+		if json.Unmarshal(raw, &id) != nil {
+			return Receipt{}, ErrBlocked
+		}
+		boundary, err := drainedVMPreflightTx(tx, id)
+		if err != nil {
+			return Receipt{}, err
+		}
+		if q.EvidenceDigest != boundary.EvidenceDigest() {
 			return Receipt{}, ErrStale
 		}
-		if state != "preparing" && state != "ready" && !(state == "collecting" && q.Mechanism == "authenticated-vm-preflight-before-guest-claim" && cancelledVMPreflightTx(tx, q.JobID)) {
-			return Receipt{}, ErrConflict
-		}
-		if pending, err := pendingPowerTx(tx, resourceID); err != nil {
-			return Receipt{}, err
-		} else if pending {
-			return Receipt{}, ErrBlocked
-		}
-		var latestReconcile int64
-		if err := tx.QueryRow(`SELECT COALESCE(MAX(reconciled_at_ns),0) FROM managed_power_transitions WHERE victim_resource_id=? OR target_resource_id=?`, resourceID, resourceID).Scan(&latestReconcile); err != nil {
-			return Receipt{}, err
-		}
-		now := time.Now().UTC().UnixNano()
-		if latestReconcile > now {
-			return Receipt{}, ErrBlocked
-		}
-		proofJSON, _ := json.Marshal(q.Proof)
-		_, err = tx.Exec(`INSERT INTO managed_no_effect_observations(reference,job_id,resource_id,config_revision,slot,lease_generation,source,mechanism,evidence_digest,recorded_at_ns,proof_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-			q.Proof.ObservationReference, q.JobID, q.ResourceID, q.ExpectedConfigRevision, q.Slot, q.LeaseGeneration, q.Source, q.Mechanism, q.EvidenceDigest, now, proofJSON)
-		if err != nil {
-			return Receipt{}, fmt.Errorf("%w: observation reference: %v", ErrConflict, err)
-		}
-		if _, err := tx.Exec(`UPDATE managed_jobs SET revision=revision+1 WHERE id=?`, q.JobID); err != nil {
-			return Receipt{}, err
-		}
-		cursor, err := addEvent(tx, q.JobID, "no_effect_observed", map[string]any{"reference": q.Proof.ObservationReference, "evidence_digest": q.EvidenceDigest})
-		if err != nil {
-			return Receipt{}, err
-		}
-		receipt, err := l.snapshotTx(tx, q.JobID)
-		receipt.EventCursor = cursor
-		return receipt, err
-	})
+	}
+	if state != "preparing" && state != "ready" && !(state == "reconciling" && q.Mechanism == DrainedVMPreflightMechanism) && !(state == "collecting" && oneOf(q.Mechanism, "authenticated-vm-preflight-before-guest-claim", DrainedVMPreflightMechanism) && cancelledVMPreflightTx(tx, q.JobID)) {
+		return Receipt{}, ErrConflict
+	}
+	if pending, err := pendingPowerTx(tx, resourceID); err != nil {
+		return Receipt{}, err
+	} else if pending {
+		return Receipt{}, ErrBlocked
+	}
+	var latestReconcile int64
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(reconciled_at_ns),0) FROM managed_power_transitions WHERE victim_resource_id=? OR target_resource_id=?`, resourceID, resourceID).Scan(&latestReconcile); err != nil {
+		return Receipt{}, err
+	}
+	now := time.Now().UTC().UnixNano()
+	if latestReconcile > now {
+		return Receipt{}, ErrBlocked
+	}
+	proofJSON, _ := json.Marshal(q.Proof)
+	_, err = tx.Exec(`INSERT INTO managed_no_effect_observations(reference,job_id,resource_id,config_revision,slot,lease_generation,source,mechanism,evidence_digest,recorded_at_ns,proof_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		q.Proof.ObservationReference, q.JobID, q.ResourceID, q.ExpectedConfigRevision, q.Slot, q.LeaseGeneration, q.Source, q.Mechanism, q.EvidenceDigest, now, proofJSON)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("%w: observation reference: %v", ErrConflict, err)
+	}
+	if _, err := tx.Exec(`UPDATE managed_jobs SET revision=revision+1 WHERE id=?`, q.JobID); err != nil {
+		return Receipt{}, err
+	}
+	cursor, err := addEvent(tx, q.JobID, "no_effect_observed", map[string]any{"reference": q.Proof.ObservationReference, "evidence_digest": q.EvidenceDigest})
+	if err != nil {
+		return Receipt{}, err
+	}
+	receipt, err := l.snapshotTx(tx, q.JobID)
+	receipt.EventCursor = cursor
+	return receipt, err
 }
 
 type ClassifyNoEffectRequest struct {
@@ -919,71 +948,75 @@ func (l *Ledger) ClassifyNoEffect(q ClassifyNoEffectRequest) (Receipt, error) {
 		return Receipt{}, ErrInvalid
 	}
 	return l.mutate("classify_no_effect", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
-		var resourceID, state string
-		var revision, pinned, lease int64
-		var slot sql.NullInt64
-		err := tx.QueryRow(`SELECT resource_id,state,revision,pinned_config_revision,slot,lease_generation FROM managed_jobs WHERE id=?`, q.JobID).
-			Scan(&resourceID, &state, &revision, &pinned, &slot, &lease)
+		return l.classifyNoEffectTx(tx, q)
+	})
+}
+
+func (l *Ledger) classifyNoEffectTx(tx *sql.Tx, q ClassifyNoEffectRequest) (Receipt, error) {
+	var resourceID, state string
+	var revision, pinned, lease int64
+	var slot sql.NullInt64
+	err := tx.QueryRow(`SELECT resource_id,state,revision,pinned_config_revision,slot,lease_generation FROM managed_jobs WHERE id=?`, q.JobID).
+		Scan(&resourceID, &state, &revision, &pinned, &slot, &lease)
+	if err != nil {
+		return Receipt{}, mapNoRows(err)
+	}
+	if resourceID != q.ResourceID || pinned != q.ExpectedConfigRevision || revision != q.ExpectedJobRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration {
+		return Receipt{}, ErrStale
+	}
+	if state != "preparing" && state != "ready" && !(state == "reconciling" && drainedVMObservationTx(tx, q.JobID)) && !(state == "collecting" && q.FailureKind == "cancel" && cancelledVMPreflightTx(tx, q.JobID)) {
+		return Receipt{}, ErrConflict
+	}
+	var kind, availability string
+	var configRev, availabilityRev int64
+	err = tx.QueryRow(`SELECT kind,config_revision,availability_revision,availability FROM managed_resources WHERE id=?`, resourceID).Scan(&kind, &configRev, &availabilityRev, &availability)
+	if err != nil {
+		return Receipt{}, mapNoRows(err)
+	}
+	if configRev != q.ExpectedConfigRevision || availabilityRev != q.ExpectedAvailabilityRevision {
+		return Receipt{}, ErrStale
+	}
+	if pending, err := pendingPowerTx(tx, resourceID); err != nil {
+		return Receipt{}, err
+	} else if pending {
+		return Receipt{}, ErrBlocked
+	}
+	if err := observedNoEffectTx(tx, q.Proof, q.JobID, resourceID, q.ExpectedConfigRevision, q.Slot, q.LeaseGeneration); err != nil {
+		return Receipt{}, err
+	}
+	if q.VMUnavailable && (kind != "utm-macos" || q.FailureKind != "prepare_failure") {
+		return Receipt{}, ErrInvalid
+	}
+	if q.VMUnavailable && availability == "available" {
+		_, err = tx.Exec(`UPDATE managed_resources SET availability='paused',availability_reason='vm_unavailable',availability_revision=availability_revision+1 WHERE id=?`, resourceID)
 		if err != nil {
-			return Receipt{}, mapNoRows(err)
-		}
-		if resourceID != q.ResourceID || pinned != q.ExpectedConfigRevision || revision != q.ExpectedJobRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration {
-			return Receipt{}, ErrStale
-		}
-		if state != "preparing" && state != "ready" && !(state == "collecting" && q.FailureKind == "cancel" && cancelledVMPreflightTx(tx, q.JobID)) {
-			return Receipt{}, ErrConflict
-		}
-		var kind, availability string
-		var configRev, availabilityRev int64
-		err = tx.QueryRow(`SELECT kind,config_revision,availability_revision,availability FROM managed_resources WHERE id=?`, resourceID).Scan(&kind, &configRev, &availabilityRev, &availability)
-		if err != nil {
-			return Receipt{}, mapNoRows(err)
-		}
-		if configRev != q.ExpectedConfigRevision || availabilityRev != q.ExpectedAvailabilityRevision {
-			return Receipt{}, ErrStale
-		}
-		if pending, err := pendingPowerTx(tx, resourceID); err != nil {
-			return Receipt{}, err
-		} else if pending {
-			return Receipt{}, ErrBlocked
-		}
-		if err := observedNoEffectTx(tx, q.Proof, q.JobID, resourceID, q.ExpectedConfigRevision, q.Slot, q.LeaseGeneration); err != nil {
 			return Receipt{}, err
 		}
-		if q.VMUnavailable && (kind != "utm-macos" || q.FailureKind != "prepare_failure") {
+		availabilityRev++
+	}
+	if q.HostPauseReason != "" {
+		if q.VMUnavailable || kind != "utm-macos" || !oneOf(q.FailureKind, "prepare_failure", "cancel") || !oneOf(q.HostPauseReason, "host_vm_limit", "host_session_unavailable", "host_permission_unavailable") {
 			return Receipt{}, ErrInvalid
 		}
-		if q.VMUnavailable && availability == "available" {
-			_, err = tx.Exec(`UPDATE managed_resources SET availability='paused',availability_reason='vm_unavailable',availability_revision=availability_revision+1 WHERE id=?`, resourceID)
-			if err != nil {
-				return Receipt{}, err
-			}
-			availabilityRev++
-		}
-		if q.HostPauseReason != "" {
-			if q.VMUnavailable || kind != "utm-macos" || !oneOf(q.FailureKind, "prepare_failure", "cancel") || !oneOf(q.HostPauseReason, "host_vm_limit", "host_session_unavailable", "host_permission_unavailable") {
-				return Receipt{}, ErrInvalid
-			}
-			if _, err := tx.Exec(`UPDATE managed_resources SET availability='paused',availability_reason=?,availability_revision=availability_revision+1 WHERE kind='utm-macos' AND availability='available'`, q.HostPauseReason); err != nil {
-				return Receipt{}, err
-			}
-			if err := tx.QueryRow(`SELECT availability_revision FROM managed_resources WHERE id=?`, resourceID).Scan(&availabilityRev); err != nil {
-				return Receipt{}, err
-			}
-		}
-		proofJSON, _ := json.Marshal(q.Proof)
-		_, err = tx.Exec(`UPDATE managed_jobs SET state='settling',revision=revision+1,no_effect_proof_json=?,failure_kind=?,pause_availability_revision=? WHERE id=?`, proofJSON, q.FailureKind, availabilityRev, q.JobID)
-		if err != nil {
+		if _, err := tx.Exec(`UPDATE managed_resources SET availability='paused',availability_reason=?,availability_revision=availability_revision+1 WHERE kind='utm-macos' AND availability='available'`, q.HostPauseReason); err != nil {
 			return Receipt{}, err
 		}
-		cursor, err := addEvent(tx, q.JobID, "no_effect_classified", map[string]any{"failure_kind": q.FailureKind, "vm_unavailable": q.VMUnavailable, "host_pause_reason": q.HostPauseReason, "availability_revision": availabilityRev})
-		if err != nil {
+		if err := tx.QueryRow(`SELECT availability_revision FROM managed_resources WHERE id=?`, resourceID).Scan(&availabilityRev); err != nil {
 			return Receipt{}, err
 		}
-		receipt, err := l.snapshotTx(tx, q.JobID)
-		receipt.EventCursor = cursor
-		return receipt, err
-	})
+	}
+	proofJSON, _ := json.Marshal(q.Proof)
+	_, err = tx.Exec(`UPDATE managed_jobs SET state='settling',revision=revision+1,no_effect_proof_json=?,failure_kind=?,pause_availability_revision=? WHERE id=?`, proofJSON, q.FailureKind, availabilityRev, q.JobID)
+	if err != nil {
+		return Receipt{}, err
+	}
+	cursor, err := addEvent(tx, q.JobID, "no_effect_classified", map[string]any{"failure_kind": q.FailureKind, "vm_unavailable": q.VMUnavailable, "host_pause_reason": q.HostPauseReason, "availability_revision": availabilityRev})
+	if err != nil {
+		return Receipt{}, err
+	}
+	receipt, err := l.snapshotTx(tx, q.JobID)
+	receipt.EventCursor = cursor
+	return receipt, err
 }
 
 type SettleNoEffectRequest struct {
@@ -999,85 +1032,89 @@ type SettleNoEffectRequest struct {
 
 func (l *Ledger) SettleNoEffect(q SettleNoEffectRequest) (Receipt, error) {
 	return l.mutate("settle_no_effect", q.MutationKey, q, func(tx *sql.Tx) (Receipt, error) {
-		var resourceID, state, failure string
-		var revision, pinned, lease, pauseRev int64
-		var slot sql.NullInt64
-		var proofJSON []byte
-		err := tx.QueryRow(`SELECT resource_id,state,revision,pinned_config_revision,slot,lease_generation,pause_availability_revision,no_effect_proof_json,failure_kind FROM managed_jobs WHERE id=?`, q.JobID).
-			Scan(&resourceID, &state, &revision, &pinned, &slot, &lease, &pauseRev, &proofJSON, &failure)
-		if err != nil {
-			return Receipt{}, mapNoRows(err)
-		}
-		if resourceID != q.ResourceID || revision != q.ExpectedJobRevision || pinned != q.ExpectedConfigRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration || pauseRev != q.ExpectedAvailabilityRevision {
-			return Receipt{}, ErrStale
-		}
-		if state != "settling" {
-			return Receipt{}, ErrConflict
-		}
-		var proof NoEffectProof
-		if json.Unmarshal(proofJSON, &proof) != nil || !proof.valid() {
-			return Receipt{}, ErrBlocked
-		}
-		var configRev, availabilityRev int64
-		var availability string
-		var occupancy int
-		err = tx.QueryRow(`SELECT config_revision,availability_revision,availability,occupancy FROM managed_resources WHERE id=?`, resourceID).Scan(&configRev, &availabilityRev, &availability, &occupancy)
-		if err != nil {
-			return Receipt{}, mapNoRows(err)
-		}
-		if configRev != q.ExpectedConfigRevision || availabilityRev != q.ExpectedAvailabilityRevision {
-			return Receipt{}, ErrStale
-		}
-		if pending, err := pendingPowerTx(tx, resourceID); err != nil {
-			return Receipt{}, err
-		} else if pending {
-			return Receipt{}, ErrBlocked
-		}
-		if err := observedNoEffectTx(tx, proof, q.JobID, resourceID, q.ExpectedConfigRevision, q.Slot, q.LeaseGeneration); err != nil {
-			return Receipt{}, err
-		}
-		if occupancy <= 0 {
-			return Receipt{}, ErrBlocked
-		}
-		outcome := WorkloadOutcome("inconclusive")
-		verdict := Incomplete
-		if failure == "cancel" {
-			outcome = "cancelled"
-			verdict = Cancelled
-		}
-		facts := ResultFacts{WorkloadOutcome: outcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", ManualEligible: true, CancelledBeforeOutcome: failure == "cancel", TerminationProven: true, NoOwnedEffect: true}
-		derived, err := DeriveVerdict(facts)
-		if err != nil || derived != verdict {
-			return Receipt{}, ErrBlocked
-		}
-		timings, err := resultTimingsTx(tx, q.JobID)
-		if err != nil {
-			return Receipt{}, err
-		}
-		schema, err := resultSchemaTx(tx, q.JobID)
-		if err != nil {
-			return Receipt{}, err
-		}
-		resultJSON, _ := json.Marshal(Result{Schema: schema, JobID: q.JobID, ResourceID: resourceID,
-			ResourceRevision: configRev, LeaseGeneration: lease, JobState: "finished", ResourceAvailability: availability,
-			WorkloadOutcome: outcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict,
-			Observations: &ResultObservations{Source: q.JobID + ":" + proof.ObservationReference}, Timings: timings})
-		if err := releaseSlotTx(tx, q.JobID, resourceID); err != nil {
-			return Receipt{}, err
-		}
-		if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, resultJSON, q.JobID); err != nil {
-			return Receipt{}, err
-		}
-		cursor, err := addEvent(tx, q.JobID, "finished", map[string]any{"verdict": verdict, "cleanup_outcome": "not_needed"})
-		if err != nil {
-			return Receipt{}, err
-		}
-		receipt, err := l.snapshotTx(tx, q.JobID)
-		receipt.Verdict = verdict
-		receipt.CapacityDelta = -1
-		receipt.EventCursor = cursor
-		return receipt, err
+		return l.settleNoEffectTx(tx, q)
 	})
+}
+
+func (l *Ledger) settleNoEffectTx(tx *sql.Tx, q SettleNoEffectRequest) (Receipt, error) {
+	var resourceID, state, failure string
+	var revision, pinned, lease, pauseRev int64
+	var slot sql.NullInt64
+	var proofJSON []byte
+	err := tx.QueryRow(`SELECT resource_id,state,revision,pinned_config_revision,slot,lease_generation,pause_availability_revision,no_effect_proof_json,failure_kind FROM managed_jobs WHERE id=?`, q.JobID).
+		Scan(&resourceID, &state, &revision, &pinned, &slot, &lease, &pauseRev, &proofJSON, &failure)
+	if err != nil {
+		return Receipt{}, mapNoRows(err)
+	}
+	if resourceID != q.ResourceID || revision != q.ExpectedJobRevision || pinned != q.ExpectedConfigRevision || !slot.Valid || int(slot.Int64) != q.Slot || lease != q.LeaseGeneration || pauseRev != q.ExpectedAvailabilityRevision {
+		return Receipt{}, ErrStale
+	}
+	if state != "settling" {
+		return Receipt{}, ErrConflict
+	}
+	var proof NoEffectProof
+	if json.Unmarshal(proofJSON, &proof) != nil || !proof.valid() {
+		return Receipt{}, ErrBlocked
+	}
+	var configRev, availabilityRev int64
+	var availability string
+	var occupancy int
+	err = tx.QueryRow(`SELECT config_revision,availability_revision,availability,occupancy FROM managed_resources WHERE id=?`, resourceID).Scan(&configRev, &availabilityRev, &availability, &occupancy)
+	if err != nil {
+		return Receipt{}, mapNoRows(err)
+	}
+	if configRev != q.ExpectedConfigRevision || availabilityRev != q.ExpectedAvailabilityRevision {
+		return Receipt{}, ErrStale
+	}
+	if pending, err := pendingPowerTx(tx, resourceID); err != nil {
+		return Receipt{}, err
+	} else if pending {
+		return Receipt{}, ErrBlocked
+	}
+	if err := observedNoEffectTx(tx, proof, q.JobID, resourceID, q.ExpectedConfigRevision, q.Slot, q.LeaseGeneration); err != nil {
+		return Receipt{}, err
+	}
+	if occupancy <= 0 {
+		return Receipt{}, ErrBlocked
+	}
+	outcome := WorkloadOutcome("inconclusive")
+	verdict := Incomplete
+	if failure == "cancel" {
+		outcome = "cancelled"
+		verdict = Cancelled
+	}
+	facts := ResultFacts{WorkloadOutcome: outcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", ManualEligible: true, CancelledBeforeOutcome: failure == "cancel", TerminationProven: true, NoOwnedEffect: true}
+	derived, err := DeriveVerdict(facts)
+	if err != nil || derived != verdict {
+		return Receipt{}, ErrBlocked
+	}
+	timings, err := resultTimingsTx(tx, q.JobID)
+	if err != nil {
+		return Receipt{}, err
+	}
+	schema, err := resultSchemaTx(tx, q.JobID)
+	if err != nil {
+		return Receipt{}, err
+	}
+	resultJSON, _ := json.Marshal(Result{Schema: schema, JobID: q.JobID, ResourceID: resourceID,
+		ResourceRevision: configRev, LeaseGeneration: lease, JobState: "finished", ResourceAvailability: availability,
+		WorkloadOutcome: outcome, EvidenceCompleteness: "complete", CleanupOutcome: "not_needed", FinalVerdict: verdict,
+		Observations: &ResultObservations{Source: q.JobID + ":" + proof.ObservationReference}, Timings: timings})
+	if err := releaseSlotTx(tx, q.JobID, resourceID); err != nil {
+		return Receipt{}, err
+	}
+	if _, err := tx.Exec(`UPDATE managed_jobs SET state='finished',revision=revision+1,result_json=? WHERE id=?`, resultJSON, q.JobID); err != nil {
+		return Receipt{}, err
+	}
+	cursor, err := addEvent(tx, q.JobID, "finished", map[string]any{"verdict": verdict, "cleanup_outcome": "not_needed"})
+	if err != nil {
+		return Receipt{}, err
+	}
+	receipt, err := l.snapshotTx(tx, q.JobID)
+	receipt.Verdict = verdict
+	receipt.CapacityDelta = -1
+	receipt.EventCursor = cursor
+	return receipt, err
 }
 
 func (l *Ledger) CancelQueued(jobID string, expectedRevision int64, mutationKey string) (Receipt, error) {

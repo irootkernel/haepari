@@ -14,6 +14,8 @@ TASK-017 adds the [runnable project caller](../examples/project-test/README.md),
 
 [TASK-024](roadmap/EPIC-006.md#task-024) qualifies storage compatibility and self-test isolation; its lifecycle is recorded on the [roadmap](roadmap.md). The observed M1 uses synthetic prior-schema fixtures and one isolated test canary with its own state and socket. There is no public predecessor. Observed on Go 1.27.1, Darwin 27, arm64. After the common gate exited 0, Main read the common-built `bin/haepari`: 20588416 bytes, SHA-256 `155136c5101910825eb8931831a2536ffa2dddf06e659ff810a2afc7d9b0a1aa`. That build was not installed. [HP-REQ-052](requirements.md#hp-req-052) and [HP-REQ-053](requirements.md#hp-req-053) are qualified now. The [EPIC-006](roadmap/EPIC-006.md) lifecycle is recorded on the canonical roadmap.
 
+TASK-027 is recording [exact-release acceptance evidence and all 58 invariant mappings](records/TASK-027-release-acceptance.md). Exact package, local and running-VM automatic/manual observations, successor cleanup and isolation checks are recorded. TASK-027 is accepted in the canonical roadmap; this unpublished candidate is not an official distribution.
+
 ## Read in this order
 
 1. [Requirements](requirements.md) defines the release scope and observable acceptance criteria.
@@ -44,7 +46,9 @@ TASK-017 adds the [runnable project caller](../examples/project-test/README.md),
 - Existing `aquarium-dev` state is retired through a staged consumer rollout, never by deleting its root before dependents are detached.
 - The generic consumer contract freezes at gate F1 (managed core, TASK-012), gate F2 (VM fields, TASK-016) and gate F3 (consumer integration, TASK-020); TASK-002 is provisional. The [F3 decision](records/TASK-020-consumer-freeze.md) defines the implemented surface and takes effect with canonical TASK-020 acceptance.
 - The macOS controller runs as a `gui/<uid>` LaunchAgent in the Aqua session with `AbandonProcessGroup=true`; runners use their own session; darwin SQLite uses `fullfsync` and `checkpoint_fullfsync`. No signing identity is required: an ad-hoc-signed LaunchAgent controls UTM through `utmctl` without an Automation prompt (TASK-034).
-- Each `utm-macos` resource is one persistent VM that Haepari never clones or resets (ADR-0018); the guest runner travels with each job. `host_macos_guest_limit` bounds registered running and pending/uncertain starts. Automatic capacity-driven stop requires explicit operator permission on an eligible resource, and pause protects maintenance.
+- Each `utm-macos` resource is one persistent VM that Haepari never clones or resets (ADR-0018); the guest runner travels with each job. The operator alone starts and stops it. `host_macos_guest_limit` is an accepted compatibility setting and the legacy automatic-stop flag is inert. A selected VM must be observed started; pause protects maintenance.
+
+Current storage is private schema 13 (`evidence-recovery-budget-v13`), preserving the earlier Job-bound pins and saved recovery records. New resource-v2 recollect/dispose plans sign the registered lifecycle collection/cleanup ceilings; resource-v1 and already-saved private v1/v2 records keep their prior shape and deadlines.
 
 ## Document authority
 

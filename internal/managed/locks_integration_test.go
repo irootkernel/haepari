@@ -489,15 +489,15 @@ var _ = ginkgo.Describe("AdvisoryLocks", ginkgo.Label("integration"), func() {
 		gomega.Expect(current.GlobalOccupancy).To(gomega.Equal(1))
 		// Only ledger observations are injected; no VM or native adapter is run.
 		f.ledger.globalLimit = 2
-		vmScheduling(ginkgo.GinkgoT(), f.ledger, "fixture-vm", 1, "stopped", false)
+		vmScheduling(ginkgo.GinkgoT(), f.ledger, "fixture-vm", 1, "started", false)
 		vm := admitScheduling(ginkgo.GinkgoT(), f.ledger, "fixture-vm", "fixture-vm-job")
 		vmReserved, err := reserveScheduling(f.ledger, vm, vmGuard(ginkgo.GinkgoT(), f.db, 2))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(vmReserved.GlobalOccupancy).To(gomega.Equal(2))
 		f.acquire("with-vm")
 		var starts int
-		gomega.Expect(f.db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions WHERE state='pending'`).Scan(&starts)).To(gomega.Succeed())
-		gomega.Expect(starts).To(gomega.Equal(1))
+		gomega.Expect(f.db.QueryRow(`SELECT COUNT(*) FROM managed_power_transitions`).Scan(&starts)).To(gomega.Succeed())
+		gomega.Expect(starts).To(gomega.BeZero())
 	})
 	ginkgo.It("extends liveness at restart and injected wake before expiry, caps maximum hold and uses backward highwater", func() {
 		f := newLockFixture()
@@ -574,7 +574,7 @@ var _ = ginkgo.Describe("AdvisoryLocks", ginkgo.Label("integration"), func() {
 			gomega.Expect(err).To(gomega.HaveOccurred())
 			var version int
 			gomega.Expect(other.db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-			gomega.Expect(version).To(gomega.Equal(12))
+			gomega.Expect(version).To(gomega.Equal(13))
 		}
 	})
 	ginkgo.It("replays a newly granted waiter with its queued receipt and original policy, then expires at maximum hold", func() {

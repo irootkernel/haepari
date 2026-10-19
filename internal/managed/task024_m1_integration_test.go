@@ -33,6 +33,7 @@ var task024MigrationIdentity = map[int]string{
 	10: "durable-manual-sessions-v10",
 	11: "effective-config-v11",
 	12: "job-bounds-v12",
+	13: "evidence-recovery-budget-v13",
 }
 
 // task024Historical strips a current fixture down to synthetic user_version at.
@@ -403,7 +404,7 @@ func task024ExpectMigrated(db *sql.DB, before task024Snap, boundID string, repla
 	ledger.UseLegacyFixtureBounds()
 	var version int
 	gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-	gomega.Expect(version).To(gomega.Equal(12))
+	gomega.Expect(version).To(gomega.Equal(13))
 	for number, identity := range task024MigrationIdentity {
 		var got string
 		gomega.Expect(db.QueryRow(`SELECT identity FROM schema_migrations WHERE version=?`, number).Scan(&got)).To(gomega.Succeed())
@@ -413,10 +414,10 @@ func task024ExpectMigrated(db *sql.DB, before task024Snap, boundID string, repla
 		var synthetic string
 		gomega.Expect(db.QueryRow(`SELECT identity FROM schema_migrations WHERE version=1`).Scan(&synthetic)).To(gomega.Succeed())
 		gomega.Expect(synthetic).To(gomega.Equal("managed-initial-v1"))
-		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM schema_migrations`)).To(gomega.Equal(12))
+		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM schema_migrations`)).To(gomega.Equal(13))
 	} else {
 		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM schema_migrations WHERE version=1`)).To(gomega.BeZero())
-		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM schema_migrations`)).To(gomega.Equal(11))
+		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM schema_migrations`)).To(gomega.Equal(12))
 	}
 	restored := task024Print(db, boundID)
 	gomega.Expect(restored.Job).To(gomega.Equal(before.Job))
@@ -441,7 +442,7 @@ func task024ExpectMigrated(db *sql.DB, before task024Snap, boundID string, repla
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	again.UseLegacyFixtureBounds()
 	gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-	gomega.Expect(version).To(gomega.Equal(12))
+	gomega.Expect(version).To(gomega.Equal(13))
 	idempotent := task024Print(db, boundID)
 	gomega.Expect(idempotent.Migrations).To(gomega.Equal(restored.Migrations))
 	gomega.Expect(idempotent.Job).To(gomega.Equal(restored.Job))
@@ -462,14 +463,14 @@ func task024ExpectMigrated(db *sql.DB, before task024Snap, boundID string, repla
 // Retained-event allowlist equality is reviewed for the task handoff.
 // This suite asserts stored data, rollback, and replay behavior only.
 var _ = ginkgo.Describe("Task024M1 storage", ginkgo.Label("integration"), func() {
-	ginkgo.It("creates schema 12 under the lifetime exclusive lock", func() {
+	ginkgo.It("creates schema 13 under the lifetime exclusive lock", func() {
 		t := ginkgo.GinkgoT()
 		fixture := task024Open(t)
 		var version int
 		gomega.Expect(fixture.db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(12))
+		gomega.Expect(version).To(gomega.Equal(13))
 		gomega.Expect(countQuery(fixture.db, `SELECT COUNT(*) FROM schema_migrations WHERE version=1`)).To(gomega.BeZero())
-		gomega.Expect(countQuery(fixture.db, `SELECT COUNT(*) FROM schema_migrations`)).To(gomega.Equal(11))
+		gomega.Expect(countQuery(fixture.db, `SELECT COUNT(*) FROM schema_migrations`)).To(gomega.Equal(12))
 		for number, identity := range task024MigrationIdentity {
 			var got string
 			gomega.Expect(fixture.db.QueryRow(`SELECT identity FROM schema_migrations WHERE version=?`, number).Scan(&got)).To(gomega.Succeed())
@@ -479,11 +480,11 @@ var _ = ginkgo.Describe("Task024M1 storage", ginkgo.Label("integration"), func()
 		gomega.Expect(errors.Is(err, state.ErrControllerOwned)).To(gomega.BeTrue())
 	})
 
-	ginkgo.It("refuses a store newer than schema 12 before mutation", func() {
+	ginkgo.It("refuses a store newer than schema 13 before mutation", func() {
 		t := ginkgo.GinkgoT()
 		fixture := task024Open(t)
 		before := task024Print(fixture.db, fixture.installationID)
-		_, err := fixture.db.Exec(`PRAGMA user_version=13`)
+		_, err := fixture.db.Exec(`PRAGMA user_version=14`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(fixture.db.Close()).To(gomega.Succeed())
 		fixture.db, err = sqlite.Open(fixture.root.DBPath)
@@ -493,7 +494,7 @@ var _ = ginkgo.Describe("Task024M1 storage", ginkgo.Label("integration"), func()
 		var version int
 		var schema, migrations string
 		gomega.Expect(fixture.db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(13))
+		gomega.Expect(version).To(gomega.Equal(14))
 		gomega.Expect(fixture.db.QueryRow(`SELECT COALESCE(group_concat(sql, char(10)), '') FROM (SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY type, name)`).Scan(&schema)).To(gomega.Succeed())
 		gomega.Expect(schema).To(gomega.Equal(before.Schema))
 		gomega.Expect(fixture.db.QueryRow(`SELECT COALESCE(group_concat(version || ':' || identity, ','), '') FROM (SELECT version, identity FROM schema_migrations ORDER BY version)`).Scan(&migrations)).To(gomega.Succeed())

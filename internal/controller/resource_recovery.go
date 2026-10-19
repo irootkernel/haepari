@@ -19,6 +19,7 @@ type resourceRecoveryPlan struct {
 	Unknowns     []string                         `json:"unknowns"`
 	Effects      []string                         `json:"proposed_effects"`
 	EvidenceLoss []managed.ProtectedEvidence      `json:"evidence_loss"`
+	Budget       *managed.RecoveryBudget          `json:"budget,omitempty"`
 	PlanToken    string                           `json:"plan_token,omitempty"`
 	ExpiresAt    time.Time                        `json:"expires_at"`
 }
@@ -121,7 +122,7 @@ func (s *runtimeServer) planResourceRecovery(id string) (resourceRecoveryPlan, e
 	if len(p.Unknowns) == 0 {
 		p.Effects = []string{"commit resource recovery intent", "verify local readiness and owned workspace absence", "return availability without changing any Job result"}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, "reconcile", managed.RecoveryDigest(snap), managed.RecoveryDigest(observation), p.ExpiresAt})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, "reconcile", managed.RecoveryDigest(snap), managed.RecoveryDigest(observation), p.ExpiresAt, ""})
 	}
 	return p, nil
 }

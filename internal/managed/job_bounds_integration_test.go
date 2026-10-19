@@ -227,19 +227,21 @@ var _ = ginkgo.Describe("JobBoundsSchema12", ginkgo.Label("integration"), func()
 		gomega.Expect(db.QueryRow(`SELECT spec_json,admitted_at_ns,queue_deadline_ns,state,request_key FROM managed_jobs WHERE id=?`, admitted.JobID).Scan(&spec, &admittedAt, &deadline, &state, &requestKey)).To(gomega.Succeed())
 		gomega.Expect(db.QueryRow(`SELECT identity_json FROM managed_admissions WHERE job_id=?`, admitted.JobID).Scan(&identity)).To(gomega.Succeed())
 		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM managed_config_audits`)).To(gomega.BeZero())
-		_, err = db.Exec(`DROP TABLE managed_job_bounds; DELETE FROM schema_migrations WHERE version=12; PRAGMA user_version=11`)
+		_, err = db.Exec(`DROP TABLE managed_job_bounds; DELETE FROM schema_migrations WHERE version>=12; PRAGMA user_version=11`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(db.Close()).To(gomega.Succeed())
 		db, ledger = openLedger(t, path, 2)
 		defer db.Close()
 		var version int
-		var schema11, schema12 string
+		var schema11, schema12, schema13 string
 		gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(12))
+		gomega.Expect(version).To(gomega.Equal(13))
 		gomega.Expect(db.QueryRow(`SELECT identity FROM schema_migrations WHERE version=11`).Scan(&schema11)).To(gomega.Succeed())
 		gomega.Expect(schema11).To(gomega.Equal("effective-config-v11"))
 		gomega.Expect(db.QueryRow(`SELECT identity FROM schema_migrations WHERE version=12`).Scan(&schema12)).To(gomega.Succeed())
 		gomega.Expect(schema12).To(gomega.Equal("job-bounds-v12"))
+		gomega.Expect(db.QueryRow(`SELECT identity FROM schema_migrations WHERE version=13`).Scan(&schema13)).To(gomega.Succeed())
+		gomega.Expect(schema13).To(gomega.Equal("evidence-recovery-budget-v13"))
 		var gotSpec []byte
 		var gotAt, gotDeadline int64
 		var gotState, gotKey, source string
@@ -309,7 +311,7 @@ var _ = ginkgo.Describe("JobBoundsSchema12", ginkgo.Label("integration"), func()
 		gomega.Expect(occupancy).To(gomega.BeZero())
 	})
 
-	ginkgo.It("refuses a store newer than schema 12 before mutation", func() {
+	ginkgo.It("refuses a store newer than schema 13 before mutation", func() {
 		t := ginkgo.GinkgoT()
 		path := t.TempDir() + "/state.sqlite"
 		db, ledger := openLedger(t, path, 2)
@@ -318,7 +320,7 @@ var _ = ginkgo.Describe("JobBoundsSchema12", ginkgo.Label("integration"), func()
 		const schemaQuery = `SELECT COALESCE(group_concat(sql, ';'),'') FROM (SELECT sql FROM sqlite_schema ORDER BY type,name)`
 		var schemaBefore string
 		gomega.Expect(db.QueryRow(schemaQuery).Scan(&schemaBefore)).To(gomega.Succeed())
-		_, err := db.Exec(`PRAGMA user_version=13`)
+		_, err := db.Exec(`PRAGMA user_version=14`)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(db.Close()).To(gomega.Succeed())
 		db, err = sqlite.Open(path)
@@ -329,7 +331,7 @@ var _ = ginkgo.Describe("JobBoundsSchema12", ginkgo.Label("integration"), func()
 		var version int
 		var schemaAfter string
 		gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(13))
+		gomega.Expect(version).To(gomega.Equal(14))
 		gomega.Expect(countQuery(db, `SELECT COUNT(*) FROM schema_migrations`)).To(gomega.Equal(before))
 		gomega.Expect(db.QueryRow(schemaQuery).Scan(&schemaAfter)).To(gomega.Succeed())
 		gomega.Expect(schemaAfter).To(gomega.Equal(schemaBefore))
@@ -804,8 +806,8 @@ func powerProgress(db *sql.DB, generation int64) powerProgressRow {
 func hostStopFixture(t ginkgo.GinkgoTInterface) (*sql.DB, *Ledger, Receipt, PowerIntent) {
 	t.Helper()
 	db, ledger := openLedger(t, filepath.Join(t.TempDir(), "power.sqlite"), 1)
-	vmScheduling(t, ledger, "victim", 1, "started", true)
-	vmScheduling(t, ledger, "target", 2, "stopped", false)
+	victimSpec := vmScheduling(t, ledger, "victim", 1, "started", true)
+	targetSpec := vmScheduling(t, ledger, "target", 2, "started", false)
 	_, err := ledger.BindInstallation("power-bounds-fixture")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	job := validJob()
@@ -813,8 +815,9 @@ func hostStopFixture(t ginkgo.GinkgoTInterface) (*sql.DB, *Ledger, Receipt, Powe
 	job.Deadlines.QueueSeconds = 600
 	admitted, err := ledger.Admit(encode(t, job), digest, "power-admission", "power-job")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	_, err = ledger.Reserve(ReserveRequest{JobID: admitted.JobID, ExpectedJobRevision: admitted.JobRevision, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "power-reserve", VMGuard: &VMReservationGuard{HostLimit: 1, ObservationRevisions: map[string]int64{"victim": 1, "target": 1}}})
+	reserved, err := ledger.Reserve(ReserveRequest{JobID: admitted.JobID, ExpectedJobRevision: admitted.JobRevision, ExpectedConfigRevision: 1, ExpectedAvailabilityRevision: 1, MutationKey: "power-reserve", VMGuard: &VMReservationGuard{HostLimit: 1, ObservationRevisions: map[string]int64{"victim": 1, "target": 1}}})
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	seedHistoricalPower(t, db, reserved, targetSpec, &victimSpec, PowerStopReady)
 	intent, err := ledger.PowerIntent(1)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(ledger.ClaimHostPowerEffect(intent.Identity, "stop")).To(gomega.Succeed())
@@ -824,7 +827,7 @@ func hostStopFixture(t ginkgo.GinkgoTInterface) (*sql.DB, *Ledger, Receipt, Powe
 func hostStartFixture(t ginkgo.GinkgoTInterface) (*sql.DB, *Ledger, Receipt, PowerIntent) {
 	t.Helper()
 	db, ledger := openLedger(t, filepath.Join(t.TempDir(), "power-start.sqlite"), 2)
-	vmScheduling(t, ledger, "target", 1, "stopped", false)
+	targetSpec := vmScheduling(t, ledger, "target", 1, "started", false)
 	vmScheduling(t, ledger, "other-vm", 2, "stopped", false)
 	_, err := ledger.BindInstallation("power-start-fixture")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -835,6 +838,7 @@ func hostStartFixture(t ginkgo.GinkgoTInterface) (*sql.DB, *Ledger, Receipt, Pow
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	admitted, err = reserveScheduling(ledger, admitted, vmGuard(t, db, 1))
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	seedHistoricalPower(t, db, admitted, targetSpec, nil, PowerStartReady)
 	intent, err := ledger.PowerIntent(1)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(ledger.ClaimHostPowerEffect(intent.Identity, "start")).To(gomega.Succeed())

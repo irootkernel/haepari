@@ -13,8 +13,8 @@ import (
 	"github.com/irootkernel/haepari/internal/utm"
 )
 
-func (b vmEvidenceBackend) observeAttested(q runner.GuestRecoveryRequest, id managed.LocalIdentity, action string) (managed.RetainedPath, error) {
-	if q.Guest.Request.Identity != id || id.ResourceID != b.resourceID {
+func (b vmEvidenceBackend) observeAttested(q runner.GuestRecoveryRequest, id managed.LocalIdentity, action string, until time.Time) (managed.RetainedPath, error) {
+	if until.IsZero() || !time.Now().Before(until) || q.Guest.Request.Identity != id || id.ResourceID != b.resourceID {
 		return managed.RetainedPath{}, managed.ErrBlocked
 	}
 	if action == "dispose" {
@@ -32,10 +32,11 @@ func (b vmEvidenceBackend) observeAttested(q runner.GuestRecoveryRequest, id man
 		} // no attested evidence-loss disposal
 	}
 	q.Operation = "state"
-	q.Deadline = time.Now().Add(5 * time.Second)
+	q.Deadline = until
 	reply, err := b.s.vmRecoveryCall(q)
 	if err != nil {
 		q.Operation = "health"
+		q.Deadline = until
 		reply, err = b.s.vmRecoveryCall(q)
 		if err != nil || !reply.Reusable {
 			return managed.RetainedPath{}, managed.ErrBlocked

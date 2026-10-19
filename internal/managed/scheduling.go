@@ -1,6 +1,7 @@
 package managed
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -8,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -238,8 +240,33 @@ type QueueBlocker struct {
 }
 
 // Blockers do not consume a lease, change admission order, or extend a deadline.
+func validQueueBlocker(blocker QueueBlocker) bool {
+	if len(blocker.Details) > 4096 || !json.Valid(blocker.Details) {
+		return false
+	}
+	switch blocker.Reason {
+	case "host_capacity_no_eligible_victim":
+		return true
+	case "vm_not_started":
+		var details struct {
+			Schema      string `json:"schema"`
+			ResourceID  string `json:"resource_id"`
+			Observation string `json:"observation"`
+		}
+		decoder := json.NewDecoder(bytes.NewReader(blocker.Details))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&details) != nil || details.Schema != "haepari.vm-not-started/v1" || details.ResourceID == "" || details.Observation == "" || details.Observation == "started" {
+			return false
+		}
+		var tail any
+		return decoder.Decode(&tail) == io.EOF
+	default:
+		return false
+	}
+}
+
 func (l *Ledger) RecordQueueBlocker(jobID string, revision int64, blocker QueueBlocker) error {
-	if blocker.Reason != "host_capacity_no_eligible_victim" || len(blocker.Details) > 4096 || !json.Valid(blocker.Details) {
+	if !validQueueBlocker(blocker) {
 		return ErrInvalid
 	}
 	tx, err := l.db.BeginTx(context.Background(), nil)

@@ -58,22 +58,22 @@ Requirement coverage: `HP-REQ-056`, `HP-REQ-057`.
 Requirement coverage: `HP-REQ-031`, `HP-REQ-058`, `HP-REQ-059`.
 
 #### Implement
-- [ ] Confirm that freeze gates F1, F2 and F3 hold for the candidate, freeze candidate binary/runner/skill identities, and execute release acceptance: deterministic failure coverage, real local and one already-running UTM resource, packaged skill/CLI flow, ordinary manual evidence and self-test protection.
-- [ ] Run the small TASK-017 through TASK-020 core auto/manual sample on the running VM under the packaged release service: success, meaningful failure, cancel, timeout, logs/outputs, bounded SSH observation loss/reconnection, cleanup and successor reuse. Bind actual candidate/input/result identities automatically. Do not rerun the full historical TASK-038 campaign or require DF-001–004, live identity-refusal, product skill/migration, soak or benchmark experiments.
+- [x] Confirm that freeze gates F1, F2 and F3 hold for the candidate, freeze candidate binary/runner/skill identities, and execute release acceptance: deterministic failure coverage, real local and one already-running UTM resource, packaged skill/CLI flow, ordinary manual evidence and self-test protection.
+- [x] Run the small TASK-017 through TASK-020 core auto/manual sample on the running VM under the packaged release service: success, meaningful failure, cancel, timeout, logs/outputs, bounded SSH observation loss/reconnection, cleanup and successor reuse. Bind actual candidate/input/result identities automatically. Do not rerun the full historical TASK-038 campaign or require DF-001–004, live identity-refusal, product skill/migration, soak or benchmark experiments.
 
 #### Do not
-- [ ] Do not infer distribution success from a local build or publish automatically from a test result.
+- [x] Do not infer distribution success from a local build or publish automatically from a test result.
 
 #### Verify
-- [ ] Require managed local and real UTM evidence, all 58 mandatory V-invariants in their declared local/fake/live layers, exact artifacts and truthful skill/runtime limits. E01 through E20 remain deferred.
-- [ ] Record exact artifacts, platform inventory, all required outcomes and evidence completeness; a changed artifact invalidates affected acceptance.
-- [ ] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
+- [x] Require managed local and real UTM evidence, all 58 mandatory V-invariants in their declared local/fake/live layers, exact artifacts and truthful skill/runtime limits. E01 through E20 remain deferred.
+- [x] Record exact artifacts, platform inventory, all required outcomes and evidence completeness; a changed artifact invalidates affected acceptance.
+- [x] Run focused unit/integration checks for changed behavior and the relevant negative cases. Record exact commands and outcomes; do not turn a missing prerequisite into a pass.
 
 #### Done when
-- [ ] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
-- [ ] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
-- [ ] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
-- [ ] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
+- [x] The listed behavior and failure paths are implemented and reviewed against the normative contracts.
+- [x] Evidence binds the exact candidate and relevant environment; required real/manual checks are observed or the task remains incomplete.
+- [x] Changed documentation and examples match the implementation. Unrelated source, state, credentials and Git work are preserved.
+- [x] The task has a bounded handoff with remaining gaps stated; its commit occurs only under the applicable authority.
 
 ## TASK-028
 

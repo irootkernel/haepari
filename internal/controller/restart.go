@@ -133,6 +133,9 @@ func (s *runtimeServer) inspectRecoveryRunner(snapshot managed.RecoverySnapshot)
 }
 
 func (s *runtimeServer) reconcileStartup() error {
+	if err := s.ledger.DrainHistoricalPower(); err != nil {
+		return err
+	}
 	jobs, err := s.ledger.InterruptedJobs()
 	if err != nil {
 		return err
@@ -174,6 +177,41 @@ func (s *runtimeServer) recoverInterrupted(jobID string, automatic bool, attesta
 		}
 		if managed.RecoveryDigest(fresh.Snapshot) != managed.RecoveryDigest(plan.Snapshot) || managed.RecoveryDigest(fresh.Observation) != managed.RecoveryDigest(plan.Observation) {
 			return managed.ErrStale
+		}
+	}
+	if snapshot.Resource.Kind == "utm-macos" && snapshot.Identity.RunID == "" {
+		if _, err := s.ledger.VMPreflightCessation(snapshot.Identity); err == nil {
+			return s.recoverVMPreflight(snapshot, automatic, attestation, plan, key, clientDigest)
+		}
+		disposition, err := s.ledger.GuestPowerDisposition(snapshot.Identity)
+		if err != nil {
+			return err
+		}
+		if disposition == "no_guest" {
+			if snapshot.Receipt.JobState != "reconciling" || s.jobWorkerAlive(jobID) || snapshot.Outcome != nil || len(snapshot.AdapterIntents) != 0 {
+				return managed.ErrBlocked
+			}
+			owned, err := s.inspectRecoveryRoot(snapshot.Identity)
+			if err != nil {
+				return err
+			}
+			if owned {
+				return managed.ErrBlocked
+			}
+			for _, phase := range snapshot.Phases {
+				if !controllerOwnerStopped(phase) || time.Now().Before(phase.ObservedAt) {
+					return managed.ErrBlocked
+				}
+			}
+			c, err := s.registerLocal(snapshot.Receipt)
+			if err != nil {
+				return err
+			}
+			defer s.unregisterLocal(c)
+			return s.vmDrainedNoEffect(c)
+		}
+		if disposition == "protected" {
+			return managed.ErrBlocked
 		}
 	}
 	if snapshot.Spec.Mode == "manual" {

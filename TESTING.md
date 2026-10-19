@@ -109,7 +109,7 @@ Compiled CLI E2E adds large export/no-overwrite, public purge/retry after restar
 
 ## TASK-013 UTM host adapter
 
-The unit stage includes `internal/utm`. `UTMCommandBoundary`, `IndividualDHCPLease` and `RegisteredHostPin` exercise bounded argv, forbidden operations, exit-zero Automation failures, UUID-only selection, lease expiry/missing/ambiguity/renewal, pre-start identity proof including a wrong guest OS, and exact pin-file bytes with symlink refusal and allowed comments. `Task013UTMController` exercises real Unix registration and revision-fenced updates against a fake UTM command boundary, duplicate UUID/MAC, unknown VM and missing pin, storage uncertainty, maintenance pause, policy/operator exclusion, durable transfer claims and observation-only uncertainty. It builds and invokes the real CLI to verify missing/zero/negative VM availability revisions, refusal of the flag on a non-VM update, and a successful VM update preserving pause and idle history. Changed/missing successor pins and unknown UUIDs leave the original registration unchanged. Unchanged and skipped successor revisions are refused at both controller and ledger fences. Concurrent transfer calls issue at most one start; delayed stop/start commands cannot release protection or be bypassed through ledger confirmation. Successful return proof survives SQLite close/reopen and is reset before the next effect; command errors and unrecorded returns remain protected after reopen despite desired status. Failed inventory status is conservatively uncertain and failed list refuses the guard. The native command runner drains and reaps oversized output while refusing it. Existing ledger and scheduling integration checks retain VM-local pause, quarantine, stale observation, one settlement return, host-place and crash/reopen proofs. These checks operate no UTM VM and do not qualify SSH, guest cleanup or F2.
+The unit stage includes `internal/utm`. The current command boundary permits only `list` and `status` with exact UUID inventory resolution; start/stop and other operations are rejected. `Task013UTMController` verifies Unix registration, pinned resource updates and conservative observations against fake UTM only. Historical returned commands can be observed, while failed, missing or corrupted return proof stays protected across reopening without another issued command. `Task027DrainedVMPreflight` and `Task027HistoricalDrain` exercise unissued/returned-stop drain, preserved malformed or ambiguous bytes, exact Job/config/lease/generation proof, and startup/dispatch settlement before any SSH call. The earlier TASK-013 command-issuance observations remain historical evidence; current tests assert zero power effects. These fixtures operate no actual UTM VM and do not substitute for exact-release guest cleanup/reuse.
 
 
 ## TASK-014 authenticated guest continuity
@@ -215,7 +215,9 @@ It verifies artifact bytes/hash, failure logs, same-key replay, exactly one
 effect per admission, verified cleanup and zero final occupancy. The test-owned
 `_tree_digest` and spec helper expose the minimum public caller inputs without
 requiring a consumer integration. Job queue/prepare/run/collect/cleanup budgets
-are 30/10/10/5/5 seconds; each terminal wait is at most 15 seconds.
+are 30/10/10/5/5 seconds; each terminal wait is at most 15 seconds. Those recorded
+TASK-039 budgets stay on that test. The public project-test helper's new Jobs use
+collect and cleanup ceilings of 90 seconds; saved 5/5 run bytes are not rewritten.
 
 The ordinary `make test-e2e` gate includes this test. It changes no installed
 service, operates no VM and edits no other project. Its local result does not
@@ -294,3 +296,5 @@ They do not observe a human product pass or qualify a live or installed VM.
 TASK-027 retains that packaged running-VM release check; TASK-038 is not repeated.
 The [F3 decision](docs/records/TASK-020-consumer-freeze.md) binds the surface
 only when TASK-020 becomes Accepted in the canonical roadmap.
+
+TASK-027 resource-bound recovery fixtures cover new v3 recollect/dispose budgets, unchanged resource-v1 behavior, saved intent/receipt replay and layout-12-to-13 compatibility. The sample caller tests exercise new 90/90-second collection/cleanup, immutable saved 5/5-second replay, lower-resource-ceiling refusal before key consumption, and one Job across PENDING reconnect. A scripted native guest fixture delays authenticated health/cleanup beyond five seconds under the finite 90-second cleanup budget; it is separate from live macOS2 qualification.

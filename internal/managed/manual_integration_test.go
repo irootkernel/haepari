@@ -48,7 +48,7 @@ var _ = ginkgo.Describe("Task019ActualSchema9Migration", ginkgo.Label("integrati
 		l, err := NewLedger(db, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(db.QueryRow(`PRAGMA user_version`).Scan(&version)).To(gomega.Succeed())
-		gomega.Expect(version).To(gomega.Equal(12))
+		gomega.Expect(version).To(gomega.Equal(13))
 		actual, err := l.BindInstallation("different-seed")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(actual).To(gomega.Equal(installation))

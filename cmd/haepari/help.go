@@ -81,7 +81,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		Canonicalization string                    `json:"canonicalization"`
 	}{
 		Schema: "haepari.help/v1", Protocol: "managed-execution/v1", Commands: commands,
-		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.doctor/v1", "haepari.manual-result/v1", "haepari.resource/v2", "haepari.operator-projection/v1", "haepari.operator-diagnostic/v1"},
+		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.recovery-plan/v3", "haepari.recovery-budget/v1", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.evidence-recovery-receipt/v2", "haepari.evidence-recovery-receipt/v3", "haepari.doctor/v1", "haepari.manual-result/v1", "haepari.resource/v2", "haepari.operator-projection/v1", "haepari.operator-diagnostic/v1"},
 		ErrorExits: errors, VerdictExits: map[managed.Verdict]int{managed.Pass: 0, managed.Fail: 1, managed.Incomplete: 3, managed.Cancelled: 4},
 		Enums: map[string][]string{
 			"job_state":             {"queued", "preparing", "ready", "running", "awaiting_manual", "cancelling", "collecting", "cleaning", "settling", "reconciling", "finished"},
@@ -93,6 +93,6 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		},
 		Cursors:          map[string]string{"events": "global monotonic integer scoped to one Job; retained ownership rejects foreign cursors before unavailable results; explicit prefix retention returns resync", "lists": "opaque scoped continuation; not a snapshot across pages", "logs": "exact byte offset plus file identity; a gap is explicit", "artifacts": "exact byte offset with signed file-incarnation token; export verifies full size and SHA-256"},
 		Limits:           map[string]int64{"artifact_page_bytes": 64 << 10, "log_bytes": 256 << 20, "artifact_bytes_per_collection": 1 << 30, "artifacts_per_collection": 1000, "caller_wait_seconds": 86400},
-		Canonicalization: "closed schemas reject duplicate and unknown fields; normalized POSIX relative paths; lowercase SHA-256; canonical typed admission JSON with ordered arrays and sorted map keys; haepari.resource/v2 lifecycle budgets are explicit ceilings",
+		Canonicalization: "closed schemas reject duplicate and unknown fields; normalized POSIX relative paths; lowercase SHA-256; canonical typed admission JSON with ordered arrays and sorted map keys; haepari.resource/v2 lifecycle budgets are explicit ceilings; new resource-v2 recollect/dispose budgets use the stored collect and cleanup ceilings",
 	})
 }

@@ -136,9 +136,8 @@ var _ = ginkgo.Describe("Task037VMOperationalBounds", ginkgo.Label("integration"
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(raw).To(gomega.BeEmpty())
 	})
-	ginkgo.It("waits for a returned start, valid lease and pinned identity before staging once", func() {
+	ginkgo.It("waits for operator readiness, valid lease and pinned identity before staging once", func() {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf ready > ../results/output.txt")
-		f.control.states[f.spec.VM.UTMVMUUID] = "stopped"
 		r, err := f.reserve(f.admit("cold-ready"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		control := f.s.utmCommand
@@ -147,7 +146,7 @@ var _ = ginkgo.Describe("Task037VMOperationalBounds", ginkgo.Label("integration"
 			if args[0] == "start" {
 				starts++
 			}
-			if args[0] == "status" && starts > 0 {
+			if args[0] == "status" {
 				statuses++
 				if statuses < 3 {
 					return utm.CommandResult{Stdout: "stopped"}, nil
@@ -184,7 +183,8 @@ var _ = ginkgo.Describe("Task037VMOperationalBounds", ginkgo.Label("integration"
 		result, err := f.s.ledger.Result(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Pass))
-		gomega.Expect(starts).To(gomega.Equal(1))
+		gomega.Expect(starts).To(gomega.BeZero())
+		gomega.Expect(f.control.effects).To(gomega.BeEmpty())
 		gomega.Expect(prepares).To(gomega.Equal(1))
 	})
 	ginkgo.It("ends failed readiness at the original deadline without guest staging or a run claim", func() {

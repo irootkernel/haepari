@@ -22,6 +22,8 @@ Haepari runs one durable per-user controller behind a private Unix socket. The `
 
 3. Work only inside the established authorization scope for this installation (repository, resource, offline effects, budgets). Having the CLI, a job ID, or an inbox item is not authorization to install tools, run providers, reset foreign state, or publish.
 
+The operator prepares and powers the VM. Haepari uses an already-running registered VM and issues no start/stop command. A queued `vm_not_started` blocker waits under the original deadline; do not generate another Job key or power the VM through Haepari.
+
 ## Submit once; never resubmit speculatively
 
 - Persist the request key and the exact spec bytes **before** the first `submit`. Use a descriptive unique key (1–128 chars: `A-Za-z0-9._-`, starts alphanumeric).
@@ -69,3 +71,5 @@ Then **use** the grant only — for example, skip acquiring that lock and procee
 - A caller whose parent context occupies capacity cannot submit/acquire (`NESTED_ACQUISITION_REJECTED`) or block on non-terminal jobs (`wait`, `events --follow`, `logs --follow` → `NESTED_WAIT_REJECTED`). Non-blocking reads and terminal observation remain allowed.
 - Supported scope: one macOS arm64 machine, one user, already-running registered VMs (persistent; never reset). No MCP transport is required; external leases are not exposed in v0.1.0.
 - Never: install into production during packaging, auto-enroll UTM VMs, bypass permissions, disable SSH host-key checking, or delete `~/.aquarium-dev`, foreign Git hooks, Sorage data, or host skills.
+
+For supplementary recollect/dispose, inspect the complete plan and its evidence-loss scope. Resource-v2 plans use `haepari.recovery-plan/v3` with signed finite resource lifecycle budgets; resource-v1 keeps its original shape. Apply only the authorized plan, save its key and replay that exact request after uncertainty. Do not extend saved recovery deadlines or infer deletion from an expired intent.
