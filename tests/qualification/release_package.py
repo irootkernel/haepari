@@ -210,7 +210,7 @@ def main() -> None:
         assert not _inventory_mismatches(package), _inventory_mismatches(package)
         # Scratch-copy negatives: missing, added and tampered are each detected
         # by BOTH the packaged helper and the independent inline inventory.
-        for mutation, victim in (("missing", "INSTALL.md"), ("added", "extra/SHA256SUMS"), ("tampered", "LICENSE")):
+        for mutation, victim in (("missing", "README.md"), ("added", "extra/SHA256SUMS"), ("tampered", "LICENSE")):
             copy = parent / f"negative-{mutation}"
             copy.mkdir()
             shutil.copytree(package, copy / names[0])

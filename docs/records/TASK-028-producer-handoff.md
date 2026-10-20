@@ -55,7 +55,9 @@ Private evidence intents are `haepari.evidence-recovery-intent/v1`, `v2`, and `v
 
 ## Operator actions and install
 
-The independent install path is [packaging/INSTALL.md](../../packaging/INSTALL.md): verify the archive, run the binary outside the checkout, then `service plan --release` for an isolated user instance. Packaging does not auto-install. The paired guide is [use-haepari](../../skill/use-haepari/SKILL.md).
+The independent install path is [README.md](../../README.md#install-a-release): verify the archive, run the binary outside the checkout, then `service plan --release` for an isolated user instance. Packaging does not auto-install. The paired guide is [use-haepari](../../skill/use-haepari/SKILL.md).
+
+As of 2026-10-21, the README is the installation guide for rebuilt archives with new artifact identities. The frozen package handed off above retains its original `INSTALL.md` and the same installation steps; its qualification does not transfer to rebuilt archives.
 
 Packaged examples are `haepari.resource/v1` local and lock resources and `haepari.job/v1` local automatic and manual jobs. Files under [docs/examples](../examples/README.md) are design fixtures. The VM templates there are illustrative. The lease templates are deferred external-execution fixtures, not v0.1.0 release tests.
 

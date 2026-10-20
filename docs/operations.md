@@ -34,7 +34,7 @@ Qualify product survival with the explicit installed-service check in [TESTING.m
 
 ## Release candidate package (TASK-025)
 
-The unpublished release candidate is assembled by `make release` (`build/release.sh`) into a fresh `dist/` directory: a version-stamped standalone `haepari` binary, the complete `use-haepari` skill tree, exercised portable examples, the packaged `verify_tree.py` complete-inventory helper, the unchanged MIT `LICENSE`, `INSTALL.md`, a basename-relative archive sidecar and an in-tree `SHA256SUMS` that excludes itself. The package is a candidate, not official distribution; publication remains a separate authority.
+The unpublished release candidate is assembled by `make release` (`build/release.sh`) into a fresh `dist/` directory: a version-stamped standalone `haepari` binary, the complete `use-haepari` skill tree, exercised portable examples, the packaged `verify_tree.py` complete-inventory helper, the unchanged MIT `LICENSE`, the repository `README.md` with installation instructions, a basename-relative archive sidecar and an in-tree `SHA256SUMS` that excludes itself. The package is a candidate, not official distribution; publication remains a separate authority.
 
 Install the explicit user release service only after reviewing a saved plan:
 

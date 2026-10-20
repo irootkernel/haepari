@@ -19,7 +19,7 @@ if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
     echo 'release packaging requires darwin/arm64' >&2
     exit 2
 fi
-for required in packaging/INSTALL.md packaging/examples/resource-local.json \
+for required in README.md packaging/examples/resource-local.json \
     packaging/examples/resource-lock.json packaging/examples/job-local-auto.json \
     packaging/examples/job-local-manual.json skill/use-haepari/SKILL.md \
     LICENSE build/build.sh; do
@@ -46,7 +46,7 @@ tree="$staging/$name"
 mkdir -p "$tree/skill" "$tree/examples"
 
 GO="${GO:-go}" sh build/build.sh "$tree/haepari" "$version"
-cp packaging/INSTALL.md "$tree/INSTALL.md"
+cp README.md "$tree/README.md"
 cp LICENSE "$tree/LICENSE"
 cp packaging/verify_tree.py "$tree/verify_tree.py"
 cp packaging/examples/*.json "$tree/examples/"

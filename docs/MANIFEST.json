@@ -39,8 +39,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 17478,
-      "sha256": "b9d8635631d26ed084a164a1ed25c9645abf184844065c9472b3da29e69782c4"
+      "bytes": 17474,
+      "sha256": "00b24fc033a69b032e94c8b6cdf94dd0972614cee0b4ddff07a58051100edb79"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -175,7 +175,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "c7f6c83be169cad9b04f4ee6237b947903bfa914678d1ba38b32e29cde0e6f9f"
+      "sha256": "81173f975e96d7355c6e0e2031e21b058e24c4298f64fe76e961230124abac0a"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -319,13 +319,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 52880,
-      "sha256": "17a1086b5e308ac2511ea223b2c4b5ccc24bc4e9724b857adfae137c50956f23"
+      "bytes": 52925,
+      "sha256": "51083bd7d5afaba341904e6dfcb805c29a91a04efaf66f6f7a0600c72b5cbc34"
     },
     {
       "path": "package-validation.md",
       "bytes": 9006,
-      "sha256": "8c40d20265cc493f77e4dc95ecf2f5ef512abefb3071f1ec9e46ccfe8c7e4f9b"
+      "sha256": "5471e22c61059486e4eba37d521225702942644627451e21de8e80eafefa5b0d"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -379,13 +379,13 @@
     },
     {
       "path": "records/TASK-025-release-packaging.md",
-      "bytes": 7375,
-      "sha256": "231a37755816ea492d240a057c011bbb44153846e9fd655b5809473f7d211ceb"
+      "bytes": 7865,
+      "sha256": "663e6ed1ce34ed6ed78674f6b2c6228044303e4c4291bafef75ac5b01d575b5f"
     },
     {
       "path": "records/TASK-026-document-reconciliation.md",
-      "bytes": 9710,
-      "sha256": "6950f75cf3eeef0580f90d6e46a8f01d06d5b2da01a69fe37be1d403e6407f93"
+      "bytes": 9957,
+      "sha256": "79ccce69128d433b2b493c6e25173411f56656bb039578a0ba768ffecdf92141"
     },
     {
       "path": "records/TASK-027-release-acceptance.md",
@@ -394,8 +394,8 @@
     },
     {
       "path": "records/TASK-028-producer-handoff.md",
-      "bytes": 15369,
-      "sha256": "023f1256baf04b441bd7410e4b139eb2c71a7064ae8da2f5fbb965fb3ab99590"
+      "bytes": 15632,
+      "sha256": "5e02441aa48c3b19a40e8c1abf619d0aac13782deba59a08d49662d6cc750711"
     },
     {
       "path": "records/TASK-034-utm-probe.md",

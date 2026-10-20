@@ -4,6 +4,10 @@ Date: 2026-10-18. Documentation-only reconciliation plus a disposable local runb
 
 Baseline: commit `6dc12331ece76fbb26fbf73e400590677fccf039` with only the Main TASK-026 activation delta (`docs/roadmap.md`, `docs/MANIFEST.json`) dirty. Go sources are unchanged by this task; the TASK-025 common-gate pass covers the identical Go code, so verification was proportionate documentation/package/runbook checks (ADR-0020).
 
+Current installation guidance moved to [README.md](../../README.md#install-a-release)
+on 2026-10-21. References to `packaging/INSTALL.md` below describe the historical
+reconciliation and its original observed package; they are not current paths.
+
 ## Reconciled statements (changed)
 
 | Location | Stale claim | Correction |
