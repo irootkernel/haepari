@@ -24,6 +24,8 @@ type nativeEnd struct {
 var spawnBoundary func(string)                      // nil in production; native crash tests only
 var processCensus = platform.ProcessCensus          // native tests can inject observation failure
 var observeStartedProcess = platform.ObserveProcess // native tests can inject initial observation failure
+var endNotification func()                          // nil in production; notification-delay fixtures only
+var logNotification func()                          // nil in production; notification-delay fixtures only
 func boundary(name string) {
 	if spawnBoundary != nil {
 		spawnBoundary(name)
@@ -161,13 +163,27 @@ func supervise(d *directory, q Request, path string) (result error) {
 	go func() {
 		_, err := io.CopyBuffer(collector, logRead, make([]byte, 64<<10))
 		logRead.Close()
+		// The native log drain is already complete when this runs; only the
+		// buffered notification is delayed when a fixture installs this hook.
+		if logNotification != nil {
+			logNotification()
+		}
 		collected <- err
 	}()
 	var logComplete bool
 	var logFailure error
 	boundary("after_spawn")
 	ended := make(chan nativeEnd, 1)
-	go func() { err := cmd.Wait(); ended <- nativeEnd{err, time.Now()} }()
+	go func() {
+		err := cmd.Wait()
+		// Record the actual reap time before any fixture notification delay;
+		// an artificial hold must not shift native classification.
+		at := time.Now()
+		if endNotification != nil {
+			endNotification()
+		}
+		ended <- nativeEnd{err, at}
+	}()
 	process, err := observeStartedProcess(cmd.Process.Pid)
 	if err != nil {
 		recordUncertainty("start_observation", err)
@@ -202,6 +218,7 @@ func supervise(d *directory, q Request, path string) (result error) {
 	var stopping time.Time
 	cancelledBeforeOutcome := false
 	killed := false
+	completionAnnounced := false
 	for {
 		if !logComplete {
 			select {
@@ -220,32 +237,22 @@ func supervise(d *directory, q Request, path string) (result error) {
 			}
 		}
 		if end != nil && outcome == nil {
-			out := nativeOutcome(cmd, *end, deadline)
-			// FD 4 is close-on-exec: a failure byte comes only from the
-			// trampoline, never from a workload that happens to exit 126.
-			ack, err := io.ReadAll(io.LimitReader(status, 2))
-			if err != nil || len(ack) > 1 {
-				return ErrUnproven
-			}
-			if len(ack) == 1 {
-				if ack[0] != 'F' {
-					return ErrUnproven
-				}
-				out = managed.LocalOutcome{Started: false, WorkloadOutcome: "inconclusive"}
-				if cancelledBeforeExec {
-					out.WorkloadOutcome = "cancelled"
-				}
-				// A refused gate or failed exec is a no-start result, even
-				// after the deadline. Only an entered workload can time out.
-			}
-			if out.Started && cancelledBeforeOutcome && !stopping.IsZero() && end.at.After(stopping) && out.WorkloadOutcome != "timed_out" {
-				out.WorkloadOutcome = "cancelled"
+			out, err := classifyEnd(cmd, status, *end, deadline, cancelledBeforeExec, cancelledBeforeOutcome, stopping)
+			if err != nil {
+				return err
 			}
 			outcome = &out
 			if err := d.write("outcome.json", Outcome{Schema: managed.RunnerSchema("outcome"), Binding: q.Binding(), Outcome: out, ObservedAt: end.at.UTC()}); err != nil {
 				return err
 			}
 			boundary("after_outcome")
+		}
+		if end != nil && logComplete && !completionAnnounced {
+			// Completion-ready: the native end and log completion are both
+			// sampled and classified. Fires once, before any census; nil in
+			// production; census-overrun fixtures arm on this.
+			completionAnnounced = true
+			boundary("completion_ready")
 		}
 		alive, scanErr := tracker.scan()
 		recordUncertainty("process_census", scanErr)
@@ -259,6 +266,8 @@ func supervise(d *directory, q Request, path string) (result error) {
 		if stopping.IsZero() && (end != nil || cancelled || !time.Now().Before(deadline) || uncertainty != nil) {
 			stopping = time.Now()
 			recordUncertainty("signal_term", tracker.signal(unix.SIGTERM))
+			// Fires only after actual TERM dispatch; nil in production.
+			boundary("after_term")
 		}
 		if end != nil && len(alive) == 0 && scanErr == nil {
 			// Probe only; never signal an old PGID after reaping the leader.
@@ -269,6 +278,12 @@ func supervise(d *directory, q Request, path string) (result error) {
 				}
 				if err := log.Sync(); err != nil {
 					return err
+				}
+				if !stopping.IsZero() && !time.Now().Before(stopping.Add(time.Duration(q.TerminationSeconds)*time.Second)) {
+					// The original stop budget already elapsed before proof could
+					// be emitted. Route directly to terminal false handling; an
+					// expired budget must never yield proven termination.
+					return finish(d, q, *outcome, false, unprovenStopReason(uncertainty), end.at, collector.manifest())
 				}
 				if uncertainty != nil {
 					return finish(d, q, *outcome, false, "native_observation_uncertain", end.at, collector.manifest())
@@ -286,13 +301,48 @@ func supervise(d *directory, q Request, path string) (result error) {
 				recordUncertainty("signal_kill", tracker.signal(unix.SIGKILL))
 			}
 			if time.Since(stopping) >= budget {
+				// Terminal expired-budget path. Sample only completion that has
+				// already happened; never wait for a future notification, take
+				// another ticker turn, renew observation or signaling, or return
+				// to the proven path from here.
+				if end == nil {
+					select {
+					case observed := <-ended:
+						end = &observed
+					default:
+					}
+				}
+				if end != nil && outcome == nil {
+					out, err := classifyEnd(cmd, status, *end, deadline, cancelledBeforeExec, cancelledBeforeOutcome, stopping)
+					if err != nil {
+						return err
+					}
+					outcome = &out
+					if err := d.write("outcome.json", Outcome{Schema: managed.RunnerSchema("outcome"), Binding: q.Binding(), Outcome: out, ObservedAt: end.at.UTC()}); err != nil {
+						return err
+					}
+					boundary("after_outcome")
+				}
 				if !logComplete {
+					select {
+					case logFailure = <-collected:
+						logComplete = true
+					default:
+					}
+				}
+				if end == nil || !logComplete {
+					// Missing completion stays fail-closed with no exit
+					// receipt. A genuine outcome that already exists is
+					// preserved without inventing proof.
 					return ErrUnproven
 				}
-				if outcome == nil {
-					return ErrUnproven
+				if logFailure != nil && collector.gap == "" {
+					collector.gap = "log_read_failed"
 				}
-				return finish(d, q, *outcome, false, "termination_budget_expired", end.at, collector.manifest())
+				if err := log.Sync(); err != nil {
+					return err
+				}
+				return finish(d, q, *outcome, false, unprovenStopReason(uncertainty), end.at, collector.manifest())
 			}
 		}
 		<-tick.C
@@ -362,6 +412,43 @@ func nativeOutcome(cmd *exec.Cmd, end nativeEnd, deadline time.Time) managed.Loc
 		}
 	}
 	return out
+}
+
+// classifyEnd is the single completion classification shared by the ordinary
+// loop entry and the expired-budget terminal path. The status pipe is at EOF
+// once the native end has been observed, so this never waits on a future event.
+func classifyEnd(cmd *exec.Cmd, status *os.File, end nativeEnd, deadline time.Time, cancelledBeforeExec, cancelledBeforeOutcome bool, stopping time.Time) (managed.LocalOutcome, error) {
+	out := nativeOutcome(cmd, end, deadline)
+	// FD 4 is close-on-exec: a failure byte comes only from the
+	// trampoline, never from a workload that happens to exit 126.
+	ack, err := io.ReadAll(io.LimitReader(status, 2))
+	if err != nil || len(ack) > 1 {
+		return out, ErrUnproven
+	}
+	if len(ack) == 1 {
+		if ack[0] != 'F' {
+			return out, ErrUnproven
+		}
+		out = managed.LocalOutcome{Started: false, WorkloadOutcome: "inconclusive"}
+		if cancelledBeforeExec {
+			out.WorkloadOutcome = "cancelled"
+		}
+		// A refused gate or failed exec is a no-start result, even
+		// after the deadline. Only an entered workload can time out.
+	}
+	if out.Started && cancelledBeforeOutcome && !stopping.IsZero() && end.at.After(stopping) && out.WorkloadOutcome != "timed_out" {
+		out.WorkloadOutcome = "cancelled"
+	}
+	return out, nil
+}
+
+// unprovenStopReason names the cause of a false termination proof: an original
+// native observation uncertainty keeps priority over the later budget expiry.
+func unprovenStopReason(uncertainty error) string {
+	if uncertainty != nil {
+		return "native_observation_uncertain"
+	}
+	return "termination_budget_expired"
 }
 
 type processTracker struct {

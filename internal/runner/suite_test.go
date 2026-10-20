@@ -147,6 +147,75 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(Command([]string{"start", "--request", path}, os.Stdout, os.Stderr))
 	}
+	if len(os.Args) == 4 && os.Args[1] == "runner-terminal-fixture" {
+		mode, path := os.Args[2], os.Args[3]
+		root := filepath.Dir(path)
+		stall := 2*time.Second + 50*time.Millisecond
+		if d, q, err := readRequest(path); err == nil {
+			d.close()
+			stall = time.Duration(q.TerminationSeconds)*time.Second + 50*time.Millisecond
+		}
+		notify := strings.HasPrefix(mode, "notify-")
+		// Census and boundary hooks both run on the supervise goroutine, so
+		// this state stays single-goroutine; notification hooks only write
+		// their own markers on their completion goroutines.
+		termFired, readyFired, injected, overrun := false, false, false, false
+		censusCalls := 0
+		release := make(chan struct{})
+		time.AfterFunc(30*time.Second, func() { close(release) })
+		record := func(name string, value int) {
+			_ = os.WriteFile(filepath.Join(root, name), []byte(strconv.Itoa(value)), 0600)
+		}
+		processCensus = func() ([]platform.ProcessObservation, error) {
+			censusCalls++
+			record("census-count", censusCalls)
+			if notify && !injected {
+				if _, err := os.Stat(filepath.Join(root, "workspace/count.txt")); err == nil {
+					injected = true
+					return nil, ErrUnproven
+				}
+			}
+			if mode == "late-cancel" && termFired && readyFired && !overrun {
+				overrun = true
+				record("census-at-overrun", censusCalls)
+				// Proof-ready overrun: actual TERM dispatch and sampled,
+				// classified completion are both already marked. This single
+				// observation crosses the original stopping budget.
+				time.Sleep(stall)
+			}
+			return platform.ProcessCensus()
+		}
+		spawnBoundary = func(name string) {
+			switch name {
+			case "after_term":
+				// Strictly after actual TERM dispatch.
+				termFired = true
+				_ = os.WriteFile(filepath.Join(root, "after-term-seen"), nil, 0600)
+				if notify {
+					// Bounded post-TERM stall forces the expired-budget terminal
+					// branch while native completion has really happened and its
+					// buffered notifications are already delivered.
+					time.Sleep(stall)
+					record("census-at-term-stall", censusCalls)
+				}
+			case "completion_ready":
+				// The native end and log completion are both sampled.
+				readyFired = true
+				_ = os.WriteFile(filepath.Join(root, "completion-ready-seen"), nil, 0600)
+			}
+		}
+		mark := func(name string, hold bool) func() {
+			return func() {
+				_ = os.WriteFile(filepath.Join(root, name), nil, 0600)
+				if hold {
+					<-release
+				}
+			}
+		}
+		endNotification = mark("end-reaped", mode == "notify-end-held" || mode == "notify-both-held")
+		logNotification = mark("log-drained", mode == "notify-log-held" || mode == "notify-both-held")
+		os.Exit(Command([]string{"start", "--request", path}, os.Stdout, os.Stderr))
+	}
 	if len(os.Args) == 2 && os.Args[1] == "runner-escaped-child" {
 		signal.Ignore(syscall.SIGTERM)
 		time.Sleep(20 * time.Second)

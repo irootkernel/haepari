@@ -55,6 +55,9 @@ func launchFixture(root, point string) (*exec.Cmd, <-chan error) {
 		if strings.HasPrefix(point, "initial-") {
 			args = []string{"runner-initial-observation-fixture", strings.TrimPrefix(point, "initial-"), filepath.Join(root, "request.json")}
 		}
+		if strings.HasPrefix(point, "notify-") || point == "late-cancel" {
+			args = []string{"runner-terminal-fixture", point, filepath.Join(root, "request.json")}
+		}
 		if point == "cancel-before-exec" {
 			args = []string{"runner-cancel-fixture", filepath.Join(root, "request.json")}
 		}
@@ -468,4 +471,222 @@ var _ = ginkgo.Describe("Task009UncertaintyOutcome", ginkgo.Label("integration")
 			gomega.Expect(string(data)).To(gomega.Equal("once"))
 		})
 	}
+})
+
+// awaitTerminalFixtureFailure accepts only the intended native CLI refusal:
+// exit 2 with a RECOVERY_BLOCKED envelope, never an arbitrary subprocess crash.
+func awaitTerminalFixtureFailure(root string, done <-chan error) {
+	select {
+	case err := <-done:
+		var exit *exec.ExitError
+		gomega.Expect(errors.As(err, &exit)).To(gomega.BeTrue())
+		gomega.Expect(exit.ExitCode()).To(gomega.Equal(2))
+	case <-time.After(9 * time.Second):
+		ginkgo.Fail("bounded runner fixture did not exit; scratch root retained: " + root)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "diagnostics.log"))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	envelopeLine := ""
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "{") {
+			envelopeLine = line
+			break
+		}
+	}
+	envelope, err := managed.DecodeEnvelope([]byte(envelopeLine))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(envelope.OK).To(gomega.BeFalse())
+	gomega.Expect(envelope.Error.Code).To(gomega.Equal(managed.RecoveryBlocked))
+}
+
+func readTerminalCounter(root, name string) int {
+	data, err := os.ReadFile(filepath.Join(root, name))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	value, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	return value
+}
+
+func launchTerminalFixture(root, mode string) (<-chan error, <-chan struct{}) {
+	_, nativeDone := launchFixture(root, mode)
+	done := make(chan error, 1)
+	reaped := make(chan struct{})
+	go func() {
+		err := <-nativeDone
+		close(reaped)
+		done <- err
+	}()
+	return done, reaped
+}
+
+// Cleanup never signals. Wait must have reaped the original fixture, including
+// its held-notification goroutines, and the native workload must be gone too.
+// Check these facts here because a failing spec may skip its own assertions.
+func terminalFixtureCleanup(root string, reaped <-chan struct{}) {
+	retain := func(reason string) {
+		fmt.Fprintln(ginkgo.GinkgoWriter, "retained terminal fixture root:", root, reason)
+	}
+	select {
+	case <-reaped:
+	default:
+		retain("fixture Wait has not completed")
+		return
+	}
+	for _, marker := range []string{"end-reaped", "log-drained"} {
+		info, err := os.Lstat(filepath.Join(root, marker))
+		if err != nil || !info.Mode().IsRegular() {
+			retain("native completion marker missing or uncertain: " + marker)
+			return
+		}
+	}
+	view, err := Inspect(filepath.Join(root, "request.json"))
+	if err != nil || view.Start == nil {
+		retain("original native workload identity unavailable")
+		return
+	}
+	if _, err := platform.ObserveProcess(view.Start.Process.PID); !errors.Is(err, unix.ESRCH) {
+		retain("native workload PID absence unconfirmed")
+		return
+	}
+	if err := unix.Kill(-view.Start.Process.PGID, 0); !errors.Is(err, unix.ESRCH) {
+		retain("native workload group absence unconfirmed")
+		return
+	}
+	gomega.Expect(os.RemoveAll(root)).To(gomega.Succeed())
+}
+
+var _ = ginkgo.Describe("Task027TerminalCompletionPreservation", ginkgo.Label("integration"), func() {
+	// The workload handles TERM itself and exits 7, so a truthful native
+	// outcome exists by the time the stop budget expires.
+	trapWorkload := "trap 'exit 7' TERM; printf once >> count.txt; while :; do /bin/sleep 0.02; done"
+	ginkgo.It("preserves an available native completion at stop-budget expiry", func() {
+		root, _ := nativeFixture(trapWorkload)
+		done, reaped := launchTerminalFixture(root, "notify-full")
+		defer terminalFixtureCleanup(root, reaped)
+		path := filepath.Join(root, "request.json")
+		view := awaitFixture(root, done, false)
+		gomega.Expect(view.Exit).NotTo(gomega.BeNil())
+		gomega.Expect(view.Exit.TerminationProven).To(gomega.BeFalse())
+		gomega.Expect(view.Exit.Reason).To(gomega.Equal("native_observation_uncertain"))
+		gomega.Expect(view.Exit.Outcome.NativeExitCode).NotTo(gomega.BeNil())
+		gomega.Expect(*view.Exit.Outcome.NativeExitCode).To(gomega.Equal(7))
+		gomega.Expect(view.Exit.Outcome.WorkloadOutcome).To(gomega.Equal(managed.WorkloadOutcome("fail")))
+		// The first diagnostic stays the injected census uncertainty.
+		d, err := openDirectory(root)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		var diagnostic nativeDiagnostic
+		gomega.Expect(d.read("native-diagnostic.json", &diagnostic)).To(gomega.Succeed())
+		d.close()
+		gomega.Expect(diagnostic.Binding).To(gomega.Equal(view.Exit.Binding))
+		gomega.Expect(diagnostic.Operation).To(gomega.Equal("process_census"))
+		gomega.Expect(diagnostic.ErrorCode).To(gomega.Equal("unproven"))
+		// Real native reap and log drain happened before the budget expired.
+		_, err = os.ReadFile(filepath.Join(root, "end-reaped"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = os.ReadFile(filepath.Join(root, "log-drained"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		// Single terminal pass: after the post-TERM stall only the original
+		// current-iteration escalation census may run.
+		gomega.Expect(readTerminalCounter(root, "census-count") - readTerminalCounter(root, "census-at-term-stall")).To(gomega.Equal(1))
+		replay, err := StartRun(path)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(replay).To(gomega.Equal(view))
+		data, err := os.ReadFile(filepath.Join(root, "workspace/count.txt"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(string(data)).To(gomega.Equal("once"))
+	})
+	ginkgo.It("preserves a genuine outcome without exit when only the log notification is missing", func() {
+		root, _ := nativeFixture(trapWorkload)
+		done, reaped := launchTerminalFixture(root, "notify-log-held")
+		defer terminalFixtureCleanup(root, reaped)
+		path := filepath.Join(root, "request.json")
+		awaitTerminalFixtureFailure(root, done)
+		view, err := Inspect(path)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(view.Exit).To(gomega.BeNil())
+		gomega.Expect(view.Outcome).NotTo(gomega.BeNil())
+		gomega.Expect(view.Outcome.Outcome.NativeExitCode).NotTo(gomega.BeNil())
+		gomega.Expect(*view.Outcome.Outcome.NativeExitCode).To(gomega.Equal(7))
+		gomega.Expect(view.Outcome.Outcome.WorkloadOutcome).To(gomega.Equal(managed.WorkloadOutcome("fail")))
+		_, err = os.Stat(filepath.Join(root, "exit.json"))
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		// The completion really happened; only its notification was withheld.
+		_, err = os.ReadFile(filepath.Join(root, "end-reaped"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = os.ReadFile(filepath.Join(root, "log-drained"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		_, err = StartRun(path)
+		gomega.Expect(errors.Is(err, ErrAmbiguous)).To(gomega.BeTrue())
+		data, err := os.ReadFile(filepath.Join(root, "workspace/count.txt"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(string(data)).To(gomega.Equal("once"))
+	})
+	for _, mode := range []string{"notify-end-held", "notify-both-held"} {
+		mode := mode
+		ginkgo.It("fabricates no outcome or exit when the native end notification is missing "+mode, func() {
+			root, _ := nativeFixture(trapWorkload)
+			done, reaped := launchTerminalFixture(root, mode)
+			defer terminalFixtureCleanup(root, reaped)
+			path := filepath.Join(root, "request.json")
+			awaitTerminalFixtureFailure(root, done)
+			view, err := Inspect(path)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(view.Exit).To(gomega.BeNil())
+			gomega.Expect(view.Outcome).To(gomega.BeNil())
+			_, err = os.Stat(filepath.Join(root, "outcome.json"))
+			gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+			_, err = os.Stat(filepath.Join(root, "exit.json"))
+			gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+			// The reap and drain really happened before their notifications
+			// were withheld, so absence is a notification fact, not a guess.
+			_, err = os.ReadFile(filepath.Join(root, "end-reaped"))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			_, err = os.ReadFile(filepath.Join(root, "log-drained"))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			_, err = StartRun(path)
+			gomega.Expect(errors.Is(err, ErrAmbiguous)).To(gomega.BeTrue())
+			data, err := os.ReadFile(filepath.Join(root, "workspace/count.txt"))
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(string(data)).To(gomega.Equal("once"))
+		})
+	}
+	ginkgo.It("never proves a late completion after the original stop budget elapses", func() {
+		root, q := nativeFixture("printf once >> count.txt; exec /bin/sleep 30")
+		done, reaped := launchTerminalFixture(root, "late-cancel")
+		defer terminalFixtureCleanup(root, reaped)
+		path := filepath.Join(root, "request.json")
+		gomega.Eventually(func() string {
+			data, _ := os.ReadFile(filepath.Join(root, "workspace/count.txt"))
+			return string(data)
+		}, 4*time.Second, 25*time.Millisecond).Should(gomega.Equal("once"))
+		// A valid cancellation (not an injected observation error) stops the
+		// owned workload; uncertainty stays nil for this completion.
+		raw, err := json.Marshal(Cancellation{Schema: managed.RunnerSchema("cancel"), Binding: q.Binding(), RequestedAt: time.Now().UTC()})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(os.WriteFile(filepath.Join(root, "cancel.json"), raw, 0600)).To(gomega.Succeed())
+		view := awaitFixture(root, done, false)
+		gomega.Expect(view.Exit).NotTo(gomega.BeNil())
+		gomega.Expect(view.Exit.TerminationProven).To(gomega.BeFalse())
+		gomega.Expect(view.Exit.Reason).To(gomega.Equal("termination_budget_expired"))
+		gomega.Expect(view.Exit.Outcome.WorkloadOutcome).To(gomega.Equal(managed.WorkloadOutcome("cancelled")))
+		gomega.Expect(view.Exit.Outcome.NativeSignal).To(gomega.Equal("terminated"))
+		_, err = os.Stat(filepath.Join(root, "native-diagnostic.json"))
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		// Both prerequisites of the proof-ready overrun are marked: actual
+		// TERM dispatch and sampled, classified completion.
+		_, err = os.Stat(filepath.Join(root, "after-term-seen"))
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeFalse())
+		_, err = os.Stat(filepath.Join(root, "completion-ready-seen"))
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeFalse())
+		// The proof-ready census that crossed the budget is followed by at most
+		// the original current-iteration escalation census; a further ticker
+		// turn would add another observation and must never happen here.
+		gomega.Expect(readTerminalCounter(root, "census-count") - readTerminalCounter(root, "census-at-overrun")).To(gomega.BeNumerically("<=", 1))
+		replay, err := StartRun(path)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(replay).To(gomega.Equal(view))
+		data, err := os.ReadFile(filepath.Join(root, "workspace/count.txt"))
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(string(data)).To(gomega.Equal("once"))
+	})
 })

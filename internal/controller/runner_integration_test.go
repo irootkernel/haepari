@@ -98,12 +98,19 @@ var _ = ginkgo.Describe("Task009IndependentControllerRunner", ginkgo.Label("inte
 		// workload, while retaining an explicit unproven termination receipt.
 		gomega.Expect(os.WriteFile(filepath.Join(root, "cancel.json"), data, 0600)).To(gomega.Succeed())
 		release()
+		// Bound the wait by the saved runner's own outer horizon: its original
+		// request deadline plus its termination allowance and one supervisor
+		// observation slack, mirroring observeWithinRunBudgetWithWorker. No
+		// fresh run budget starts at release, and no extra delivery slack is
+		// added: the product's own observation slack already bounds controller
+		// settlement past the native runner horizon.
+		horizon := time.Until(q.Deadline) + time.Duration(q.TerminationSeconds)*time.Second + supervisorObservationSlack
 		select {
 		case err := <-done:
 			gomega.Expect(errors.Is(err, runner.ErrUnproven)).To(gomega.BeTrue())
 			s.failed(r.JobID, err)
-		case <-time.After(4 * time.Second):
-			ginkgo.Fail("controller did not bound unproven exit observation")
+		case <-time.After(horizon):
+			ginkgo.Fail("controller did not bound unproven exit observation within the saved runner horizon")
 		}
 		view, err := runner.Inspect(path)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

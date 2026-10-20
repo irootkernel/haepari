@@ -778,14 +778,16 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 			guest, facts, err := f.s.observeVMRecovery(snapshot)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(facts.Reboot).NotTo(gomega.BeNil())
-			// A short original authority window keeps this native boundary fixture
-			// bounded. No saved request or deadline is changed after publication.
-			plan.ExpiresAt = time.Now().UTC().Add(5 * time.Second)
+			// A bounded original authority window keeps this native boundary
+			// fixture timely while leaving the genuine native identity and
+			// attest exchanges enough headroom inside the immutable window.
+			// No saved request or deadline is changed after publication.
+			plan.ExpiresAt = time.Now().UTC().Add(15 * time.Second)
 			native := f.s.sshCommand
 			attests := 0
 			f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
 				archive := tar.NewReader(bytes.NewReader(input))
-				var shape struct{ Schema, Operation string }
+				var wire runner.GuestRecoveryRequest
 				for {
 					header, e := archive.Next()
 					if e != nil {
@@ -794,11 +796,11 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 					if header.Name == "request.json" {
 						raw, e := io.ReadAll(archive)
 						gomega.Expect(e).NotTo(gomega.HaveOccurred())
-						gomega.Expect(json.Unmarshal(raw, &shape)).To(gomega.Succeed())
+						gomega.Expect(json.Unmarshal(raw, &wire)).To(gomega.Succeed())
 						break
 					}
 				}
-				if shape.Schema != "haepari.guest-recovery-request/v2" || shape.Operation != "attest" {
+				if wire.Schema != "haepari.guest-recovery-request/v2" || wire.Operation != "attest" {
 					return native(ctx, exe, args, input)
 				}
 				attests++
@@ -806,7 +808,27 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 					return utm.CommandResult{}, errors.New("fixture lost undelivered attestation")
 				}
 				result, e := native(ctx, exe, args, input)
+				// Count a native success only with a completed transport and
+				// envelope, the full original identity binding, the exact
+				// attestation for this wire request and completion inside the
+				// original authority window.
 				gomega.Expect(e).NotTo(gomega.HaveOccurred(), result.Stderr)
+				gomega.Expect(result.ExitCode).To(gomega.Equal(0), result.Stderr)
+				envelope, e := managed.DecodeEnvelope([]byte(result.Stdout))
+				gomega.Expect(e).NotTo(gomega.HaveOccurred())
+				gomega.Expect(envelope.OK).To(gomega.BeTrue())
+				gomega.Expect(envelope.Operation).To(gomega.Equal("runner.guest-recovery"))
+				gomega.Expect(wire.Guest.Request.Identity).To(gomega.Equal(snapshot.Identity))
+				gomega.Expect(time.Now().Before(plan.ExpiresAt)).To(gomega.BeTrue())
+				reply, e := runner.DecodeGuestRecoveryReply(envelope.Data)
+				gomega.Expect(e).NotTo(gomega.HaveOccurred())
+				expected := rebootAttestation(wire)
+				gomega.Expect(runner.ValidateGuestAttestation(expected, wire.Guest)).To(gomega.Succeed())
+				gomega.Expect(reply.Schema).To(gomega.Equal("haepari.guest-recovery-reply/v2"))
+				gomega.Expect(reply.RecoveryDigest).To(gomega.Equal(wire.RecoveryDigest))
+				gomega.Expect(reply.ProtocolDigest).To(gomega.Equal(managed.RecoveryDigest(wire)))
+				gomega.Expect(reply.Attestation).NotTo(gomega.BeNil())
+				gomega.Expect(*reply.Attestation).To(gomega.Equal(expected))
 				if mode == "publication-only" {
 					// Model publication without durable retirement in private fixture
 					// state; the resumed native state read must reject this uncertainty.
@@ -819,6 +841,23 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 					raw, e = json.Marshal(control)
 					gomega.Expect(e).NotTo(gomega.HaveOccurred())
 					gomega.Expect(os.WriteFile(path, raw, 0600)).To(gomega.Succeed())
+				}
+				if mode == "completed" {
+					// The reply is discarded only after its bound native control
+					// proves genuine durable retirement inside the same window:
+					// full original request identity, an owner belonging to the
+					// control's own guest boot, and retired true.
+					path := filepath.Join(f.guest, ".haepari-control-"+r.JobID+".json")
+					raw, e := os.ReadFile(path)
+					gomega.Expect(e).NotTo(gomega.HaveOccurred())
+					var control runner.GuestControl
+					gomega.Expect(json.Unmarshal(raw, &control)).To(gomega.Succeed())
+					gomega.Expect(runner.ValidateGuestControl(control, wire.Guest)).To(gomega.Succeed())
+					gomega.Expect(control.NativeRequest).NotTo(gomega.BeNil())
+					gomega.Expect(*control.NativeRequest).To(gomega.Equal(wire.Guest.Request))
+					gomega.Expect(control.Request.Request.Identity).To(gomega.Equal(snapshot.Identity))
+					gomega.Expect(control.Owner.BootID).To(gomega.Equal(control.Request.BootID))
+					gomega.Expect(control.Retired).To(gomega.BeTrue())
 				}
 				return utm.CommandResult{}, errors.New("fixture lost completed attestation reply")
 			}
