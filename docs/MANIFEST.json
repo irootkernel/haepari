@@ -389,8 +389,8 @@
     },
     {
       "path": "records/TASK-027-release-acceptance.md",
-      "bytes": 45802,
-      "sha256": "46fc1c8aeeb2760df4cf4f75f11c023769c27443e7bb30c7b470117672464792"
+      "bytes": 46715,
+      "sha256": "5aa911e7ee93fd453d8106210bbe8db48f10f3ca82c0fa9f06d327660ae97e67"
     },
     {
       "path": "records/TASK-028-producer-handoff.md",
