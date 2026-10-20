@@ -424,8 +424,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 15989,
-      "sha256": "18f9772f3891d02ad71aeab57fea82ee2ed56bba13f230656acf11db324cc7de"
+      "bytes": 16524,
+      "sha256": "24c23a0e191422d08788ff582b8a78b52a8eab500f5614ffed256c5d13e010d1"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -460,7 +460,7 @@
     {
       "path": "roadmap/EPIC-007.md",
       "bytes": 8267,
-      "sha256": "64cfec658df9910b695d88d75f89e8174719fd8e54853246f7c216ba0af9508b"
+      "sha256": "b4bb40b57b78471694f278a6c290f200e5e7f5dcbd79efa69363584d545c973a"
     },
     {
       "path": "roadmap/EPIC-008.md",

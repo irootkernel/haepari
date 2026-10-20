@@ -15,6 +15,7 @@ Lifecycle status vocabulary:
 | Blocked | Waiting on a recorded external or real-environment prerequisite. |
 | In review | Implementation and evidence are submitted for review. |
 | Accepted | Reviewed acceptance evidence is recorded; only this file records it. |
+| Completed | Master has explicitly approved final Epic closeout; recorded candidate-specific qualification limits remain unchanged. |
 | Deferred | Outside the current release; re-entry needs a recorded decision. |
 | Cancelled | Withdrawn; history is retained. |
 
@@ -35,8 +36,10 @@ Lifecycle status vocabulary:
 | [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Accepted |
 | [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Accepted |
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Accepted |
-| [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | In progress |
+| [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Completed |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
+
+Master approved EPIC-007 final closeout on 2026-10-20 after the common-test corrections. TASK-025 through TASK-028 retain their Accepted status. Historical package and running-VM evidence remains bound to its recorded artifacts; the corrected package still requires its own qualification before release. This closeout neither records a new live observation nor authorizes installation or publication.
 
 EPIC-003 Canonical Outcomes: [managed core freeze](records/TASK-012-managed-core-freeze.md), [managed transitions](contracts/managed-transitions.md), [artifact delivery and retention](contracts/artifact-and-profile.md), and [operations](operations.md).
 
