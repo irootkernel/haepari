@@ -166,6 +166,9 @@ var _ = ginkgo.Describe("Task019ManualGuestRecovery", ginkgo.Label("integration"
 		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; cat input.txt > ../results/output.txt")
 		marker := filepath.Join(f.guest, "manual-recovery-marker")
 		manualGuestFixture(f, marker)
+		// Native preparation includes authenticated runner transfer and setup/smoke;
+		// its allowance is independent of the original human observation window.
+		f.job.Deadlines.PrepareSeconds = 30
 		original := f.s.sshCommand
 		var prepares, starts atomic.Int32
 		f.s.sshCommand = func(ctx context.Context, binary string, args []string, input []byte) (utm.CommandResult, error) {
@@ -180,11 +183,20 @@ var _ = ginkgo.Describe("Task019ManualGuestRecovery", ginkgo.Label("integration"
 		r, err := f.reserve(f.admit("manual-guest-recovery"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		done := make(chan error, 1)
+		prepareWindow := time.Duration(f.job.Deadlines.PrepareSeconds) * time.Second
+		prepareDeadline := time.Now().Add(prepareWindow)
 		go func() {
 			defer ginkgo.GinkgoRecover()
-			done <- f.s.executeVM(r, f.job, f.object, time.Now().Add(10*time.Second))
+			done <- f.s.executeVM(r, f.job, f.object, prepareDeadline)
 		}()
-		gomega.Eventually(func() string { r, _ := f.s.ledger.Snapshot(r.JobID); return r.JobState }, 10*time.Second, 20*time.Millisecond).Should(gomega.Equal("awaiting_manual"))
+		gomega.Eventually(func() string { r, _ := f.s.ledger.Snapshot(r.JobID); return r.JobState }, prepareWindow+supervisorObservationSlack, 20*time.Millisecond).Should(gomega.Equal("awaiting_manual"))
+		phases, err := f.s.ledger.LocalPhases(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(phases["prepare"].Completed).To(gomega.BeTrue())
+		gomega.Expect(phases["prepare"].Outcome).To(gomega.Equal("complete"))
+		gomega.Expect(phases["prepare"].BudgetSeconds).To(gomega.Equal(int64(30)))
+		gomega.Expect(phases["prepare"].Deadline).To(gomega.BeTemporally("==", prepareDeadline))
+		gomega.Expect(phases["prepare"].ObservedAt.After(phases["prepare"].Deadline)).To(gomega.BeFalse())
 		close(f.s.detached)
 		gomega.Eventually(done, 5*time.Second).Should(gomega.Receive(gomega.MatchError(errControllerDetached)))
 		f.s.workers.Wait()

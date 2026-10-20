@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
@@ -588,25 +589,68 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 		gomega.Expect(phases["collect"].Deadline).To(gomega.Equal(snap.Phases["collect"].Deadline))
 	})
 	ginkgo.It("cancels the original guest run and proves termination before releasing its lease", func() {
-		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf cancelled > ../results/output.txt; sleep 8")
+		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf cancelled > ../results/output.txt; sleep 60")
+		native := f.s.sshCommand
+		var terminationBeforeCleanup atomic.Bool
+		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
+			q := vmTransportRequest(input)
+			if q.Operation == "cleanup" {
+				requestPath := filepath.Join(f.guest, q.Request.Identity.JobID, "request.json")
+				request, err := runner.ReadRequest(requestPath)
+				if err != nil {
+					return utm.CommandResult{}, err
+				}
+				view, err := runner.Inspect(requestPath)
+				if err != nil {
+					return utm.CommandResult{}, err
+				}
+				status, err := f.s.ledger.ResourceStatus(f.spec.ID)
+				if err != nil {
+					return utm.CommandResult{}, err
+				}
+				if request.Identity != q.Request.Identity || view.Exit == nil || !view.Exit.TerminationProven || view.Exit.Outcome.WorkloadOutcome != "cancelled" || status.Occupancy != 1 {
+					return utm.CommandResult{}, errors.New("original guest cancellation must be proven before cleanup and lease release")
+				}
+				terminationBeforeCleanup.Store(true)
+			}
+			return native(ctx, exe, args, input)
+		}
 		r, err := f.reserve(f.admit("vm-cancel"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		done := make(chan error, 1)
+		prepareWindow := time.Duration(f.job.Deadlines.PrepareSeconds) * time.Second
+		prepareDeadline := time.Now().Add(prepareWindow)
 		go func() {
 			defer ginkgo.GinkgoRecover()
-			done <- f.s.executeVM(r, f.job, f.object, time.Now().Add(10*time.Second))
+			done <- f.s.executeVM(r, f.job, f.object, prepareDeadline)
 		}()
 		gomega.Eventually(func() bool {
 			_, err := os.Stat(filepath.Join(f.guest, r.JobID, "workspace/results/output.txt"))
 			return err == nil
-		}, 4*time.Second, 25*time.Millisecond).Should(gomega.BeTrue())
+		}, prepareWindow+supervisorObservationSlack, 25*time.Millisecond).Should(gomega.BeTrue())
 		current, err := f.s.ledger.Snapshot(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		_, err = f.s.requestCancel(managed.CancelRequest{JobID: r.JobID, ExpectedRevision: current.JobRevision, MutationKey: "cancel-original-vm"})
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		var runErr error
-		gomega.Eventually(done, 8*time.Second).Should(gomega.Receive(&runErr))
+		// Completion includes an in-flight run observation, termination, collection
+		// and cleanup. This observer must cover their existing saved budgets.
+		settlementWindow := time.Duration(f.job.Deadlines.RunSeconds+f.job.Deadlines.CollectSeconds+2*f.job.Deadlines.CleanupSeconds)*time.Second + 2*supervisorObservationSlack
+		gomega.Eventually(done, settlementWindow).Should(gomega.Receive(&runErr))
 		gomega.Expect(runErr).NotTo(gomega.HaveOccurred())
+		gomega.Expect(terminationBeforeCleanup.Load()).To(gomega.BeTrue())
+		phases, err := f.s.ledger.LocalPhases(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		for _, name := range []string{"run", "collect", "cleanup"} {
+			phase := phases[name]
+			gomega.Expect(phase.Completed).To(gomega.BeTrue(), name)
+			gomega.Expect(phase.Outcome).To(gomega.Equal("complete"), name)
+			until := phase.Deadline
+			if name == "run" {
+				until = until.Add(time.Duration(f.job.Deadlines.CleanupSeconds)*time.Second + supervisorObservationSlack)
+			}
+			gomega.Expect(phase.ObservedAt.After(until)).To(gomega.BeFalse(), name)
+		}
 		result, err := f.s.ledger.Result(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(result.FinalVerdict).To(gomega.Equal(managed.Cancelled))
