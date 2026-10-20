@@ -270,7 +270,13 @@ func recoveryLedgerNote(f *vmJobFixture, key string) (state, stage, owner string
 
 func attestedVMFixture() *vmJobFixture {
 	f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf retained > ../results/output.txt; printf once > once.txt")
-	f.job.Deadlines.CollectSeconds = 30
+	// Admit finite setup time for the transferred race executable before any
+	// Job is reserved. Recovery clocks and saved deadlines are not renewed.
+	f.job.Deadlines.PrepareSeconds = 30
+	f.job.Deadlines.RunSeconds = 30
+	// Each native recovery read authenticates and transfers the race executable.
+	// Admit the full inventory allowance before any saved phase is created.
+	f.job.Deadlines.CollectSeconds = 90
 	f.job.Deadlines.CleanupSeconds = 30
 	recorder := &guestCommandRecorder{}
 	guestCommandRecorders.Store(f, recorder)
@@ -482,7 +488,15 @@ var _ = ginkgo.Describe("GuestAttestedRecovery", ginkgo.Label("integration"), fu
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
 		response = vmMutationHTTP(f.s, "/v1/resources/"+f.spec.ID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: "guest-native-collect"})
-		gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())
+		intent, _, found, queryErr := f.s.ledger.EvidenceRecovery("evidence-recovery-guest-native-collect", "")
+		state, stage, owner := recoveryLedgerNote(f, "evidence-recovery-guest-native-collect")
+		var collectBudget, collectRemaining time.Duration
+		if found && len(intent.Jobs) != 0 {
+			collectBudget = intent.Jobs[0].CollectDeadline.Sub(intent.RecordedAt)
+			collectRemaining = time.Until(intent.Jobs[0].CollectDeadline)
+		}
+		ginkgo.GinkgoWriter.Printf("native supplementary recovery=%s stage=%s owner=%s collect_budget=%s collect_remaining=%s query_error=%v\n", state, stage, owner, collectBudget, collectRemaining, queryErr)
+		gomega.Expect(response.Code).To(gomega.Equal(200), "%s; recovery=%s stage=%s owner=%s collect_budget=%s collect_remaining=%s query_error=%v", response.Body.String(), state, stage, owner, collectBudget, collectRemaining, queryErr)
 		_, collected, _, err := f.s.ledger.EvidenceRecovery("evidence-recovery-guest-native-collect", "")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(collected.Complete).To(gomega.BeTrue())

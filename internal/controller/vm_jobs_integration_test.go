@@ -145,7 +145,7 @@ func (f *vmJobFixture) reserve(r managed.Receipt) (managed.Receipt, error) {
 func (f *vmJobFixture) run(id string) managed.Result {
 	r, err := f.reserve(f.admit(id))
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	err = f.s.executeVM(r, f.job, f.object, time.Now().Add(10*time.Second))
+	err = f.s.executeVM(r, f.job, f.object, time.Now().Add(time.Duration(f.job.Deadlines.PrepareSeconds)*time.Second))
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	result, err := f.s.ledger.Result(id)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())

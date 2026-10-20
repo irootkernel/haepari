@@ -62,16 +62,29 @@ func previousBootVMFixtureWithOutputs(finishedRetained, retainOutcome, failed bo
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		f.s.vmWrite = nil
 	} else {
+		successfulStarts := 0
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
 			result, err := native(ctx, exe, args, input)
-			if vmTransportRequest(input).Operation == "start" && err == nil {
-				return utm.CommandResult{}, errors.New("fixture lost original observer")
+			q := vmTransportRequest(input)
+			if q.Operation == "start" && err == nil && result.ExitCode == 0 && ctx.Err() == nil && time.Now().Before(q.Deadline) {
+				envelope, decodeErr := managed.DecodeEnvelope([]byte(result.Stdout))
+				if decodeErr == nil && envelope.OK && envelope.Operation == "runner.guest" {
+					successfulStarts++
+					if successfulStarts == 1 {
+						return utm.CommandResult{}, errors.New("fixture lost original observer")
+					}
+				}
 			}
 			return result, err
 		}
 		r, err = f.reserve(f.admit("previous-boot-original"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(f.s.executeVM(r, f.job, f.object, time.Now().Add(10*time.Second))).To(gomega.HaveOccurred())
+		executeErr := f.s.executeVM(r, f.job, f.object, time.Now().Add(time.Duration(f.job.Deadlines.PrepareSeconds)*time.Second))
+		gomega.Expect(successfulStarts).To(gomega.Equal(1), "previous-boot setup did not lose exactly one successful native start reply: %v", executeErr)
+		// SSH classifies a lost command reply instead of retaining our injected
+		// error identity. The counter and original receipts prove which reply.
+		gomega.Expect(errors.Is(executeErr, utm.ErrGuestUncertain)).To(gomega.BeTrue(), "%v", executeErr)
+		gomega.Expect(errors.Is(executeErr, utm.ErrUnavailable)).To(gomega.BeTrue(), "%v", executeErr)
 	}
 	// Wait within the original native run/termination bounds before seeding
 	// historical bytes. The shared helper's short receipt poll is not the
@@ -79,6 +92,9 @@ func previousBootVMFixtureWithOutputs(finishedRetained, retainOutcome, failed bo
 	requestPath := filepath.Join(f.guest, r.JobID, "request.json")
 	nativeRequest, e := runner.ReadRequest(requestPath)
 	gomega.Expect(e).NotTo(gomega.HaveOccurred())
+	expectedIdentity, e := f.s.ledger.LocalIdentity(r.JobID)
+	gomega.Expect(e).NotTo(gomega.HaveOccurred())
+	gomega.Expect(nativeRequest.Identity).To(gomega.Equal(expectedIdentity))
 	wait := time.Until(nativeRequest.Deadline) + time.Duration(nativeRequest.TerminationSeconds)*time.Second
 	if wait < time.Second {
 		wait = time.Second
