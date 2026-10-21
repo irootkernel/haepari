@@ -175,7 +175,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "81173f975e96d7355c6e0e2031e21b058e24c4298f64fe76e961230124abac0a"
+      "sha256": "1eff039e4e201e264a1291be029a89ca1232dfbae94c9ae2650a9d4d4c6b7241"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -224,8 +224,8 @@
     },
     {
       "path": "examples/README.md",
-      "bytes": 4831,
-      "sha256": "6623ecae7eb20ada575e7f9074a75a477db5dcbac729e6362007df3c42f9b32f"
+      "bytes": 4870,
+      "sha256": "a04f5129a28db8c0b2d222267276c9c3c86491dfb949ee92091c5efe8193d5b7"
     },
     {
       "path": "examples/config.template.json",
