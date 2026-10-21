@@ -14,12 +14,14 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 - Inspect the requested code and its named authorities before changing anything. Resolve discoverable facts before asking Master.
 - Reuse established facts; recheck affected information when state changes, evidence conflicts, or context is missing.
 - State material assumptions and trade-offs. Ask when ambiguity changes the result, and push back on conflicts with repository authority, safety, or Master's goal.
+- Before changing a feature, read applicable directory AGENTS.md files and the canonical documents relevant to the change. Respect the selected harness's native instruction scope and precedence.
 
 ### 3. Act on Sufficient Evidence
 
 - Once the root cause is established, implement the smallest complete, durable fix within the authorized scope.
 - Weigh correctness, performance, maintainability, and structural fit. Reuse established patterns and avoid speculative features or compatibility layers.
 - Preserve unrelated work and match local style. Record only independent remaining work in a canonical deferred-feedback owner; propose an owner for approval if none exists.
+- Read directory-guide adoption coverage in the root documentation index. Maintain affected canonical documents and existing applicable guides, including guides outside that coverage. Within adopted coverage, add guides for new feature boundaries as part of the authorized work. Report uncovered areas without unrelated backfill; guide absence alone adds no workflow blocker. Finish affected documentation before candidate review.
 
 ### 4. Carry Authorization Forward
 
