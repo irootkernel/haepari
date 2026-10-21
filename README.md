@@ -1,6 +1,6 @@
 # Haepari
 
-Haepari is an independent Go CLI and local controller for managed command jobs and advisory named locks. `make release` assembles the unpublished v0.1.0 release candidate — a standalone darwin/arm64 binary, the paired `use-haepari` skill tree, exercised portable examples and the packaged tree verifier. See [Install a release](#install-a-release) for binary and controller setup and [the agent setup below](#optional-configure-an-ai-coding-agent) for the paired skill. Publication remains a separate authority. The [development package](https://github.com/irootkernel/haepari/blob/main/docs/README.md) owns the planned contracts and roadmap.
+Haepari is an independent Go CLI and local controller for managed command jobs and advisory named locks. `make release` assembles a versioned release package — a standalone darwin/arm64 binary, the paired `use-haepari` skill tree, exercised portable examples and the packaged tree verifier. See [Install a release](#install-a-release) for binary and controller setup and [the agent setup below](#optional-configure-an-ai-coding-agent) for the paired skill. Published archives are identified by their [GitHub Release](https://github.com/irootkernel/haepari/releases). The [development package](https://github.com/irootkernel/haepari/blob/main/docs/README.md) owns the planned contracts and roadmap.
 
 ## Supported development scope
 
@@ -8,11 +8,12 @@ The first release targets one macOS arm64 machine, one user and one already-runn
 
 ## Install a release
 
-The current v0.1.0 archive is an **unpublished release candidate**, not an
-official distribution. It contains the standalone `haepari` CLI/controller,
-this `README.md`, the complete `skill/use-haepari/` tree, portable `examples/`,
-`verify_tree.py`, `SHA256SUMS`, and the MIT `LICENSE`. Installation is explicit;
-the archive does not install itself or enroll a VM.
+Select a versioned archive and its matching checksum sidecar from
+[GitHub Releases](https://github.com/irootkernel/haepari/releases). The archive
+contains the standalone `haepari` CLI/controller, this `README.md`, the complete
+`skill/use-haepari/` tree, portable `examples/`, `verify_tree.py`, `SHA256SUMS`,
+and the MIT `LICENSE`. Installation is explicit; the archive does not install
+itself or enroll a VM.
 
 Replace the angle-bracket placeholders below with the selected version, paths
 and IDs before running commands. Run the package commands from the extracted

@@ -59,6 +59,8 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 
 ## Project Configuration
 
+- Aquarium release notes: CHANGELOG.md
+
 ### Repository Index and Authorities
 
 - `docs/README.md` indexes the Haepari v0.1.0 design package and current implementation boundaries. Discover implemented build and test commands from `Makefile` and the common test contract in `TESTING.md`; the roadmap alone owns acceptance.
