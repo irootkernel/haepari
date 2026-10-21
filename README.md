@@ -188,10 +188,10 @@ The release archive also includes this directory as `skill/use-haepari/`.
 The current skill is one self-contained `SKILL.md`; install any additional
 files with it if a later version expands the tree.
 
-The default `main` reference selects development guidance. Haepari has no
-published stable release yet; after publication, select the matching release
-tag for guidance paired with an installed release. For an exact unpublished
-candidate, use the skill tree from its verified package instead of `main`.
+The default `main` reference selects development guidance. Select the matching
+release tag for guidance paired with an installed release. For an exact
+unpublished candidate, use the skill tree from its verified package instead of
+`main`.
 
 The following procedure downloads the skill before replacing an existing
 installation and restores the previous directory if the replacement fails:
