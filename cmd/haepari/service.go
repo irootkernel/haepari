@@ -398,7 +398,7 @@ func serviceCommand(args []string, stdout, stderr io.Writer) int {
 	file := flags.String("plan-file", "", "exact saved plan")
 	outputJSON := flags.Bool("json", false, "machine-readable response")
 	globalLimit := flags.Int("global-limit", 1, "positive global execution limit")
-	hostLimit := flags.Int("host-macos-guest-limit", 1, "host macOS guest capacity")
+	hostLimit := flags.Int("host-macos-guest-limit", 1, "compatibility setting (1 or 2); does not limit physical VM count")
 	release := flags.Bool("release", false, "plan the explicit user release service identity")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || !*outputJSON {
 		return 2

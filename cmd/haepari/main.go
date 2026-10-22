@@ -85,7 +85,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		backend := flags.String("backend", platform.DefaultBackend, "bootstrap backend")
 		cliRoot := flags.String("root", "", "absolute private state root")
 		configPath := flags.String("config", "", "private configuration file; a relative path uses the working directory")
-		hostLimit := flags.Int("host-macos-guest-limit", 1, "host macOS guest capacity, including operator VMs")
+		hostLimit := flags.Int("host-macos-guest-limit", 1, "compatibility setting (1 or 2); does not limit physical VM count")
 		globalLimit := flags.Int("global-limit", 1, "positive global execution limit")
 		if err := flags.Parse(args[2:]); err != nil {
 			return 2
