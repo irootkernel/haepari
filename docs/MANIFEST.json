@@ -184,8 +184,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 53713,
-      "sha256": "0892ed366fdb00be4772bb511daa3a8487fde9adec4e16fa7e54d42dffcbeb6d"
+      "bytes": 54030,
+      "sha256": "333f693140ca86c64be28f7d003bfca187e9b553c1e6cf1e1f2a614af67a867b"
     },
     {
       "path": "contracts/configuration.md",
@@ -224,8 +224,8 @@
     },
     {
       "path": "examples/README.md",
-      "bytes": 4831,
-      "sha256": "6623ecae7eb20ada575e7f9074a75a477db5dcbac729e6362007df3c42f9b32f"
+      "bytes": 4870,
+      "sha256": "a04f5129a28db8c0b2d222267276c9c3c86491dfb949ee92091c5efe8193d5b7"
     },
     {
       "path": "examples/config.template.json",

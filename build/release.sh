@@ -22,7 +22,7 @@ fi
 for required in README.md packaging/examples/resource-local.json \
     packaging/examples/resource-lock.json packaging/examples/job-local-auto.json \
     packaging/examples/job-local-manual.json skill/use-haepari/SKILL.md \
-    LICENSE build/build.sh; do
+    LICENSE THIRD_PARTY_NOTICES.txt build/build.sh; do
     if [ ! -e "$required" ]; then
         echo "missing package input: $required (run from the repository root)" >&2
         exit 2
@@ -48,6 +48,7 @@ mkdir -p "$tree/skill" "$tree/examples"
 GO="${GO:-go}" sh build/build.sh "$tree/haepari" "$version"
 cp README.md "$tree/README.md"
 cp LICENSE "$tree/LICENSE"
+cp THIRD_PARTY_NOTICES.txt "$tree/THIRD_PARTY_NOTICES.txt"
 cp packaging/verify_tree.py "$tree/verify_tree.py"
 cp packaging/examples/*.json "$tree/examples/"
 cp -R skill/use-haepari "$tree/skill/use-haepari"

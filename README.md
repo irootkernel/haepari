@@ -12,7 +12,8 @@ Select a versioned archive and its matching checksum sidecar from
 [GitHub Releases](https://github.com/irootkernel/haepari/releases). The archive
 contains the standalone `haepari` CLI/controller, this `README.md`, the complete
 `skill/use-haepari/` tree, portable `examples/`, `verify_tree.py`, `SHA256SUMS`,
-and the MIT `LICENSE`. Installation is explicit; the archive does not install
+the MIT `LICENSE`, and `THIRD_PARTY_NOTICES.txt` for the bundled runtime and
+dependencies. Installation is explicit; the archive does not install
 itself or enroll a VM.
 
 Replace the angle-bracket placeholders below with the selected version, paths
@@ -188,10 +189,10 @@ The release archive also includes this directory as `skill/use-haepari/`.
 The current skill is one self-contained `SKILL.md`; install any additional
 files with it if a later version expands the tree.
 
-The default `main` reference selects development guidance. Haepari has no
-published stable release yet; after publication, select the matching release
-tag for guidance paired with an installed release. For an exact unpublished
-candidate, use the skill tree from its verified package instead of `main`.
+The default `main` reference selects development guidance. Select the matching
+release tag for guidance paired with an installed release. For an exact
+unpublished candidate, use the skill tree from its verified package instead of
+`main`.
 
 The following procedure downloads the skill before replacing an existing
 installation and restores the previous directory if the replacement fails:
@@ -344,6 +345,6 @@ An idle VM configuration update uses `resource update --file <revision-plus-one.
 
 TASK-014 provides the authenticated guest transport and transient runner used by the next integration step. It transfers the digest-pinned runner with the sealed input, verifies the registered host key, current MAC lease and boot identity, and reconnects to the original run receipts and output. A disconnected SSH observer does not stop or restart the workload. TASK-015 connects public automatic development VM Jobs to bounded collection, owned Job cleanup, quarantine and recovery. Provision guest authentication separately; see the [SSH mapping and protocol](https://github.com/irootkernel/haepari/blob/main/docs/contracts/resource-and-runner.md#ssh-and-guest-supervision). The accepted [TASK-016 qualification](https://github.com/irootkernel/haepari/blob/main/docs/records/TASK-016-vm-contract-freeze.md) covers one already-running registered macOS VM. Actual DHCP expiry, logout/post-login recovery, multi-day uptime and two-VM operation remain [optional hardening](https://github.com/irootkernel/haepari/blob/main/docs/deferred-feedback.md), outside v0.1.0 release obligations.
 
-The foreground daemon accepts `--host-macos-guest-limit 1|2` (default 1). It counts observed running VMs and protected power claims before reservation. At capacity, only an explicitly eligible registered idle VM may be stopped; otherwise the Job stays queued under its original deadline. Set 2 only for an independently qualified operator configuration.
+The foreground daemon accepts `--host-macos-guest-limit 1|2` (default 1) as a legacy compatibility setting. It grants no VM power-control authority. Reservations enforce managed global/per-resource occupancy and unresolved historical power fences, and the selected VM must already be running.
 
 VM results are immutable after settlement. Failed required collection retains the exact guest Job directory and quarantines the VM; unknown workload or collector termination also retains occupancy. Use the original Job's revision-bound recovery plan before idle resource recollection or explicit disposal, then a separate health plan before reuse. See [TASK-015's boundary](https://github.com/irootkernel/haepari/blob/main/docs/records/TASK-015-vm-job-recovery.md). Neither implemented dispatch nor fake/native fixtures qualify a real UTM installation.

@@ -147,6 +147,70 @@ var _ = ginkgo.Describe("Task008ObserverClient", ginkgo.Label("unit"), func() {
 		gomega.Expect(got).To(gomega.Equal(bytes))
 	})
 
+	ginkgo.DescribeTable("preserves retained terminal log evidence gaps", func(reason string) {
+		retained := []byte("abcdefgh")
+		for _, after := range []int64{0, 4, 8} {
+			identity := "file-1"
+			if after == 0 {
+				identity = ""
+			}
+			page := LogPage{JobID: "job-1", Identity: "file-1", Offset: after, NextOffset: 8, Size: 8, Data: retained[after:], Snapshot: managed.Receipt{JobID: "job-1", JobState: "finished"}, Gap: &LogGap{Reason: reason, RequestedOffset: after, ResumeOffset: 8, PreviousIdentity: "file-1"}}
+			body := mustJSON(ginkgo.GinkgoT(), Envelope{Schema: "haepari.envelope/v1", Operation: "logs", OK: true, Data: mustJSON(ginkgo.GinkgoT(), page)})
+			c := &Client{http: &http.Client{Transport: responseTransport{body: body}}}
+			got, _, err := c.Logs(context.Background(), "job-1", LogsOptions{After: after, Identity: identity})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(got.Data).To(gomega.Equal(retained[after:]))
+			gomega.Expect(got.Gap).To(gomega.Equal(page.Gap))
+			gomega.Expect(got.NextOffset).To(gomega.Equal(int64(8)))
+
+			transport := &observerTransport{body: observerLines(
+				Record{Schema: ObserverSchema, Type: "resync", JobID: "job-1", Offset: 8, Identity: "file-1", Logs: &page},
+				Record{Schema: ObserverSchema, Type: "end", JobID: "job-1", Offset: 8, Identity: "file-1", Reason: "finished"},
+			)}
+			c = &Client{http: &http.Client{Transport: transport}}
+			followed := []byte{}
+			var types []string
+			err = c.FollowLogs(context.Background(), "job-1", LogsOptions{After: after, Identity: identity}, func(r Record) error {
+				types = append(types, r.Type)
+				if r.Logs != nil {
+					followed = append(followed, r.Logs.Data...)
+					gomega.Expect(r.Logs.Gap).To(gomega.Equal(page.Gap))
+				}
+				return nil
+			})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(followed).To(gomega.Equal([]byte(retained[after:])))
+			gomega.Expect(types).To(gomega.Equal([]string{"resync", "end"}))
+			gomega.Expect(transport.closed).To(gomega.BeTrue())
+		}
+	},
+		ginkgo.Entry("native log bound", "log_limit"),
+		ginkgo.Entry("native write failure", "log_write_failed"),
+		ginkgo.Entry("native read failure", "log_read_failed"),
+		ginkgo.Entry("pinned bound", "pinned_log_exceeded"),
+		ginkgo.Entry("missing native manifest", "native_log_manifest_missing"),
+		ginkgo.Entry("uncollected guest log", "guest_log_uncollected"),
+	)
+
+	ginkgo.DescribeTable("rejects malformed terminal log evidence gaps", func(change func(*LogPage)) {
+		page := LogPage{JobID: "job-1", Identity: "file-1", Offset: 4, NextOffset: 8, Size: 8, Data: []byte("efgh"), Snapshot: managed.Receipt{JobID: "job-1", JobState: "finished"}, Gap: &LogGap{Reason: "log_limit", RequestedOffset: 4, ResumeOffset: 8, PreviousIdentity: "file-1"}}
+		change(&page)
+		body := mustJSON(ginkgo.GinkgoT(), Envelope{Schema: "haepari.envelope/v1", Operation: "logs", OK: true, Data: mustJSON(ginkgo.GinkgoT(), page)})
+		c := &Client{http: &http.Client{Transport: responseTransport{body: body}}}
+		_, _, err := c.Logs(context.Background(), "job-1", LogsOptions{After: 4, Identity: "file-1"})
+		gomega.Expect(err).To(gomega.HaveOccurred())
+	},
+		ginkgo.Entry("unknown reason", func(p *LogPage) { p.Gap.Reason = "other" }),
+		ginkgo.Entry("wrong requested offset", func(p *LogPage) { p.Gap.RequestedOffset++ }),
+		ginkgo.Entry("wrong previous identity", func(p *LogPage) { p.Gap.PreviousIdentity = "other" }),
+		ginkgo.Entry("reset checkpoint", func(p *LogPage) { p.Gap.ResumeOffset = 0 }),
+		ginkgo.Entry("unfinished job", func(p *LogPage) { p.Snapshot.JobState = "running" }),
+		ginkgo.Entry("undrained bytes", func(p *LogPage) { p.Size++; p.More = true }),
+		ginkgo.Entry("file replacement", func(p *LogPage) { p.Identity = "other"; p.Gap.PreviousIdentity = "other" }),
+		ginkgo.Entry("missing identity", func(p *LogPage) { p.Identity = ""; p.Gap.PreviousIdentity = "" }),
+		ginkgo.Entry("rewound retained prefix", func(p *LogPage) { p.Offset = 3; p.Data = []byte("defgh") }),
+	)
+
 	ginkgo.DescribeTable("rejects log range and identity corruption", func(change func(*LogPage)) {
 		p := LogPage{JobID: "job-1", Identity: "file-1", Offset: 3, NextOffset: 6, Size: 6, Data: []byte("abc"), Snapshot: managed.Receipt{JobID: "job-1", JobState: "finished"}}
 		change(&p)
