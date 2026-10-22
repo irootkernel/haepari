@@ -164,7 +164,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--scenario", default="release-package", help="unique owned observation name")
-    parser.add_argument("--version", default="0.1.0")
+    parser.add_argument("--version", default="0.1.1")
     args = parser.parse_args()
     assert re.fullmatch(r"[a-z][a-z0-9-]{0,31}", args.scenario), "scenario must be a short lowercase slug"
     instance = f"h7-t25-rel-{args.scenario}"

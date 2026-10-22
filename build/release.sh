@@ -7,7 +7,7 @@ set -eu
 # sidecar that binds the whole archive. SHA256SUMS inside the archive lists
 # every file except itself. Existing outputs are never replaced destructively:
 # the run refuses when the target archive already exists.
-version=${1:-0.1.0}
+version=${1:-0.1.1}
 output=${2:-dist}
 case "$version" in
     ''|*[!0-9A-Za-z.-]*)
