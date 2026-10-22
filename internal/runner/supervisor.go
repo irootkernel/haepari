@@ -256,6 +256,17 @@ func supervise(d *directory, q Request, path string) (result error) {
 		}
 		alive, scanErr := tracker.scan()
 		recordUncertainty("process_census", scanErr)
+		signal := func(value unix.Signal) error {
+			if scanErr != nil {
+				// A failed census still requires a fresh best-effort stop;
+				// its original uncertainty remains recorded above.
+				alive, scanErr = tracker.scan()
+				if scanErr != nil {
+					return scanErr
+				}
+			}
+			return signalObserved(alive, value)
+		}
 		cancelled, cancelErr := cancellation(d, q)
 		recordUncertainty("cancellation_observation", cancelErr)
 		// Uncertainty can require a stop without a cancellation request.
@@ -265,7 +276,7 @@ func supervise(d *directory, q Request, path string) (result error) {
 		}
 		if stopping.IsZero() && (end != nil || cancelled || !time.Now().Before(deadline) || uncertainty != nil) {
 			stopping = time.Now()
-			recordUncertainty("signal_term", tracker.signal(unix.SIGTERM))
+			recordUncertainty("signal_term", signal(unix.SIGTERM))
 			// Fires only after actual TERM dispatch; nil in production.
 			boundary("after_term")
 		}
@@ -298,7 +309,7 @@ func supervise(d *directory, q Request, path string) (result error) {
 			budget := time.Duration(q.TerminationSeconds) * time.Second
 			if !killed && time.Since(stopping) >= min(2*time.Second, budget/2) {
 				killed = true
-				recordUncertainty("signal_kill", tracker.signal(unix.SIGKILL))
+				recordUncertainty("signal_kill", signal(unix.SIGKILL))
 			}
 			if time.Since(stopping) >= budget {
 				// Terminal expired-budget path. Sample only completion that has
@@ -501,6 +512,14 @@ func (t *processTracker) signal(signal unix.Signal) error {
 	if err != nil {
 		return err
 	}
+	return signalObserved(alive, signal)
+}
+
+// Reuse this iteration's census instead of spending the stop budget on another
+// whole-host scan. SignalProcess still rechecks each complete native identity
+// immediately before signaling; a changed or absent process is never inferred
+// from the earlier census alone.
+func signalObserved(alive []platform.ProcessIdentity, signal unix.Signal) error {
 	for _, id := range alive {
 		if err := platform.SignalProcess(id, signal); err != nil && !errors.Is(err, unix.ESRCH) && !errors.Is(err, unix.ENOENT) {
 			return err

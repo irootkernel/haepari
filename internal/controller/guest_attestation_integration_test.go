@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -269,7 +270,14 @@ func recoveryLedgerNote(f *vmJobFixture, key string) (state, stage, owner string
 }
 
 func attestedVMFixture() *vmJobFixture {
+	f := attestedBootstrapVMFixture()
+	installNativeGuestCommands(f)
+	return f
+}
+
+func attestedBootstrapVMFixture() *vmJobFixture {
 	f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf retained > ../results/output.txt; printf once > once.txt")
+	f.s.vmExecutable = func() (string, error) { return nativeGuestExecutable, nil }
 	// Admit finite setup time for the transferred race executable before any
 	// Job is reserved. Recovery clocks and saved deadlines are not renewed.
 	f.job.Deadlines.PrepareSeconds = 30
@@ -327,6 +335,73 @@ func applyGuestPlan(f *vmJobFixture, plan resourceRecoveryPlan, key string, evid
 }
 
 var _ = ginkgo.Describe("GuestAttestedRecovery", ginkgo.Label("integration"), func() {
+	ginkgo.It("executes the original bootstrap for native observations and refuses a changed archive digest", func() {
+		f := attestedBootstrapVMFixture()
+		q := runner.GuestRequest{Schema: "haepari.guest-request/v1", Operation: "identity", VMUUID: f.spec.VM.UTMVMUUID, MAC: f.spec.VM.MACAddress, JobRoot: f.guest}
+		q.Request.Identity.ResourceID = f.spec.ID
+		q.Request.Identity.ConfigRevision = f.spec.Revision
+		call := func() (runner.GuestReply, error) {
+			transport, err := f.s.vmSSH(f.spec)
+			if err != nil {
+				return runner.GuestReply{}, err
+			}
+			q.RunnerDigest = transport.RunnerDigest
+			// Transfer/setup coverage admits its own finite clock before any Job;
+			// saved Job and recovery clocks are exercised by the native fixtures.
+			q.Deadline = time.Now().Add(time.Minute)
+			leases, err := f.s.vmLeases()
+			if err != nil {
+				return runner.GuestReply{}, err
+			}
+			defer leases.Close()
+			return transport.Call(context.Background(), f.spec, leases, q)
+		}
+		reply, err := call()
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(reply.VMUUID).To(gomega.Equal(q.VMUUID))
+		gomega.Expect(reply.MAC).To(gomega.Equal(q.MAC))
+		gomega.Expect(reply.BootID).NotTo(gomega.BeEmpty())
+
+		native := f.s.sshCommand
+		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
+			archive := tar.NewReader(bytes.NewReader(input))
+			var changed bytes.Buffer
+			writer := tar.NewWriter(&changed)
+			for {
+				header, err := archive.Next()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return utm.CommandResult{}, err
+				}
+				data, err := io.ReadAll(archive)
+				if err != nil {
+					return utm.CommandResult{}, err
+				}
+				if header.Name == "digest" {
+					data = bytes.Repeat([]byte("0"), len(data))
+				}
+				if err = writer.WriteHeader(header); err != nil {
+					return utm.CommandResult{}, err
+				}
+				if _, err = writer.Write(data); err != nil {
+					return utm.CommandResult{}, err
+				}
+			}
+			if err := writer.Close(); err != nil {
+				return utm.CommandResult{}, err
+			}
+			return native(ctx, exe, args, changed.Bytes())
+		}
+		_, err = call()
+		gomega.Expect(err).To(gomega.HaveOccurred())
+		gomega.Expect(os.ReadDir(f.guest)).To(gomega.BeEmpty())
+		status, err := f.s.ledger.ResourceStatus(f.spec.ID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(status.Availability).To(gomega.Equal("available"))
+		gomega.Expect(status.Occupancy).To(gomega.BeZero())
+	})
 	ginkgo.It("retains source and quarantine when exact existing host artifact parent sync fails", func() {
 		f := attestedVMFixture()
 		f.s.vmWrite = func(*os.File, []byte) (int, error) { return 0, unix.ENOSPC }

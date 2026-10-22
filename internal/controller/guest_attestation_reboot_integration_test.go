@@ -302,6 +302,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 			fresh, err := newRuntime(old.root, old.ledger, old.store)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			fresh.utmCommand, fresh.sshCommand, fresh.vmLeases = old.utmCommand, old.sshCommand, old.vmLeases
+			fresh.vmExecutable = old.vmExecutable
 			f.s = fresh
 			var extraEffects []string
 			fresh.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
@@ -639,7 +640,6 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 
 	ginkgo.It("keeps a delayed ordinary reboot probe on its five second clock without recovery authority", func() {
 		f, r := previousBootVMFixture()
-		installInProcessGuestRecoveryObservations(f)
 		before, err := f.s.ledger.RecoverySnapshot(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		receipts := map[string][]byte{}
@@ -700,7 +700,6 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		boundary := boundary
 		ginkgo.It("resumes only committed reboot settlement after a stopped controller at "+boundary, func() {
 			f, r := previousBootVMFixture()
-			installInProcessGuestRecoveryObservations(f)
 			original, err := f.s.ledger.RecoverySnapshot(r.JobID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			plan, err := f.s.planJobRecovery(r.JobID, "reconcile")
@@ -733,6 +732,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 			fresh, err := newRuntime(old.root, old.ledger, old.store)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			fresh.utmCommand, fresh.sshCommand, fresh.vmLeases = old.utmCommand, old.sshCommand, old.vmLeases
+			fresh.vmExecutable = old.vmExecutable
 			f.s = fresh
 			gomega.Expect(fresh.tryRecoverInterrupted(r.JobID, true, nil)).To(gomega.Succeed())
 			fresh.workers.Wait()

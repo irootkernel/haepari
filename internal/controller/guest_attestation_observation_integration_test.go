@@ -6,14 +6,18 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
-	"github.com/irootkernel/haepari/internal/runner"
 	"github.com/irootkernel/haepari/internal/utm"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -27,31 +31,24 @@ type attestationExchange struct {
 	At        time.Time
 }
 
-// Prepare with short-lived native guest owners before installing the observation
-// dispatcher. An in-process preparation owner would still be alive and must block
-// attestation.
+// Preparation effects use short-lived native guest owners. An in-process
+// preparation owner would still be alive and must block attestation.
 func attestationObservationFixture() (*vmJobFixture, managed.Result, []byte) {
 	f := attestedVMFixture()
 	f.s.vmWrite = func(*os.File, []byte) (int, error) { return 0, unix.ENOSPC }
 	original := f.run("attestation-observation")
 	exit := falseVMExit(f, original.JobID)
 	f.s.vmWrite = nil
-	installInProcessGuestRecoveryObservations(f)
 	return f, original, exit
 }
 
-// These fixtures test observation clocks and host crash boundaries, not transfer
-// speed. Keep the real JSON/identity/boot/root/census/deadline validation without
-// two full race-binary bootstraps. All effects and ordinary guest state requests
-// still use the original native command. Call only after native owners stop.
-func installInProcessGuestRecoveryObservations(f *vmJobFixture) {
-	native := f.s.sshCommand
+// Reuse verified executable bytes in native controller fixtures. The exact
+// incoming archive digest and pinned guest/recovery image select a real native
+// process for every command, including effects. Its production handler retains
+// identity and deadline checks. The original bootstrap has separate coverage.
+func installNativeGuestCommands(f *vmJobFixture) {
 	f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (result utm.CommandResult, callErr error) {
 		q := vmTransportRequest(input)
-		recovery := strings.HasPrefix(q.Schema, "haepari.guest-recovery-request/")
-		if q.Operation != "identity" && !(recovery && (q.Operation == "probe" || q.Operation == "state")) {
-			return native(ctx, exe, args, input)
-		}
 		started := time.Now()
 		defer func() {
 			if recorder := recorderFor(f); recorder != nil {
@@ -62,23 +59,82 @@ func installInProcessGuestRecoveryObservations(f *vmJobFixture) {
 			return utm.CommandResult{ExitCode: -1}, err
 		}
 		archive := tar.NewReader(bytes.NewReader(input))
+		entries := map[string][]byte{}
 		for {
 			header, err := archive.Next()
+			if err == io.EOF {
+				break
+			}
 			if err != nil {
 				return utm.CommandResult{}, err
 			}
-			if header.Name != "request.json" {
-				continue
+			if header.Name != "haepari" && header.Name != "request.json" && header.Name != "digest" {
+				return utm.CommandResult{}, errors.New("unexpected fixture archive entry")
 			}
-			var out, diag bytes.Buffer
-			var code int
-			if recovery {
-				code = runner.GuestRecoveryCommand(archive, &out, &diag)
-			} else {
-				code = runner.GuestCommand(archive, &out, &diag)
+			if _, exists := entries[header.Name]; exists || header.Typeflag != tar.TypeReg {
+				return utm.CommandResult{}, errors.New("invalid fixture archive entry")
 			}
-			return utm.CommandResult{Stdout: out.String(), Stderr: diag.String(), ExitCode: code}, nil
+			entries[header.Name], err = io.ReadAll(archive)
+			if err != nil {
+				return utm.CommandResult{}, err
+			}
 		}
+		imageDigest := sha256.Sum256(entries["haepari"])
+		if len(entries) != 3 || string(entries["digest"]) != hex.EncodeToString(imageDigest[:]) {
+			return utm.CommandResult{}, errors.New("fixture archive digest mismatch")
+		}
+		resolveExecutable := os.Executable
+		if f.s.vmExecutable != nil {
+			resolveExecutable = f.s.vmExecutable
+		}
+		current, err := resolveExecutable()
+		if err != nil {
+			return utm.CommandResult{}, err
+		}
+		candidates := []string{current}
+		if managed.ValidRequestKey(q.Request.Identity.JobID) {
+			candidates = append(candidates, filepath.Join(f.s.root.Path, "jobs", q.Request.Identity.JobID, "guest-runner"))
+		}
+		executable := ""
+		for _, candidate := range candidates {
+			data, err := os.ReadFile(candidate)
+			if err == nil && sha256.Sum256(data) == imageDigest {
+				executable = candidate
+				break
+			}
+		}
+		if executable == "" {
+			return utm.CommandResult{}, errors.New("fixture selected image unavailable")
+		}
+		var shape struct {
+			Schema string `json:"schema"`
+		}
+		raw := entries["request.json"]
+		if err := json.Unmarshal(raw, &shape); err != nil {
+			return utm.CommandResult{}, err
+		}
+		verb := "guest"
+		if strings.HasPrefix(shape.Schema, "haepari.guest-recovery-request/") {
+			verb = "guest-recovery"
+		}
+		if shape.Schema == "haepari.guest-transport-request/v1" {
+			verb = "guest-transport"
+		}
+		cmd := exec.CommandContext(ctx, executable, "runner", verb, "--stdio")
+		cmd.Stdin = bytes.NewReader(raw)
+		cmd.Env = []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin", "GORACE=atexit_sleep_ms=0"}
+		cmd.WaitDelay = time.Second
+		var out, diag bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &out, &diag
+		err = cmd.Run()
+		if ctx.Err() != nil {
+			return utm.CommandResult{ExitCode: -1}, ctx.Err()
+		}
+		var exit *exec.ExitError
+		if err != nil && !errors.As(err, &exit) {
+			return utm.CommandResult{ExitCode: -1}, err
+		}
+		return utm.CommandResult{Stdout: out.String(), Stderr: diag.String(), ExitCode: cmd.ProcessState.ExitCode()}, nil
 	}
 }
 

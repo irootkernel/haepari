@@ -42,6 +42,7 @@ type runtimeServer struct {
 	evidenceMu        sync.RWMutex
 	backendEvidence   func(kind, id string) (evidenceBackend, error)
 	sshCommand        utm.SSHRunner
+	vmExecutable      func() (string, error)              // nil uses this executable; native fixtures supply a race-instrumented runner
 	vmLeases          func() (io.ReadCloser, error)       // nil selects the native macOS DHCP database
 	doctorHostSession func(context.Context) error         // nil observes the current user's Aqua domain
 	vmWrite           func(*os.File, []byte) (int, error) // nil is the ordinary durable collector; tests inject ENOSPC

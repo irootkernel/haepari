@@ -33,7 +33,11 @@ func (s *runtimeServer) vmSpec(id string) (managed.ResourceSpec, error) {
 	return managed.ResourceSpec{}, managed.ErrNotFound
 }
 func (s *runtimeServer) vmSSH(spec managed.ResourceSpec) (utm.SSH, error) {
-	executable, err := os.Executable()
+	resolveExecutable := os.Executable
+	if s.vmExecutable != nil {
+		resolveExecutable = s.vmExecutable
+	}
+	executable, err := resolveExecutable()
 	if err != nil {
 		return utm.SSH{}, err
 	}

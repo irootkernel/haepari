@@ -50,6 +50,16 @@ func nativeGuestProtocolObserved(q any, recovery bool, crash string) (managed.En
 	}
 	return envelope, err, diag.String()
 }
+
+func awaitNativeGuestExit(q GuestRequest) GuestReply {
+	return awaitGuestExit(q, func(request GuestRequest) GuestReply {
+		envelope, err, diagnostic := nativeGuestProtocolObserved(request, false, "")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred(), "guest watch: %s", diagnostic)
+		var reply GuestReply
+		gomega.Expect(json.Unmarshal(envelope.Data, &reply)).To(gomega.Succeed())
+		return reply
+	})
+}
 func retainedNativeGuest() (GuestRecoveryRequest, string) {
 	return retainedNativeGuestWithLogLimit(0)
 }
@@ -78,11 +88,7 @@ func retainedNativeGuestWithEnvironment(limit int64, schema string, environment 
 	guest.Operation = "start"
 	_, err = nativeGuestProtocol(guest, false, "")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	guest.Operation = "watch"
-	envelope, err = nativeGuestProtocol(guest, false, "")
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	var stopped GuestReply
-	gomega.Expect(json.Unmarshal(envelope.Data, &stopped)).To(gomega.Succeed())
+	stopped := awaitNativeGuestExit(guest)
 	gomega.Expect(stopped.Observation.Exit.TerminationProven).To(gomega.BeTrue())
 	gomega.Eventually(func() bool {
 		p, e := platform.ObserveProcess(stopped.Observation.Intent.Supervisor.PID)

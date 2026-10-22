@@ -585,9 +585,9 @@ var _ = ginkgo.Describe("Task027TerminalCompletionPreservation", ginkgo.Label("i
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		_, err = os.ReadFile(filepath.Join(root, "log-drained"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		// Single terminal pass: after the post-TERM stall only the original
-		// current-iteration escalation census may run.
-		gomega.Expect(readTerminalCounter(root, "census-count") - readTerminalCounter(root, "census-at-term-stall")).To(gomega.Equal(1))
+		// Escalation reuses this iteration's census and rechecks each native
+		// identity before signaling, without another whole-host scan.
+		gomega.Expect(readTerminalCounter(root, "census-count") - readTerminalCounter(root, "census-at-term-stall")).To(gomega.BeZero())
 		replay, err := StartRun(path)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(replay).To(gomega.Equal(view))

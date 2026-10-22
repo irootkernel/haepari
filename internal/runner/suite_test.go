@@ -162,6 +162,7 @@ func TestMain(m *testing.M) {
 		termFired, readyFired, injected, overrun := false, false, false, false
 		censusCalls := 0
 		release := make(chan struct{})
+		endReady, logReady := make(chan struct{}), make(chan struct{})
 		time.AfterFunc(30*time.Second, func() { close(release) })
 		record := func(name string, value int) {
 			_ = os.WriteFile(filepath.Join(root, name), []byte(strconv.Itoa(value)), 0600)
@@ -198,22 +199,38 @@ func TestMain(m *testing.M) {
 					time.Sleep(stall)
 					record("census-at-term-stall", censusCalls)
 				}
+				if mode == "late-cancel" {
+					// Reach the intended proof-ready boundary deterministically.
+					// Waiting for actual native notifications is bounded by the
+					// original stop budget, not a guessed scheduling delay.
+					timer := time.NewTimer(stall - 50*time.Millisecond)
+					defer timer.Stop()
+					for _, ready := range []<-chan struct{}{endReady, logReady} {
+						select {
+						case <-ready:
+						case <-timer.C:
+							fmt.Fprintln(os.Stderr, "native completion barrier did not become ready within the stop budget")
+							os.Exit(90)
+						}
+					}
+				}
 			case "completion_ready":
 				// The native end and log completion are both sampled.
 				readyFired = true
 				_ = os.WriteFile(filepath.Join(root, "completion-ready-seen"), nil, 0600)
 			}
 		}
-		mark := func(name string, hold bool) func() {
+		mark := func(name string, hold bool, ready chan struct{}) func() {
 			return func() {
 				_ = os.WriteFile(filepath.Join(root, name), nil, 0600)
 				if hold {
 					<-release
 				}
+				close(ready)
 			}
 		}
-		endNotification = mark("end-reaped", mode == "notify-end-held" || mode == "notify-both-held")
-		logNotification = mark("log-drained", mode == "notify-log-held" || mode == "notify-both-held")
+		endNotification = mark("end-reaped", mode == "notify-end-held" || mode == "notify-both-held", endReady)
+		logNotification = mark("log-drained", mode == "notify-log-held" || mode == "notify-both-held", logReady)
 		os.Exit(Command([]string{"start", "--request", path}, os.Stdout, os.Stderr))
 	}
 	if len(os.Args) == 2 && os.Args[1] == "runner-escaped-child" {

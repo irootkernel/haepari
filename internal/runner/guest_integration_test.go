@@ -69,7 +69,45 @@ func guestOperation(q GuestRequest, op string) GuestReply {
 	return r
 }
 
+// A guest watch is a bounded observation, not a promise of terminal receipts.
+// Follow the same run without extending its original execution/stop window.
+func awaitGuestExit(q GuestRequest, observe func(GuestRequest) GuestReply) GuestReply {
+	q.Operation = "watch"
+	q.Deadline = minTime(q.Deadline, q.Request.Deadline.Add(time.Duration(q.Request.TerminationSeconds)*time.Second))
+	for {
+		gomega.Expect(time.Now().Before(q.Deadline)).To(gomega.BeTrue(), "guest exit was not observed within the original run/stop window: %s", q.JobRoot)
+		reply := observe(q)
+		gomega.Expect(reply.Observation).NotTo(gomega.BeNil(), "guest watch omitted its observation: %s", q.JobRoot)
+		if reply.Observation.Exit != nil {
+			return reply
+		}
+	}
+}
+
 var _ = ginkgo.Describe("Task014GuestContinuity", ginkgo.Label("integration"), func() {
+	ginkgo.It("follows a bounded nonterminal watch to the original native exit without another start", func() {
+		q, parent := guestFixture("printf once > count.txt; while [ ! -f ../finish ]; do /bin/sleep .02; done")
+		defer func() {
+			if ginkgo.CurrentSpecReport().Failed() {
+				ginkgo.GinkgoWriter.Printf("guest watch fixture retained: %s\n", parent)
+				return
+			}
+			os.RemoveAll(parent)
+		}()
+		q.Request = *guestOperation(q, "prepare").Request
+		q.Files, q.Inventory = nil, nil
+		guestOperation(q, "start")
+		first := guestOperation(q, "watch")
+		gomega.Expect(first.Observation).NotTo(gomega.BeNil())
+		gomega.Expect(first.Observation.Exit).To(gomega.BeNil())
+		gomega.Expect(os.WriteFile(filepath.Join(parent, q.Request.Identity.JobID, "finish"), nil, 0600)).To(gomega.Succeed())
+		stopped := awaitNativeGuestExit(q)
+		gomega.Expect(stopped.Observation.Exit.TerminationProven).To(gomega.BeTrue())
+		gomega.Expect(stopped.Observation.Exit.Binding).To(gomega.Equal(q.Request.Binding()))
+		gomega.Expect(stopped.Observation.Exit.Outcome.WorkloadOutcome).To(gomega.Equal(managed.WorkloadOutcome("pass")))
+		gomega.Expect(os.ReadFile(filepath.Join(parent, q.Request.Identity.JobID, "workspace/count.txt"))).To(gomega.Equal([]byte("once")))
+	})
+
 	ginkgo.It("reattaches original receipts and literal output after the protocol caller returns, then cancels once", func() {
 		q, parent := guestFixture("printf 'literal $HOME ; quote\n'; printf x >> count.txt; while :; do sleep .05; done")
 		defer func() {

@@ -76,10 +76,7 @@ var _ = ginkgo.Describe("GuestWorkspaceIdentity", ginkgo.Label("integration"), f
 		q.Operation = "start"
 		_, err = nativeGuestProtocol(q, false, "")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		q.Operation = "watch"
-		envelope, err = nativeGuestProtocol(q, false, "")
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(json.Unmarshal(envelope.Data, &reply)).To(gomega.Succeed())
+		reply = awaitNativeGuestExit(q)
 		gomega.Expect(reply.Observation.Exit.TerminationProven).To(gomega.BeTrue())
 		root := filepath.Join(parent, q.Request.Identity.JobID)
 		for _, operation := range []string{"file", "cleanup"} {
@@ -103,7 +100,8 @@ var _ = ginkgo.Describe("GuestWorkspaceIdentity", ginkgo.Label("integration"), f
 		prepared := guestOperation(q, "prepare")
 		q.Request, q.Root, q.Files, q.Inventory = *prepared.Request, prepared.Root, nil, nil
 		guestOperation(q, "start")
-		gomega.Expect(guestOperation(q, "watch").Observation.Exit.TerminationProven).To(gomega.BeTrue())
+		stopped := awaitGuestExit(q, func(request GuestRequest) GuestReply { return guestOperation(request, "watch") })
+		gomega.Expect(stopped.Observation.Exit.TerminationProven).To(gomega.BeTrue())
 		q.Area, q.Path = "workspace", "missing.txt"
 		gomega.Expect(guestOperation(q, "file").Absent).To(gomega.BeTrue())
 		guestOperation(q, "cleanup")

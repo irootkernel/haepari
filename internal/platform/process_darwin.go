@@ -37,6 +37,13 @@ func ObserveProcess(pid int) (ProcessObservation, error) {
 		}
 		return ProcessObservation{}, &ProcessError{"process_snapshot_before", pid, err}
 	}
+	return observeProcessSnapshot(pid, boot, before)
+}
+
+// The UID census already supplies the first kernel snapshot. Reuse that birth
+// evidence and one boot observation, but still verify the incarnation after
+// reading PGID/SID; a bulk PID listing alone is never an ownership proof.
+func observeProcessSnapshot(pid int, boot string, before *unix.KinfoProc) (ProcessObservation, error) {
 	pgid, err := unix.Getpgid(pid)
 	if err != nil {
 		return ProcessObservation{}, &ProcessError{"getpgid", pid, err}
@@ -62,6 +69,10 @@ func ObserveProcess(pid int) (ProcessObservation, error) {
 // descendant is observed, callers retain its incarnation across reparenting.
 // Any incomplete census is uncertainty, not evidence of termination.
 func ProcessCensus() ([]ProcessObservation, error) {
+	boot, err := BootIdentity()
+	if err != nil {
+		return nil, &ProcessError{"boot_identity", 0, err}
+	}
 	list, err := unix.SysctlKinfoProcSlice("kern.proc.uid", os.Geteuid())
 	if err != nil {
 		return nil, &ProcessError{"process_list", 0, err}
@@ -71,7 +82,7 @@ func ProcessCensus() ([]ProcessObservation, error) {
 		if p.Proc.P_pid <= 0 || p.Proc.P_stat == 5 {
 			continue
 		}
-		observed, err := ObserveProcess(int(p.Proc.P_pid))
+		observed, err := observeProcessSnapshot(int(p.Proc.P_pid), boot, &p)
 		if errors.Is(err, unix.ESRCH) || errors.Is(err, unix.ENOENT) {
 			continue
 		}
