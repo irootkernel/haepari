@@ -148,11 +148,20 @@ func validateLogs(id string, after int64, identity string, p LogPage) error {
 		return errors.New("invalid observer log byte range")
 	}
 	if p.Gap != nil {
-		if p.Gap.RequestedOffset != after || p.Gap.PreviousIdentity != identity || p.Gap.ResumeOffset != 0 || p.Offset != p.Gap.ResumeOffset || len(p.Data) != 0 {
+		if p.Gap.RequestedOffset != after {
 			return errors.New("invalid observer log gap checkpoint")
 		}
 		switch p.Gap.Reason {
 		case "truncated", "replaced", "missing":
+			if p.Gap.PreviousIdentity != identity || p.Gap.ResumeOffset != 0 || p.Offset != 0 || len(p.Data) != 0 {
+				return errors.New("invalid observer log gap checkpoint")
+			}
+		case "log_limit", "log_write_failed", "log_read_failed", "pinned_log_exceeded", "native_log_manifest_missing", "guest_log_uncollected":
+			// A terminal evidence gap accompanies the retained bytes; it does
+			// not reset the file's identity or the consumer's byte checkpoint.
+			if p.Snapshot.JobState != "finished" || p.Offset != after || p.Identity == "" || (identity != "" && p.Identity != identity) || p.Gap.PreviousIdentity != p.Identity || p.Gap.ResumeOffset != p.NextOffset || p.More {
+				return errors.New("invalid observer log evidence gap checkpoint")
+			}
 		default:
 			return errors.New("unknown observer log gap")
 		}

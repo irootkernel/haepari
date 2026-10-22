@@ -12,4 +12,4 @@
 - Collect bounded logs and hashed artifacts with paged reads, explicit evidence gaps, verified export and retention/purge guards that preserve protected evidence and admission identities.
 - Coordinate cooperating tools with durable advisory locks, bounded renewal and expiry, and read-only nested-borrower validation.
 - Expose bounded controller configuration, resource-readiness checks and queue/retention diagnostics while preserving occupied or quarantined resources when execution or cleanup is uncertain.
-- Ship a checksummed macOS arm64 archive with a standalone ad-hoc-signed executable, the `use-haepari` skill, portable examples, a complete-tree verifier, the MIT license and explicit per-user release-service setup.
+- Ship a checksummed macOS arm64 archive with a standalone ad-hoc-signed executable, the `use-haepari` skill, portable examples, a complete-tree verifier, the MIT license, applicable third-party notices and explicit per-user release-service setup.
