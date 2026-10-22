@@ -3,7 +3,7 @@ set -eu
 
 # Run from the repository root, just like the Makefile's other build commands.
 # Optional second argument stamps internal/identity.Version (release packaging);
-# without it the build keeps the development default (0.1.0-dev).
+# without it the build keeps the source default from internal/identity.Version.
 output=${1:-bin/haepari}
 version=${2:-}
 mkdir -p "$(dirname "$output")"
