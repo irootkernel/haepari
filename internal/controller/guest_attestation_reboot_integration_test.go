@@ -1100,7 +1100,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		f, r := previousBootVMFixture()
 		plan, err := f.s.planJobRecovery(r.JobID, "reconcile")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v2"))
+		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v4"))
 		gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
 		root := filepath.Join(f.guest, r.JobID)
 		retained := root + "-retained-fixture"

@@ -73,3 +73,5 @@ Then **use** the grant only — for example, skip acquiring that lock and procee
 - Never: install into production during packaging, auto-enroll UTM VMs, bypass permissions, disable SSH host-key checking, or delete `~/.aquarium-dev`, foreign Git hooks, Sorage data, or host skills.
 
 For supplementary recollect/dispose, inspect the complete plan and its evidence-loss scope. Resource-v2 plans use `haepari.recovery-plan/v3` with signed finite resource lifecycle budgets; resource-v1 keeps its original shape. Apply only the authorized plan, save its key and replay that exact request after uncertainty. Do not extend saved recovery deadlines or infer deletion from an expired intent.
+
+VM Job recovery plans now use `haepari.recovery-plan/v4`, including cross-boot and pre-guest paths. Observation-only SSH audit events remain visible but do not stale the recovery fence. Real revision, lease, receipt, ownership and native observation changes still reject the plan. Local/resource plan versions and saved-key replay rules are unchanged; a token never grants execution authority or permits PASS from operator attestation.

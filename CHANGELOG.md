@@ -2,6 +2,10 @@
 
 ## v0.1.1 - Unreleased
 
+### Fixed
+
+- Keep VM Job recovery plans stable across observation-only SSH measurements while retaining audit history and revision, lease, ownership and native-evidence fences. New VM Job plans use `haepari.recovery-plan/v4`; operator attestation still cannot produce PASS.
+
 ## v0.1.0 - 2026-10-22
 
 ### Added

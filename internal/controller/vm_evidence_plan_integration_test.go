@@ -100,6 +100,7 @@ var _ = ginkgo.Describe("Task015VMNativeEvidencePlan", ginkgo.Label("integration
 
 	ginkgo.It("blocks recollection and disposal after controller attestation without upgrading guest proof", func() {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf x >> ../results/output.txt")
+		f.s.vmTransport = true
 		native := f.s.sshCommand
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
 			r, err := native(ctx, exe, args, input)
@@ -118,10 +119,23 @@ var _ = ginkgo.Describe("Task015VMNativeEvidencePlan", ginkgo.Label("integration
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(plan.Unknowns).To(gomega.BeEmpty())
 		gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
+		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v4"))
+		beforeEvents, err := f.s.ledger.EventsAfter(r.JobID, 0, 1000)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		second, err := f.s.planJobRecovery(r.JobID, "attest-stopped")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(second.Snapshot).To(gomega.Equal(plan.Snapshot))
+		gomega.Expect(second.Observation).To(gomega.Equal(plan.Observation))
+		afterEvents, err := f.s.ledger.EventsAfter(r.JobID, 0, 1000)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(len(afterEvents.Events)).To(gomega.BeNumerically(">", len(beforeEvents.Events)))
 		e := managed.RecoveryEvidence{Source: "operator-attested", Observer: "test", ObservedAt: time.Now().UTC(), Mechanism: "bounded native fixture stopped", Digest: managed.RecoveryDigest(plan.Observation), Reference: "job:" + r.JobID}
 		w := recoveryHTTP(f.s, "/v1/jobs/"+r.JobID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: "attest-original", Evidence: &e})
 		gomega.Expect(w.Code).To(gomega.Equal(200), w.Body.String())
 		f.s.workers.Wait()
+		replay := recoveryHTTP(f.s, "/v1/jobs/"+r.JobID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: "attest-original", Evidence: &e})
+		gomega.Expect(replay.Code).To(gomega.Equal(200), replay.Body.String())
+		gomega.Expect(replay.Body.String()).To(gomega.Equal(w.Body.String()))
 		original, err := f.s.ledger.Result(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(original.FinalVerdict).To(gomega.Equal(managed.Incomplete))

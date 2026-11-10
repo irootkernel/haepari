@@ -48,8 +48,9 @@ func validRecoveryDigest(s string) bool {
 }
 
 // RecoverySnapshot is read from one transaction. Its digest covers all active
-// event bytes, receipt bytes, ownership and resource fences. It contains no
-// freshly generated timestamp, so reading a plan never changes its basis.
+// recovery-relevant event bytes, receipt bytes, ownership and resource fences.
+// Observation-only SSH telemetry remains in the audit stream but cannot change
+// this basis. Unknown or effectful exchanges remain fenced.
 type RecoverySnapshot struct {
 	Installation      string                     `json:"installation_id"`
 	Identity          LocalIdentity              `json:"identity"`
@@ -178,9 +179,11 @@ func (l *Ledger) recoverySnapshotTx(tx *sql.Tx, jobID string) (RecoverySnapshot,
 			rows.Close()
 			return s, err
 		}
-		if err = encoder.Encode(event); err != nil {
-			rows.Close()
-			return s, err
+		if !recoveryObservationTelemetry(event, s.Identity) {
+			if err = encoder.Encode(event); err != nil {
+				rows.Close()
+				return s, err
+			}
 		}
 		if event.Kind == "interrupted" {
 			var value struct {
@@ -218,6 +221,46 @@ func (l *Ledger) recoverySnapshotTx(tx *sql.Tx, jobID string) (RecoverySnapshot,
 	s.EventsDigest = "sha256:" + hex.EncodeToString(h.Sum(nil))
 	s.AdapterIntents, err = pendingRecoveryIntentsTx(tx, s.Resource.ID)
 	return s, err
+}
+
+// recoveryObservationTelemetry recognizes only known observation records. Do
+// not import utm here: the transport depends on managed, not the reverse.
+func recoveryObservationTelemetry(event Event, identity LocalIdentity) bool {
+	if !oneOf(event.Kind, "vm_ssh_exchange_start", "vm_ssh_exchange_complete", "vm_ssh_measurement_gap") || ValidateUniqueJSONKeys(event.Payload) != nil {
+		return false
+	}
+	if event.Kind == "vm_ssh_measurement_gap" {
+		var gap struct {
+			Schema string `json:"schema"`
+			Reason string `json:"reason"`
+		}
+		return decodeClosed(event.Payload, &gap) == nil &&
+			gap.Schema == "haepari.ssh-measurement-gap/v1" && gap.Reason == "exchange_detail_limit"
+	}
+	if event.Kind != "vm_ssh_exchange_start" && event.Kind != "vm_ssh_exchange_complete" {
+		return false
+	}
+	var exchange VMSSHExchange
+	if decodeClosed(event.Payload, &exchange) != nil || exchange.Schema != "haepari.ssh-exchange/v1" ||
+		exchange.Identity != identity || exchange.Identity.JobID != event.JobID ||
+		exchange.Complete != (event.Kind == "vm_ssh_exchange_complete") {
+		return false
+	}
+	// The producer emits every field, including zero values. Missing/null fields
+	// are not a known measurement, even when they decode to matching Go zeros.
+	var fields, identityFields map[string]json.RawMessage
+	if json.Unmarshal(event.Payload, &fields) != nil || len(fields) != reflect.TypeOf(exchange).NumField() ||
+		json.Unmarshal(fields["identity"], &identityFields) != nil || len(identityFields) != reflect.TypeOf(identity).NumField() {
+		return false
+	}
+	for _, values := range []map[string]json.RawMessage{fields, identityFields} {
+		for _, value := range values {
+			if strings.TrimSpace(string(value)) == "null" {
+				return false
+			}
+		}
+	}
+	return oneOf(exchange.Operation, "identity", "state", "inspect", "health", "probe")
 }
 
 // Keep an issued adapter command and its progress together. Reopening an

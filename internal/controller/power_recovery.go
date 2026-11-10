@@ -119,7 +119,7 @@ type vmPreflightRecoveryObservation struct {
 }
 
 func (s *runtimeServer) planVMPreflightRecovery(p jobRecoveryPlan) (jobRecoveryPlan, error) {
-	p.Schema = "haepari.recovery-plan/v2"
+	p.Schema = "haepari.recovery-plan/v4"
 	proof, err := s.ledger.VMPreflightCessation(p.Snapshot.Identity)
 	if err != nil {
 		return p, err

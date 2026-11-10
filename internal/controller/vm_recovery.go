@@ -94,6 +94,7 @@ func (s *runtimeServer) observeVMRecovery(snapshot managed.RecoverySnapshot) (ru
 	return q, facts, nil
 }
 func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, error) {
+	p.Schema = "haepari.recovery-plan/v4"
 	if p.Snapshot.Identity.RunID == "" {
 		if _, err := s.ledger.VMPreflightCessation(p.Snapshot.Identity); err == nil {
 			return s.planVMPreflightRecovery(p)
@@ -111,7 +112,6 @@ func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, e
 	_ = q
 	p.Observation = facts
 	if facts.Reboot != nil || facts.CompletedCleanup != nil {
-		p.Schema = "haepari.recovery-plan/v2"
 		for _, name := range []string{"prepare", "collect", "cleanup"} {
 			if phase, exists := p.Snapshot.Phases[name]; exists && !controllerOwnerStopped(phase) {
 				p.Unknowns = append(p.Unknowns, name+" controller filesystem worker termination is unproven")

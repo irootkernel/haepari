@@ -193,7 +193,7 @@ var _ = ginkgo.Describe("Task036PowerRecovery", ginkgo.Label("integration"), fun
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		var jobPlan jobRecoveryPlan
 		gomega.Expect(json.Unmarshal(env.Data, &jobPlan)).To(gomega.Succeed())
-		gomega.Expect(jobPlan.Schema).To(gomega.Equal("haepari.recovery-plan/v2"))
+		gomega.Expect(jobPlan.Schema).To(gomega.Equal("haepari.recovery-plan/v4"))
 		gomega.Expect(jobPlan.Unknowns).To(gomega.BeEmpty())
 		q := managed.RecoveryRequest{PlanToken: jobPlan.PlanToken, MutationKey: "saved-preflight-settlement"}
 		_, err = c.RecoverJob(context.Background(), id.TargetJobID, q)

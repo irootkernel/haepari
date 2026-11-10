@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (775 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (780 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |
@@ -34,10 +34,10 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Requirements | 81 | 58 | 6 | 17 |
 | Epics | 9 | 8 | 0 | 1 |
 | Tasks | 39 | 35 | 0 | 4 |
-| ADRs | 20 | 18 | 0 | 2 |
+| ADRs | 21 | 19 | 0 | 2 |
 | Verification cases | 85 | 58 | 7 | 20 |
 
-The package also holds 85 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
+The package also holds 86 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
 
 ## Limits of these checks
 

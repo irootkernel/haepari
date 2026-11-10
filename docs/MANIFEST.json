@@ -4,7 +4,7 @@
   "revision_date": "2026-10-12",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 101,
+    "package_files_excluding_manifest": 102,
     "requirements": {
       "total": 81,
       "active": 58,
@@ -22,9 +22,9 @@
       "deferred": 4
     },
     "adrs": {
-      "total": 20,
+      "total": 21,
       "deferred": 2,
-      "active": 18
+      "active": 19
     },
     "verification_cases": {
       "total": 85,
@@ -32,15 +32,15 @@
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 85,
+    "markdown_documents": 86,
     "json_templates": 13,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 17474,
-      "sha256": "00b24fc033a69b032e94c8b6cdf94dd0972614cee0b4ddff07a58051100edb79"
+      "bytes": 17789,
+      "sha256": "a5d98497cd2206f431ac1a1a2c9a3b67ed75521b11862aeff17a710de17984bd"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -54,8 +54,8 @@
     },
     {
       "path": "TODO.md",
-      "bytes": 24115,
-      "sha256": "2da07791b7e86965fc05057fa806a4c0cc6dbab3b9031a40d2142226bf14433c"
+      "bytes": 24714,
+      "sha256": "2627bfd9eaf3bc6999f896ea215903dec59f2eb9640bfc0fb008fabdf7bb8d90"
     },
     {
       "path": "aquarium-adoption.md",
@@ -163,9 +163,14 @@
       "sha256": "6b93e481f1358a5fb8f18b3780a70284c7b91f1d96a96501dc7944bdedb93863"
     },
     {
+      "path": "architecture-decision-records/0021-recovery-observation-fence.md",
+      "bytes": 2987,
+      "sha256": "95a82e390eab969948cc6d120a7c53248a2f0c1557d594b220b50ecf1968a4ff"
+    },
+    {
       "path": "architecture-decision-records/README.md",
-      "bytes": 3620,
-      "sha256": "62c8c160ec218b0b6b0f52a8176148b0069b8524c3a0a62d9afe6d282ba3cc7d"
+      "bytes": 3787,
+      "sha256": "a47c3d89917e9c1fb0e0da72263de01e8c6cc9b7a505a80530d0dec0a5e5d927"
     },
     {
       "path": "architecture.md",
@@ -175,7 +180,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "1eff039e4e201e264a1291be029a89ca1232dfbae94c9ae2650a9d4d4c6b7241"
+      "sha256": "936eb1d84ec75e539445df7241813a5dc88935d1405f7ba408bd4c50db813c7b"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -184,8 +189,8 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 54030,
-      "sha256": "333f693140ca86c64be28f7d003bfca187e9b553c1e6cf1e1f2a614af67a867b"
+      "bytes": 55451,
+      "sha256": "d4d1a0b9de53fbab2de881eba607304ed053041accbb955815416685f76959c6"
     },
     {
       "path": "contracts/configuration.md",
@@ -204,8 +209,8 @@
     },
     {
       "path": "contracts/managed-transitions.md",
-      "bytes": 40089,
-      "sha256": "667ac8662a367f1862b6be2c47b6d4cd79e8fb73dc8d4ccc7afcdad13e13bd61"
+      "bytes": 40794,
+      "sha256": "512d6ecb7af78afbb1b6c3cc57497b966397df97ab1b017c35e93a254463d2db"
     },
     {
       "path": "contracts/resource-and-runner.md",
@@ -319,13 +324,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 52925,
-      "sha256": "51083bd7d5afaba341904e6dfcb805c29a91a04efaf66f6f7a0600c72b5cbc34"
+      "bytes": 52962,
+      "sha256": "15261be52a6a61b4f1e74e924aed6b7f7b572ebb540ba848e14727fb6c57b166"
     },
     {
       "path": "package-validation.md",
       "bytes": 9006,
-      "sha256": "5471e22c61059486e4eba37d521225702942644627451e21de8e80eafefa5b0d"
+      "sha256": "76d61af7bfc8b4fc6aa429f3ab986cb809afd129c428f2eee4794bfbc5d24ffe"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",

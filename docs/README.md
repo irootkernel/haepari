@@ -69,3 +69,5 @@ Follow-up candidates from EPIC-001 cold validation and EPIC-002 task reviews, an
 The [TASK-016 VM freeze decision](records/TASK-016-vm-contract-freeze.md) defines the candidate F2 field boundary, qualification scope and deferred checks. It becomes effective only with canonical TASK-016 acceptance.
 
 The [Mulgae integration contract](integrations/mulgae-review.md) defines the managed VM adoption boundary and how ordinary reviews queue on the advisory lock. It is planned downstream behavior, not a Haepari dependency or a claim about the installed Mulgae release.
+
+VM Job recovery v4 separates observation-only SSH telemetry from the recovery event fence while retaining the original audit stream and native/ledger guards ([ADR-0021](architecture-decision-records/0021-recovery-observation-fence.md)). Local and resource plan versions and historical acceptance remain unchanged.

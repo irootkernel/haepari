@@ -1,6 +1,6 @@
 {
   "design_revision": "3.5",
-  "validation_date": "2026-10-22",
+  "validation_date": "2026-11-10",
   "scope": "documentation only",
   "generator": "docs/tools/validate_docs.py",
   "document_checks": {
@@ -54,9 +54,9 @@
       "deferred": 4
     },
     "adrs": {
-      "total": 20,
+      "total": 21,
       "deferred": 2,
-      "active": 18
+      "active": 19
     },
     "verification_cases": {
       "total": 85,
@@ -64,10 +64,10 @@
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 85,
+    "markdown_documents": 86,
     "json_templates": 13,
     "producer_request_drafts": 9,
-    "relative_links_checked": 775
+    "relative_links_checked": 780
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",
