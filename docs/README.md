@@ -71,3 +71,15 @@ The [TASK-016 VM freeze decision](records/TASK-016-vm-contract-freeze.md) define
 The [Mulgae integration contract](integrations/mulgae-review.md) defines the managed VM adoption boundary and how ordinary reviews queue on the advisory lock. It is planned downstream behavior, not a Haepari dependency or a claim about the installed Mulgae release.
 
 VM Job recovery v4 separates observation-only SSH telemetry from the recovery event fence while retaining the original audit stream and native/ledger guards ([ADR-0021](architecture-decision-records/0021-recovery-observation-fence.md)). Local and resource plan versions and historical acceptance remain unchanged.
+
+## Development toolchain guide
+
+The root [toolchains.env](../toolchains.env) owns exact developer runtime versions.
+[Toolchain maintenance](../tools/README.md) covers explicit installation, locked
+dependency preparation, scoped checks, generated example snapshots and portable
+release verification. Use `make docs-check` for read-only package validation and
+`make docs-update` for generation followed by validation. Historical candidate
+and version observations in records remain unchanged. Directory-guide adoption
+has no separate repository-wide coverage map; the existing runnable-example and
+qualification guides continue to cover their boundaries, and `tools/README.md`
+covers the new launcher boundary.

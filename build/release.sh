@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+# Fail before output directories, formatting, synchronization or build effects.
+"$(dirname "$0")/../tools/toolchain" check all
+
 # Assemble the unpublished Haepari release candidate package.
 # Usage (from the repository root): sh build/release.sh [version] [output-dir]
 # Produces <output-dir>/haepari-<version>-darwin-arm64.tar.gz plus a .sha256
@@ -38,17 +41,21 @@ if [ -e "$archive" ] || [ -e "$archive.sha256" ]; then
     exit 2
 fi
 
-# Packaging scratch honors the caller TMPDIR (for task scratch volumes); only
-# short controller fixture roots need the canonical /tmp pattern.
-staging=$(mktemp -d "${TMPDIR:-/tmp}/haepari-release-$version.XXXXXX")
+# Packaging scratch is task-owned and physical, independently of caller TMPDIR.
+staging=$(mktemp -d "/tmp/haepari-release-$version.XXXXXX")
+staging=$(cd "$staging" && pwd -P)
 trap 'rm -rf "$staging"' EXIT
 tree="$staging/$name"
-mkdir -p "$tree/skill" "$tree/examples"
+mkdir -p "$tree/skill" "$tree/examples" "$tree/tools"
 
-GO="${GO:-go}" sh build/build.sh "$tree/haepari" "$version"
+sh build/build.sh "$tree/haepari" "$version"
 cp README.md "$tree/README.md"
 cp LICENSE "$tree/LICENSE"
 cp THIRD_PARTY_NOTICES.txt "$tree/THIRD_PARTY_NOTICES.txt"
+"./tools/toolchain" python tools/release_metadata.py "$tree/haepari" "$tree/build-metadata.json"
+cp toolchains.env "$tree/toolchains.env"
+cp tools/toolchain "$tree/tools/toolchain"
+cp packaging/verify-tree "$tree/verify-tree"
 cp packaging/verify_tree.py "$tree/verify_tree.py"
 cp packaging/examples/*.json "$tree/examples/"
 cp -R skill/use-haepari "$tree/skill/use-haepari"

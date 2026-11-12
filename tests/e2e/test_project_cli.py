@@ -8,7 +8,9 @@ import shutil
 import socket
 import threading
 import runpy
+import shlex
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -20,14 +22,20 @@ from test_local_cli import BINARY, _controller, _response, _run
 SOURCE = Path(__file__).resolve().parents[2] / "examples/project-test"
 
 
+def python_script_header():
+    # Quote the runtime through a shell/Python polyglot, including spaces.
+    return "#!/bin/sh\n'''exec' " + shlex.quote(sys.executable) + " \"$0\" \"$@\"\n' '''\n"
+
+
+def caller_toolchain_env(env):
+    # The controller deliberately receives a minimal, isolated HOME. Only the
+    # developer Make caller needs the cache selected by the parent launcher.
+    return dict(env, HAEPARI_TOOLCHAIN_CACHE=os.environ["HAEPARI_TOOLCHAIN_CACHE"])
+
+
 @pytest.fixture
 def project_root():
-    volume = Path("/Volumes/RootKernel")
-    if os.path.ismount(volume) and os.access(volume, os.W_OK):
-        parent = volume / "tmp"
-        parent.mkdir(exist_ok=True)
-    else:
-        parent = Path(tempfile.gettempdir()).resolve()
+    parent = Path("/tmp").resolve()
     root = Path(tempfile.mkdtemp(prefix="hp-project-", dir=parent)).resolve()
     try:
         shutil.copytree(SOURCE, root / "project", ignore=shutil.ignore_patterns("__pycache__", ".haepari-runs", "results"))
@@ -47,7 +55,7 @@ def register(parent, env):
 
 
 def host(root, env, run, suite="regression", mode="auto", binary=BINARY):
-    return subprocess.run(["/usr/bin/python3", str(root / "project/host.py"), "--haepari", str(binary),
+    return subprocess.run([sys.executable, str(root / "project/host.py"), "--haepari", str(binary),
                            "--resource", "project-local", "--suite", suite, "--mode", mode, "--run-dir", str(run)],
                           env=env, text=True, capture_output=True, timeout=40)
 
@@ -160,7 +168,7 @@ def test_reference_project_freezes_queued_source_and_refuses_host_guest_entrypoi
         paused = _response(_run(BINARY, env, "resource", "pause", "project-local", "--expected-revision", "1",
                                 "--request-key", "project-pause", "--json"))["data"]
         run = project_root / "queued"
-        process = subprocess.Popen(["/usr/bin/python3", str(project / "host.py"), "--haepari", str(BINARY),
+        process = subprocess.Popen([sys.executable, str(project / "host.py"), "--haepari", str(BINARY),
                                     "--resource", "project-local", "--run-dir", str(run)],
                                    env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
@@ -327,7 +335,7 @@ def test_reference_project_refuses_nested_invalid_private_and_concurrent_callers
         result = host(project_root, env, linked)
         assert result.returncode == 2 and "private owned directory" in result.stderr
         result = subprocess.run(["make", "test-vm", "HAEPARI=" + str(BINARY), "RESOURCE="],
-                                cwd=project_root / "project", env=env, text=True, capture_output=True, timeout=5)
+                                cwd=project_root / "project", env=caller_toolchain_env(env), text=True, capture_output=True, timeout=5)
         assert result.returncode == 2 and "explicit resource" in result.stderr
         assert _response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"] == []
 
@@ -354,8 +362,7 @@ def test_reference_project_peer_faults_preserve_original_identity_and_unknown_ou
     # A test-owned protocol proxy forwards to the actual isolated controller,
     # then injects malformed peer observations; it cannot create a new key.
     proxy = project_root / "haepari-proxy"
-    proxy.write_text('''#!/usr/bin/python3
-import json, os, subprocess, sys
+    proxy.write_text(python_script_header() + '''import json, os, subprocess, sys
 r = subprocess.run([os.environ["HAEPARI_REAL_CLI"], *sys.argv[1:]], capture_output=True, text=True)
 reply = json.loads(r.stdout)
 code = r.returncode
@@ -411,8 +418,7 @@ def test_reference_make_entrypoint_and_lost_submit_reply(project_root):
     config["suites"]["regression"]["environment"] = {"COUNT_PATH": str(counter)}
     (project / "project.json").write_text(json.dumps(config))
     proxy = project_root / "drop-submit-reply"
-    proxy.write_text('''#!/usr/bin/python3
-import os, subprocess, sys
+    proxy.write_text(python_script_header() + '''import os, subprocess, sys
 r = subprocess.run([os.environ["HAEPARI_REAL_CLI"], *sys.argv[1:]], capture_output=True, text=True)
 if sys.argv[1] == "submit":
     sys.stderr.write("injected loss after real admission")
@@ -424,7 +430,7 @@ sys.exit(r.returncode)
     proxy.chmod(0o700)
     def make(env, run, binary=BINARY, *settings):
         return subprocess.run(["make", "test-vm", "HAEPARI=" + str(binary), "RESOURCE=project-local",
-                               "RUN_DIR=" + str(run), *settings], cwd=project, env=env,
+                               "RUN_DIR=" + str(run), *settings], cwd=project, env=caller_toolchain_env(env),
                               text=True, capture_output=True, timeout=25)
     with _controller() as (parent, env, owned, _):
         register(parent, env)
@@ -478,8 +484,7 @@ def test_reference_project_malformed_config_and_peer_refuse_without_false_fail(p
         config_path.write_bytes(original)
         assert _response(_run(BINARY, env, "jobs", "list", "--json"))["data"]["jobs"] == []
     stub = project_root / "incompatible-cli"
-    stub.write_text('''#!/usr/bin/python3
-import os, signal, sys
+    stub.write_text(python_script_header() + '''import os, signal, sys
 if os.environ.get("HAEPARI_TEST_SIGNAL"):
     os.kill(os.getpid(), signal.SIGKILL)
 sys.stdout.write(os.environ["HAEPARI_TEST_ENVELOPE"])
@@ -557,8 +562,7 @@ def test_reference_project_deadlines_retain_admission_and_bound_doctor(project_r
     config["suites"]["regression"]["environment"] = {"COUNT_PATH": str(counter)}
     (project / "project.json").write_text(json.dumps(config))
     proxy = project_root / "delayed-submit-reply"
-    proxy.write_text('''#!/usr/bin/python3
-import os, subprocess, sys, time
+    proxy.write_text(python_script_header() + '''import os, subprocess, sys, time
 r = subprocess.run([os.environ["HAEPARI_REAL_CLI"], *sys.argv[1:]], capture_output=True, text=True)
 if sys.argv[1] == "submit":
     time.sleep(30)

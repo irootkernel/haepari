@@ -41,13 +41,13 @@ var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission Task
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		project := filepath.Join(root, "project")
 		gomega.Expect(os.Mkdir(project, 0700)).To(gomega.Succeed())
-		for _, name := range []string{"Makefile", "host.py", "haepari_inputs.py", "project.json", "profile.json", "source/input.txt", "tests/vm/run.sh", "scenarios/check.md"} {
+		for _, name := range []string{"toolchains.env", "tools/toolchain", "Makefile", "host.py", "haepari_inputs.py", "project.json", "profile.json", "source/input.txt", "tests/vm/run.sh", "scenarios/check.md"} {
 			path := filepath.Join(project, name)
 			gomega.Expect(os.MkdirAll(filepath.Dir(path), 0700)).To(gomega.Succeed())
 			data, err := os.ReadFile(filepath.Join("../../examples/project-test", name))
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			mode := os.FileMode(0600)
-			if name == "tests/vm/run.sh" {
+			if name == "tests/vm/run.sh" || name == "tools/toolchain" {
 				mode = 0700
 			}
 			gomega.Expect(os.WriteFile(path, data, mode)).To(gomega.Succeed())
@@ -63,7 +63,7 @@ var _ = ginkgo.Describe("Task017NativeGuestProject Task018OriginalAdmission Task
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(os.WriteFile(configPath, configBytes, 0600)).To(gomega.Succeed())
 		binary := filepath.Join(root, "haepari")
-		build := exec.Command("go", "build", "-o", binary, "./cmd/haepari")
+		build := exec.Command("./tools/toolchain", "go", "build", "-o", binary, "./cmd/haepari")
 		build.Dir = "../.."
 		out, err := build.CombinedOutput()
 		gomega.Expect(err).NotTo(gomega.HaveOccurred(), "%s", out)

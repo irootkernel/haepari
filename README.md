@@ -11,7 +11,8 @@ The first release targets one macOS arm64 machine, one user and one already-runn
 Select a versioned archive and its matching checksum sidecar from
 [GitHub Releases](https://github.com/irootkernel/haepari/releases). The archive
 contains the standalone `haepari` CLI/controller, this `README.md`, the complete
-`skill/use-haepari/` tree, portable `examples/`, `verify_tree.py`, `SHA256SUMS`,
+`skill/use-haepari/` tree, portable `examples/`, `verify-tree`, `verify_tree.py`, `toolchains.env`,
+`tools/toolchain`, `build-metadata.json`, `SHA256SUMS`,
 the MIT `LICENSE`, and `THIRD_PARTY_NOTICES.txt` for the bundled runtime and
 dependencies. Installation is explicit; the archive does not install
 itself or enroll a VM.
@@ -35,11 +36,13 @@ the archive lists every file **except itself**.
 ```sh
 shasum -a 256 -c haepari-<version>-darwin-arm64.tar.gz.sha256   # archive digest
 tar -xzf haepari-<version>-darwin-arm64.tar.gz
-cd haepari-<version>-darwin-arm64 && python3 verify_tree.py
+cd haepari-<version>-darwin-arm64
+./tools/toolchain install  # explicit verifier runtime preparation in the user cache
+./verify-tree
 ```
 
-`verify_tree.py` (packaged, standard library only, independent of the haepari
-binary) compares the complete unpacked tree against the inventory and reports
+`verify-tree` uses the packaged pins and launcher to run `verify_tree.py`
+(standard library only, independent of the haepari binary) compares the complete unpacked tree against the inventory and reports
 each **missing**, **added** or **tampered** file by name. It never follows
 symlinks: an unlisted symlink or special file is reported as added, a recorded
 regular file replaced by a symlink, special file or directory is reported as
@@ -47,7 +50,11 @@ tampered even when the target bytes are identical, and `SHA256SUMS` itself must
 be a regular file. Ordinary structural directories that the inventory does not
 list are fine. Plain `shasum -a 256 -c SHA256SUMS` only covers recorded files
 and cannot detect extra files; use the packaged helper for complete-tree
-verification. A failed check leaves all files in place for inspection.
+verification. A failed check leaves all files in place for inspection. The verifier writes no
+cache or bytecode into the extracted inventory tree; runtime installation is
+explicit and stays in the Haepari user cache. `build-metadata.json` records the
+actual Go build runtime, exact toolchain pins and bundled module versions;
+packaging refuses a mismatch with `THIRD_PARTY_NOTICES.txt`.
 
 ### Run the binary standalone
 
@@ -92,7 +99,7 @@ preserving state and evidence.
 ./haepari service plan --release --instance <unique-id> \
   --binary "$PWD/haepari" --root <absolute-private-root> --json > plan.envelope.json
 # Save the plan's data object; install/uninstall consume it, not the envelope.
-python3 -c 'import json,sys; json.dump(json.load(open("plan.envelope.json"))["data"], open("plan.json","w"), indent=2)'
+./tools/toolchain python -c 'import json,sys; json.dump(json.load(open("plan.envelope.json"))["data"], open("plan.json","w"), indent=2)'
 # review plan.json (label io.rootkernel.haepari.<unique-id>, digest, plist)
 ./haepari service install --plan-file plan.json --json
 # Select this service for subsequent resource/job/lock client commands.
@@ -166,15 +173,19 @@ capacity.
 
 ## Build and check (source checkout)
 
-Use Go 1.27.1 on macOS arm64:
+Use the exact Go, CPython and uv versions in `toolchains.env`.
+No global PATH or host-tool default changes are needed:
 
 ```sh
+make help
+make toolchain-install
+make toolchain-check
 make build
 make test
 ./bin/haepari version --json
 ```
 
-`make test` is the serial prepare, unit, integration, and isolated local CLI E2E gate; `make check` is its alias. E2E automatically syncs the pinned pytest harness and may contact the Python package index on first use. Prepare formats Go source, so review any unrelated dirty Go files before running it. [TESTING.md](https://github.com/irootkernel/haepari/blob/main/TESTING.md) documents every stage, the private E2E state root, and failure behavior.
+`make test` is the serial prepare, unit, integration, and isolated local CLI E2E gate; `make check` is its alias. Prepare synchronizes locked dependencies, formats Go sources, runs static/build checks, and regenerates and validates snapshots and documentation. Review resulting source/generated changes. Tests never install languages; `make fmt` and `make deps` remain available individually. `make docs-check` is read-only and `make docs-update` regenerates and then checks snapshots and documentation. [Toolchain maintenance](tools/README.md) documents cache paths, diagnostics and upgrades. [TESTING.md](https://github.com/irootkernel/haepari/blob/main/TESTING.md) documents every stage, the private E2E state root, and failure behavior.
 
 `make test-macos-supervision` is the separate macOS arm64 host probe for the bounded TASK-004 decisions recorded in [its evidence](https://github.com/irootkernel/haepari/blob/main/docs/records/TASK-004-macos-supervision.md). `make test-utm` is the optional full single-VM campaign, requiring its reviewed manifest/authority inputs. Use the project-owned `make test-vm` target in [examples/project-test](https://github.com/irootkernel/haepari/blob/main/examples/project-test/README.md) with an explicit CLI and resource. The common gate does not run either host/VM gate or install a host service.
 

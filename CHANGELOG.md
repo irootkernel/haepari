@@ -2,6 +2,10 @@
 
 ## v0.1.1 - Unreleased
 
+### Changed
+
+- Pin developer Go, CPython and uv through one manifest and an explicit user-cache bootstrap; group dependency preparation, formatting, static/build checks and documentation generation under test preparation and carry portable toolchain snapshots and verified build metadata with examples and release archives.
+
 ### Fixed
 
 - Keep VM Job recovery plans stable across observation-only SSH measurements while retaining audit history and revision, lease, ownership and native-evidence fences. New VM Job plans use `haepari.recovery-plan/v4`; operator attestation still cannot produce PASS.

@@ -116,7 +116,7 @@ var _ = ginkgo.Describe("Task013UTMController", ginkgo.Label("integration"), fun
 		gomega.Expect(os.WriteFile(localFile, mustJSONScheduling(local), 0600)).To(gomega.Succeed())
 		executable := filepath.Join(parent, "haepari")
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		build := exec.CommandContext(ctx, "go", "build", "-o", executable, "./cmd/haepari")
+		build := exec.CommandContext(ctx, "./tools/toolchain", "go", "build", "-o", executable, "./cmd/haepari")
 		build.Dir = "../.."
 		buildOutput, err := build.CombinedOutput()
 		cancel()

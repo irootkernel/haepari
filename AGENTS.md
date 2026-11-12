@@ -65,11 +65,13 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 
 ### Repository Index and Authorities
 
+- `toolchains.env` is the sole manually edited toolchain version authority. Use `tools/toolchain` for Go/Python/uv execution; see `tools/README.md` for preparation and upgrades. `make test-prepare` prepares locked dependencies, applies formatting, runs static/build checks, and regenerates and validates documentation; `make fmt` and `make deps` also remain available individually.
+
 - `docs/README.md` indexes the Haepari v0.1.0 design package and current implementation boundaries. Discover implemented build and test commands from `Makefile` and the common test contract in `TESTING.md`; the roadmap alone owns acceptance.
 - `docs/requirements.md` owns product obligations; `docs/architecture.md` and active `docs/contracts/` documents own implementation semantics; `docs/architecture-decision-records/` records rationale.
 - `docs/roadmap.md` alone owns Haepari task identity, sequence, prerequisites, and lifecycle status. Task checkboxes are acceptance evidence, not separate status authority.
 - `docs/verification.md`, `docs/traceability.md`, and `docs/operations.md` define planned checks and operating procedures. `docs/handoffs/implementation-prompt.md` guides implementation; `docs/handoffs/haepari-to-aquarium.md` defines the producer handoff.
-- Run `python3 docs/tools/validate_docs.py` to verify the documentation package. `--write` regenerates `docs/checks.json` and `docs/MANIFEST.json`; use it only when those generated files should change. Discover product build and test commands from the implemented tree before running them.
+- Run `make docs-check` to verify the documentation package and derived toolchain snapshots. `make docs-update` regenerates snapshots, `docs/checks.json` and `docs/MANIFEST.json`, then checks them; use it only when those generated files should change. Discover product build and test commands from the implemented tree before running them.
 
 ### Commit Messages
 
@@ -92,7 +94,7 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 - Follow the roadmap's actual task prerequisites and freeze gates. Do not mark a task accepted from compilation, mocks, a command exit code, or an unobserved manual check.
 - For TASK-001, confirm the module path, license, AGENTS.md, and Make targets with Master before the first implementation commit, as required by `docs/handoffs/implementation-prompt.md`.
 - `docs/examples/` contains illustrative design fixtures, not ready-to-run production configuration.
-- `.gaori/tester.yaml` maps `docs-validation` to `python3 docs/tools/validate_docs.py` with the `generic` parser. The repository's own documentation decides when that check is required.
+- `.gaori/tester.yaml` maps `docs-validation` to `make docs-check` with the `generic` parser. The repository's own documentation decides when that check is required.
 - `.mulgae/config.yaml` is shared review policy; `.mulgae/local.yaml` and `.podway/runtime/` are local state. Preserve their ignore rules and do not promote runtime evidence into tracked documentation.
 - Do not install host tools, enable services, operate unregistered VMs, invoke providers, send Sorage messages, remove legacy state, or publish releases without the applicable authority. The nine files in `docs/rollout-requests/` are unsent drafts.
 - This project does not use Sanho. Use ordinary Git for authorized repository operations; do not initialize or invoke Sanho here.

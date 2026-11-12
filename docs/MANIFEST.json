@@ -39,8 +39,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 17789,
-      "sha256": "a5d98497cd2206f431ac1a1a2c9a3b67ed75521b11862aeff17a710de17984bd"
+      "bytes": 18499,
+      "sha256": "5016eff0b4e18e62a59c2399e5c3fe66e8ec7e9a05cbe61a5e2b2a9ae60ebeae"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -180,7 +180,7 @@
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "936eb1d84ec75e539445df7241813a5dc88935d1405f7ba408bd4c50db813c7b"
+      "sha256": "27d47e947c647a25365fec77673a485ad0cf8fefa02e1874ffbbd868ad2a2439"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -309,8 +309,8 @@
     },
     {
       "path": "handoffs/implementation-prompt.md",
-      "bytes": 5797,
-      "sha256": "cb0142cc397dd18bc7de8cc03baacb7fc596eeeca9fe43f4d9dc58ea48ecaf24"
+      "bytes": 6351,
+      "sha256": "6dc72cf778d8e9843cd51151450e15669144c98b55a532013dc55eb6759e01b8"
     },
     {
       "path": "handoffs/producer-completion-template.md",
@@ -330,7 +330,7 @@
     {
       "path": "package-validation.md",
       "bytes": 9006,
-      "sha256": "76d61af7bfc8b4fc6aa429f3ab986cb809afd129c428f2eee4794bfbc5d24ffe"
+      "sha256": "f15e1ce750c470e6c0ac04b0b84bec337849fb8237a750df6a6decb256f52181"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -534,8 +534,8 @@
     },
     {
       "path": "tools/validate_docs.py",
-      "bytes": 24564,
-      "sha256": "f3d129e2f689c73f44666fc4d99f5e92fb26bad5aa86dd7d5548129bc312998b"
+      "bytes": 24559,
+      "sha256": "0ac40d7aff6aafaae96b7f669702dda3c3cc8e227ec5cd6b54a9cbda3f143a70"
     },
     {
       "path": "traceability.md",

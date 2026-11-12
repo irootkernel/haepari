@@ -2,8 +2,8 @@
 """Validate the Haepari documentation package.
 
 Usage:
-    python3 docs/tools/validate_docs.py          # check only; exit 1 on failure
-    python3 docs/tools/validate_docs.py --write  # also rewrite checks.json and MANIFEST.json
+    make docs-check   # read-only documentation and toolchain snapshot validation
+    make docs-update  # regenerate snapshots, checks.json and MANIFEST.json, then check
 
 Standard library only. The checks are documentation checks; they do not test product behavior.
 """

@@ -5,6 +5,13 @@ checks a small candidate input. The host submits and observes; the managed runne
 executes `tests/vm/run.sh` in its sealed workspace. The wrapper performs no UTM
 power operation, host installation or environment repair.
 
+The derived `toolchains.env` and `tools/toolchain` travel with this directory.
+They work after copying it without referring to the original checkout. Prepare
+the pinned Python runtime explicitly with `make toolchain-install`, then use
+`make toolchain-check`. `make test` and the guest shell entrypoint need no Go or
+Python runtime. Edit versions only at the original repository root and run
+`make docs-update` there to regenerate this snapshot.
+
 Select an explicitly authorized local or already-running registered VM resource
 and a compatible Haepari CLI:
 

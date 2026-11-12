@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (780 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (783 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |

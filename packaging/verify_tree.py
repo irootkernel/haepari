@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Complete release-tree inventory verification against SHA256SUMS.
 
-Usage: python3 verify_tree.py [root]      (default: the directory containing
+Usage: ./verify-tree [root]      (default: the directory containing
 this script and SHA256SUMS)
 
 Compares the complete unpacked tree with the recorded inventory without

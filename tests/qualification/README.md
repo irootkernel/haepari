@@ -13,6 +13,12 @@ approval, and a private evidence directory. A missing input fails. The ordinary
 The historical `development_service.py` remains its original local-service
 qualification; it is not imported by this VM driver.
 
+Run Python drivers through `tools/toolchain python tests/qualification/<driver>.py`
+after explicit `make toolchain-install` preparation. `make test-qualification`
+uses the locked dev environment prepared by `make deps`. Syntax and documentation
+checks use the same pinned interpreter. Runtime preparation does not authorize
+any service or VM scenario.
+
 ## Approval and reproducibility
 
 Before execution, disclose the exact source/executable/runner candidate, saved

@@ -1,0 +1,187 @@
+#!/bin/sh
+# POSIX bootstrap and guarded execution; deliberately needs neither Go nor Python.
+set -eu
+fail() { echo "toolchain: $*" >&2; exit 2; }
+real() {
+    target=$1
+    while [ -L "$target" ]; do
+        link=$(readlink "$target")
+        case "$link" in /*) target=$link ;; *) target=$(dirname "$target")/$link ;; esac
+    done
+    (cd -P "$(dirname "$target")" && printf '%s/%s\n' "$PWD" "$(basename "$target")")
+}
+self=$(real "$0")
+root=$(cd "$(dirname "$self")/.." && pwd -P)
+manifest=$root/toolchains.env
+[ -f "$manifest" ] || fail "missing manifest: $manifest"
+# Parse as data, never source an editable manifest as shell code.
+requested_go_version=${GO_VERSION:-}
+requested_python_version=${PYTHON_VERSION:-}
+requested_uv_version=${UV_VERSION:-}
+GO_VERSION= PYTHON_VERSION= UV_VERSION=
+while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    key=${line%%=*}; value=${line#*=}
+    case "$value" in ''|*[!0-9.]*|.*|*.) fail "invalid field $key: $value ($manifest)" ;; esac
+    printf '%s\n' "$value" | LC_ALL=C grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail "invalid version $key: $value"
+    case "$key" in
+        GO_VERSION) [ -z "$GO_VERSION" ] || fail "duplicate $key"; GO_VERSION=$value ;;
+        PYTHON_VERSION) [ -z "$PYTHON_VERSION" ] || fail "duplicate $key"; PYTHON_VERSION=$value ;;
+        UV_VERSION) [ -z "$UV_VERSION" ] || fail "duplicate $key"; UV_VERSION=$value ;;
+        *) fail "unknown field $key ($manifest)" ;;
+    esac
+done < "$manifest"
+[ -n "$GO_VERSION" ] && [ -n "$PYTHON_VERSION" ] && [ -n "$UV_VERSION" ] || fail "missing required fields ($manifest)"
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+case "$(uname -m)" in arm64|aarch64) arch=arm64; uvarch=aarch64 ;; x86_64|amd64) arch=amd64; uvarch=x86_64 ;; *) fail 'unsupported architecture' ;; esac
+case "$os" in darwin) uvtarget=$uvarch-apple-darwin ;; linux) uvtarget=$uvarch-unknown-linux-gnu ;; *) fail "unsupported OS $os" ;; esac
+cache=${HAEPARI_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/haepari/toolchains}
+case "$cache" in /*) ;; *) fail "cache must be absolute: $cache" ;; esac
+cache=$cache/$os-$arch
+if [ -d "$cache" ]; then cache=$(cd "$cache" && pwd -P); fi
+# Preserve the selected cache across isolated child HOME/XDG environments.
+# This is a process-local selection, never a dependency on the source checkout.
+HAEPARI_TOOLCHAIN_CACHE=$(dirname "$cache")
+export HAEPARI_TOOLCHAIN_CACHE
+go_home=$cache/go/$GO_VERSION
+uv_bin=$cache/uv/$UV_VERSION/uv
+python_home=$cache/python/$PYTHON_VERSION
+report() { printf '%s required=%s actual=%s path=%s\n' "$1" "$2" "$3" "$4"; }
+overrides() {
+    # Reject selectors that could redirect nested commands or change their runtime.
+    [ -z "$requested_go_version" ] || [ "$requested_go_version" = "$GO_VERSION" ] || fail "conflicting GO_VERSION=$requested_go_version; required=$GO_VERSION path=$manifest"
+    [ -z "$requested_python_version" ] || [ "$requested_python_version" = "$PYTHON_VERSION" ] || fail "conflicting PYTHON_VERSION=$requested_python_version; required=$PYTHON_VERSION path=$manifest"
+    [ -z "$requested_uv_version" ] || [ "$requested_uv_version" = "$UV_VERSION" ] || fail "conflicting UV_VERSION=$requested_uv_version; required=$UV_VERSION path=$manifest"
+    [ -z "${UV:-}" ] || [ "$UV" = "$uv_bin" ] || fail "conflicting UV=$UV; required=$uv_bin; unset UV to use the manifest"
+    [ -z "${PYTHON:-}" ] || fail "conflicting PYTHON=$PYTHON; unset PYTHON to use the manifest"
+    [ -z "${PYTHON3:-}" ] || fail "conflicting PYTHON3=$PYTHON3; unset PYTHON3 to use the manifest"
+    for key in GOROOT GOFLAGS GOWORK PYTHONHOME PYTHONPATH UV_PYTHON UV_PYTHON_INSTALL_DIR UV_PROJECT_ENVIRONMENT UV_MANAGED_PYTHON UV_NO_MANAGED_PYTHON UV_PYTHON_DOWNLOADS UV_CONFIG_FILE UV_PYTHON_PREFERENCE UV_SYSTEM_PYTHON; do
+        eval 'value=${'"$key"'-}'
+        [ -z "$value" ] || fail "conflicting $key=$value; required manifest=$manifest"
+    done
+    [ -z "${TEST_TELEMETRY_DIR:-}" ] || [ "$TEST_TELEMETRY_DIR" = /dev/null ] || fail "conflicting TEST_TELEMETRY_DIR=$TEST_TELEMETRY_DIR; required=/dev/null"
+    [ -z "${GOOS:-}" ] || [ "$GOOS" = "$os" ] || fail "conflicting GOOS=$GOOS; required=$os"
+    [ -z "${GOARCH:-}" ] || [ "$GOARCH" = "$arch" ] || fail "conflicting GOARCH=$GOARCH; required=$arch"
+    [ -z "${GOEXPERIMENT:-}" ] || fail "conflicting GOEXPERIMENT=$GOEXPERIMENT"
+    [ -z "${GOENV:-}" ] || [ "$GOENV" = off ] || fail "conflicting GOENV=$GOENV; required=off"
+    [ -z "${GOTOOLCHAIN:-}" ] || [ "$GOTOOLCHAIN" = local ] || fail "conflicting GOTOOLCHAIN=$GOTOOLCHAIN; required=local"
+    [ -z "${GO:-}" ] || [ "$GO" = "$go_home/bin/go" ] || fail "conflicting GO=$GO; required=$go_home/bin/go"
+    [ -z "${GOFMT:-}" ] || [ "$GOFMT" = "$go_home/bin/gofmt" ] || fail "conflicting GOFMT=$GOFMT; required=$go_home/bin/gofmt"
+}
+check_go() {
+    executable=$go_home/bin/go
+    [ -x "$executable" ] || { report Go "$GO_VERSION" missing "$executable" >&2; fail 'run make toolchain-install'; }
+    executable=$(real "$executable")
+    [ "$executable" = "$go_home/bin/go" ] || fail "Go required=$go_home/bin/go actual=$executable path=$executable"
+    [ -x "$go_home/bin/gofmt" ] || fail "gofmt required=$GO_VERSION actual=missing path=$go_home/bin/gofmt"
+    [ "$(real "$go_home/bin/gofmt")" = "$go_home/bin/gofmt" ] || fail "gofmt required=$GO_VERSION actual=$(real "$go_home/bin/gofmt") path=$go_home/bin/gofmt; go and gofmt must be from the same distribution"
+    # Go has no GOTELEMETRY environment switch. A non-directory telemetry root
+    # prevents counter/cache creation and sidecar uploads without changing user state.
+    export TEST_TELEMETRY_DIR=/dev/null
+    if ! actual=$(GOTOOLCHAIN=local GOENV=off "$executable" version 2>&1); then
+        report Go "$GO_VERSION" "$actual" "$executable" >&2
+        exit 2
+    fi
+    [ "$actual" = "go version go$GO_VERSION $os/$arch" ] || { report Go "$GO_VERSION" "$actual" "$executable" >&2; exit 2; }
+    export GOTOOLCHAIN=local GOENV=off
+    PATH=$go_home/bin:$PATH; export PATH
+    report Go "$GO_VERSION" "$actual" "$executable"
+}
+check_uv() {
+    [ -x "$uv_bin" ] || { report uv "$UV_VERSION" missing "$uv_bin" >&2; fail 'run make toolchain-install'; }
+    if ! actual=$("$uv_bin" --version 2>&1); then
+        report uv "$UV_VERSION" "$actual" "$uv_bin" >&2
+        exit 2
+    fi
+    case "$actual" in "uv $UV_VERSION"|"uv $UV_VERSION "*) ;; *) report uv "$UV_VERSION" "$actual" "$uv_bin" >&2; exit 2 ;; esac
+    [ "$(real "$uv_bin")" = "$uv_bin" ] || fail "uv required=$uv_bin actual=$(real "$uv_bin") path=$uv_bin"
+    PATH=$(dirname "$uv_bin"):$PATH; export PATH
+    report uv "$UV_VERSION" "$actual" "$uv_bin"
+}
+check_python() {
+    python_bin=
+    for candidate in "$python_home"/cpython-*/bin/python3; do
+        [ -x "$candidate" ] || continue
+        resolved=$(real "$candidate")
+        [ -z "$python_bin" ] || [ "$python_bin" = "$resolved" ] || fail "CPython required=$PYTHON_VERSION actual=ambiguous path=$python_home"
+        python_bin=$resolved
+    done
+    [ -n "$python_bin" ] || { report CPython "$PYTHON_VERSION" missing "$python_home" >&2; fail 'run make toolchain-install'; }
+    case "$python_bin" in "$python_home"/*) ;; *) fail "CPython required=$PYTHON_VERSION actual=$python_bin path=$python_home; Python escapes cache" ;; esac
+    if ! actual=$("$python_bin" -I -B -c 'import platform; print(platform.python_implementation()+" "+platform.python_version())' 2>&1); then
+        report CPython "$PYTHON_VERSION" "$actual" "$python_bin" >&2
+        exit 2
+    fi
+    [ "$actual" = "CPython $PYTHON_VERSION" ] || { report CPython "$PYTHON_VERSION" "$actual" "$python_bin" >&2; exit 2; }
+    PATH=$(dirname "$python_bin"):$PATH; export PATH
+    export PYTHONDONTWRITEBYTECODE=1
+    report CPython "$PYTHON_VERSION" "$actual" "$python_bin"
+}
+verify_download() {
+    url=$1; destination=$2
+    curl -fLsS --proto '=https' --tlsv1.2 "$url" -o "$destination"
+    if [ "$destination" = "$scratch/go.tar.gz" ]; then
+        curl -fLsS --proto '=https' --tlsv1.2 'https://go.dev/dl/?mode=json&include=all' -o "$scratch/go.json"
+        expected=$(awk -v name="go$GO_VERSION.$os-$arch.tar.gz" '
+            /"filename":/ { split($0, fields, "\""); selected=(fields[4] == name) }
+            selected && /"sha256":/ { split($0, fields, "\""); print fields[4]; exit }
+        ' "$scratch/go.json")
+    else
+        curl -fLsS --proto '=https' --tlsv1.2 "$url.sha256" -o "$destination.sha256"
+        expected=$(awk '{print $1; exit}' "$destination.sha256")
+    fi
+    [ "${#expected}" = 64 ] || fail "invalid checksum for $url"
+    actual=$(shasum -a 256 "$destination" | cut -d' ' -f1)
+    [ "$actual" = "$expected" ] || fail "checksum mismatch for $url"
+}
+install() {
+    mkdir -p "$cache"
+    cache=$(cd "$cache" && pwd -P)
+    HAEPARI_TOOLCHAIN_CACHE=$(dirname "$cache")
+    export HAEPARI_TOOLCHAIN_CACHE
+    go_home=$cache/go/$GO_VERSION
+    uv_bin=$cache/uv/$UV_VERSION/uv
+    python_home=$cache/python/$PYTHON_VERSION
+    scratch=$(mktemp -d /tmp/haepari-toolchain.XXXXXX)
+    trap 'rm -rf "$scratch"' EXIT
+    trap 'exit 130' HUP INT TERM
+    if [ ! -e "$go_home" ]; then
+        verify_download "https://dl.google.com/go/go$GO_VERSION.$os-$arch.tar.gz" "$scratch/go.tar.gz"
+        mkdir -p "$cache/go"
+        tar -xzf "$scratch/go.tar.gz" -C "$scratch"
+        mv "$scratch/go" "$go_home"
+    fi
+    if [ ! -e "$(dirname "$uv_bin")" ]; then
+        verify_download "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$uvtarget.tar.gz" "$scratch/uv.tar.gz"
+        tar -xzf "$scratch/uv.tar.gz" -C "$scratch"
+        mkdir -p "$cache/uv"
+        mv "$scratch/uv-$uvtarget" "$(dirname "$uv_bin")"
+    fi
+    check_go
+    check_uv
+    UV_PYTHON_INSTALL_DIR="$python_home" "$uv_bin" python install "$PYTHON_VERSION" --no-bin --no-config
+    check_python
+}
+command=${1:-diagnose}; [ "$#" -eq 0 ] || shift
+overrides
+case "$command" in
+    install) install ;;
+    check|diagnose) scope=${1:-all}; case "$scope" in go) check_go ;; python) check_python ;; uv) check_uv ;; all) check_go; check_uv; check_python ;; *) fail "unknown scope: $scope" ;; esac ;;
+    go|gofmt) check_go >&2; exec "$go_home/bin/$command" "$@" ;;
+    python) check_python >&2; exec "$python_bin" "$@" ;;
+    uv) check_python >&2; check_uv >&2; export UV_PYTHON_DOWNLOADS=never UV_PYTHON="$python_bin"; exec "$uv_bin" --no-config "$@" ;;
+    deps)
+        check_go; check_python; check_uv
+        "$go_home/bin/go" mod download
+        UV_PYTHON_DOWNLOADS=never "$uv_bin" --no-config sync --locked --group dev --python "$python_bin"
+        ;;
+    pytest)
+        check_python >&2; check_uv >&2
+        venv=$root/.venv/bin/python
+        [ -x "$venv" ] || fail 'missing dev environment; run make deps'
+        [ "$(real "$venv")" = "$python_bin" ] || fail "dev Python required=$python_bin actual=$(real "$venv") path=$venv; run make deps"
+        UV_PYTHON_DOWNLOADS=never "$uv_bin" --no-config sync --check --locked --offline --group dev --python "$python_bin" >&2
+        exec "$venv" -B -m pytest "$@"
+        ;;
+    *) fail "usage: tools/toolchain install|diagnose|check [all|go|python|uv]|deps|go|gofmt|python|uv|pytest [args...]" ;;
+esac
