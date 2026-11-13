@@ -17,7 +17,7 @@ import (
 // This fixture models historical bytes from an earlier boot. It is not evidence
 // that a VM reboot occurred; real reboot qualification belongs to TASK-038.
 func retainedPreviousBootGuest() (GuestRecoveryRequest, string) {
-	return retainedPreviousBootGuestWithProtocol("haepari.guest-request/v1")
+	return retainedPreviousBootGuestWithProtocol("haepari.guest-request/v3")
 }
 
 func retainedPreviousBootGuestWithProtocol(schema string) (GuestRecoveryRequest, string) {
@@ -58,7 +58,7 @@ func retainedPreviousBootGuestWithProtocol(schema string) (GuestRecoveryRequest,
 	gomega.Expect(os.Remove(filepath.Join(root, "exit.json"))).To(gomega.Succeed())
 	boot, err := platform.BootIdentity()
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	q.Schema, q.Operation, q.RecoveryBoot = "haepari.guest-recovery-request/v2", "probe", boot
+	q.Schema, q.Operation, q.RecoveryBoot = GuestRecoveryRequestSchema(q.Guest, true), "probe", boot
 	rootBinding := q.Basis.Root
 	q.Guest.Root = &rootBinding
 	q.Basis, q.Evidence, q.Attestation, q.MutationKey = nil, nil, nil, ""
@@ -68,7 +68,7 @@ func retainedPreviousBootGuestWithProtocol(schema string) (GuestRecoveryRequest,
 var _ = ginkgo.Describe("GuestRebootRecoveryNative", ginkgo.Label("integration"), func() {
 	ginkgo.It("retains a v2 prepared workspace changed before either the reboot basis or attested collection", func() {
 		for _, attested := range []bool{false, true} {
-			q, parent := retainedPreviousBootGuestWithProtocol("haepari.guest-request/v2")
+			q, parent := retainedPreviousBootGuestWithProtocol("haepari.guest-request/v4")
 			defer os.RemoveAll(parent)
 			root := filepath.Join(parent, q.Guest.Request.Identity.JobID)
 			if attested {
@@ -133,7 +133,7 @@ var _ = ginkgo.Describe("GuestRebootRecoveryNative", ginkgo.Label("integration")
 		q.Operation = "health"
 		_, err = nativeGuestProtocol(q, true, "")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	}, ginkgo.Entry("original v1 guest", "haepari.guest-request/v1"), ginkgo.Entry("original v2 guest", "haepari.guest-request/v2"))
+	}, ginkgo.Entry("original v1 guest", "haepari.guest-request/v3"), ginkgo.Entry("original v2 guest", "haepari.guest-request/v4"))
 	ginkgo.DescribeTable("accepts only bounded v2 attested workspace absence", func(schema string) {
 		q, parent := retainedPreviousBootGuestWithProtocol(schema)
 		defer os.RemoveAll(parent)
@@ -148,7 +148,7 @@ var _ = ginkgo.Describe("GuestRebootRecoveryNative", ginkgo.Label("integration")
 		gomega.Expect(json.Unmarshal(envelope.Data, &reply)).To(gomega.Succeed())
 		q.Attestation, q.Operation, q.Guest.Path = reply.Attestation, "file", "missing.txt"
 		envelope, err = nativeGuestProtocol(q, true, "")
-		if schema == "haepari.guest-request/v1" {
+		if schema == "haepari.guest-request/v3" {
 			gomega.Expect(err).To(gomega.HaveOccurred())
 		} else {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -169,14 +169,14 @@ var _ = ginkgo.Describe("GuestRebootRecoveryNative", ginkgo.Label("integration")
 			}
 		}
 		gomega.Expect(os.ReadFile(filepath.Join(parent, q.Guest.Request.Identity.JobID, "workspace/count.txt"))).To(gomega.Equal([]byte("once")))
-	}, ginkgo.Entry("original v1 guest", "haepari.guest-request/v1"), ginkgo.Entry("original v2 guest", "haepari.guest-request/v2"))
+	}, ginkgo.Entry("original v1 guest", "haepari.guest-request/v3"), ginkgo.Entry("original v2 guest", "haepari.guest-request/v4"))
 	ginkgo.It("rejects same boot, changed recovery boot, changed root and unexplained receipt absence", func() {
 		q, parent := retainedPreviousBootGuest()
 		defer os.RemoveAll(parent)
 		for _, change := range []func(*GuestRecoveryRequest){
 			func(v *GuestRecoveryRequest) { v.RecoveryBoot = v.Guest.BootID },
 			func(v *GuestRecoveryRequest) { v.RecoveryBoot = "foreign-current-boot" },
-			func(v *GuestRecoveryRequest) { v.Schema, v.RecoveryBoot = "haepari.guest-recovery-request/v1", "" },
+			func(v *GuestRecoveryRequest) { v.Schema, v.RecoveryBoot = "haepari.guest-recovery-request/v3", "" },
 			func(v *GuestRecoveryRequest) { root := *v.Guest.Root; root.Inode++; v.Guest.Root = &root },
 		} {
 			changed := q

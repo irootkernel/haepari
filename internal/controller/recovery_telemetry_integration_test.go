@@ -21,7 +21,7 @@ func measuredRecoveryPlan(s *runtimeServer, jobID string) jobRecoveryPlan {
 	gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())
 	var plan jobRecoveryPlan
 	recoveryData(response, &plan)
-	gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v4"))
+	gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v5"))
 	gomega.Expect(plan.Unknowns).To(gomega.BeEmpty())
 	gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
 	before, err := s.ledger.EventsAfter(jobID, 0, 1000)

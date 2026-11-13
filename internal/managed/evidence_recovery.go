@@ -249,13 +249,16 @@ func evidenceResolvedTx(tx *sql.Tx, result Result) (bool, error) {
 }
 
 func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
-	if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v1", "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3") || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose", "attest-guest-stopped") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
+	if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v1", "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3", "haepari.evidence-recovery-intent/v4") || !ValidRequestKey(q.ResourceID) || !ValidRequestKey(q.MutationKey) || q.ResourceConfigRevision <= 0 || q.ResourceAvailabilityRevision <= 0 || !validRecoveryDigest(q.SnapshotDigest) || !validRecoveryDigest(q.ClientDigest) || !oneOf(q.Action, "recollect", "dispose", "attest-guest-stopped") || q.Owner.BootID == "" || q.Owner.PID <= 0 || q.Owner.StartedSeconds <= 0 || len(q.Jobs) == 0 || len(q.Jobs) > 1000 {
 		return false
 	}
 	if q.RecordedAt.IsZero() || q.Action == "dispose" && q.AuthorityReference != "request:"+q.MutationKey {
 		return false
 	}
-	if q.Schema == "haepari.evidence-recovery-intent/v3" && !oneOf(q.Action, "recollect", "dispose") {
+	if evidenceRecoveryBudgeted(q) && !oneOf(q.Action, "recollect", "dispose") {
+		return false
+	}
+	if EvidenceRecoveryHasPersistentIdentity(q.Jobs) != (q.Schema == "haepari.evidence-recovery-intent/v4") {
 		return false
 	}
 	seen := map[string]bool{}
@@ -267,7 +270,7 @@ func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
 		if j.GuestLogLimitBytes < 0 || j.GuestLogLimitBytes > GuestRecoveryLogBytes || (q.Action == "attest-guest-stopped") != (len(j.GuestAttestation) > 0) || len(j.GuestAttestation) > 2<<20 {
 			return false
 		}
-		if q.Schema == "haepari.evidence-recovery-intent/v3" {
+		if evidenceRecoveryBudgeted(q) {
 			if !validRecoveryBudget(q.Budget) {
 				return false
 			}
@@ -279,13 +282,16 @@ func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
 		}
 		if b := j.AbsenceBinding; b != nil {
 			hasAbsenceBinding = true
-			if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3") || q.Action != "recollect" || j.Identity.RunID == "" ||
+			if !oneOf(q.Schema, "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3", "haepari.evidence-recovery-intent/v4") || q.Action != "recollect" || j.Identity.RunID == "" ||
 				b.WorkspaceRoot.Path != "workspace" || !b.WorkspaceRoot.Directory || b.WorkspaceRoot.Inode == 0 ||
 				!validRecoveryDigest(b.AttestationDigest) || b.OriginalBoot == "" || b.RecoveryBoot == "" || b.OriginalBoot == b.RecoveryBoot ||
 				!b.Cessation.valid() || !(b.Cessation.Source == "machine-observed" && b.Cessation.Mechanism == "guest-reboot-observed" || b.Cessation.Source == "operator-attested" && b.Cessation.Mechanism == "guest-workload-and-descendants-stopped") ||
 				b.Cessation.Reference != "job:"+j.JobID || b.Cessation.ObservedAt.After(q.RecordedAt) {
 				return false
 			}
+		}
+		if !validRecoveryPathIdentity(j.Root) || j.AbsenceBinding != nil && !validRecoveryPathIdentity(j.AbsenceBinding.WorkspaceRoot) {
+			return false
 		}
 		seen[j.JobID] = true
 	}
@@ -294,6 +300,8 @@ func validEvidenceIntent(q EvidenceRecoveryIntent) bool {
 		return !hasAbsenceBinding && q.Budget == nil
 	case "haepari.evidence-recovery-intent/v2":
 		return hasAbsenceBinding && q.Budget == nil
+	case "haepari.evidence-recovery-intent/v4":
+		return q.Budget == nil || validRecoveryBudget(q.Budget)
 	default:
 		return validRecoveryBudget(q.Budget)
 	}
@@ -307,8 +315,11 @@ func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) b
 	if q.Schema == "haepari.evidence-recovery-intent/v2" {
 		expectedSchema = "haepari.evidence-recovery-receipt/v2"
 	}
-	if q.Schema == "haepari.evidence-recovery-intent/v3" {
+	if evidenceRecoveryBudgeted(q) {
 		expectedSchema = "haepari.evidence-recovery-receipt/v3"
+	}
+	if q.Schema == "haepari.evidence-recovery-intent/v4" {
+		expectedSchema = "haepari.evidence-recovery-receipt/v4"
 	}
 	if r.Schema != expectedSchema || r.MutationKey != q.MutationKey || !r.Observation.valid() || r.Observation.Source != "machine-observed" || len(r.Jobs) != len(q.Jobs) {
 		return false
@@ -358,7 +369,7 @@ func validEvidenceReceipt(q EvidenceRecoveryIntent, r EvidenceRecoveryReceipt) b
 		if len(paths) > 0 && !uniquePaths(paths) {
 			return false
 		}
-		if len(o.AbsentOutputs) > 0 && (!oneOf(q.Schema, "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3") || j.AbsenceBinding == nil || q.Action != "recollect" || o.Stage == "pending" || o.ArtifactRoot == "") {
+		if len(o.AbsentOutputs) > 0 && (!oneOf(q.Schema, "haepari.evidence-recovery-intent/v2", "haepari.evidence-recovery-intent/v3", "haepari.evidence-recovery-intent/v4") || j.AbsenceBinding == nil || q.Action != "recollect" || o.Stage == "pending" || o.ArtifactRoot == "") {
 			return false
 		}
 		for _, absent := range o.AbsentOutputs {
@@ -427,7 +438,7 @@ func (l *Ledger) BeginEvidenceRecovery(q EvidenceRecoveryIntent) error {
 	if err != nil {
 		return err
 	}
-	if q.Schema == "haepari.evidence-recovery-intent/v3" {
+	if evidenceRecoveryBudgeted(q) {
 		if spec.Schema != "haepari.resource/v2" {
 			return ErrStale
 		}
@@ -443,7 +454,7 @@ func (l *Ledger) BeginEvidenceRecovery(q EvidenceRecoveryIntent) error {
 			return err
 		}
 		deadlinesMatch := j.CollectDeadline.Equal(q.RecordedAt.Add(time.Duration(b.Spec.Deadlines.CollectSeconds)*time.Second)) && j.CleanupDeadline.Equal(j.CollectDeadline.Add(time.Duration(b.Spec.Deadlines.CleanupSeconds)*time.Second))
-		if q.Schema == "haepari.evidence-recovery-intent/v3" {
+		if evidenceRecoveryBudgeted(q) {
 			collect := q.RecordedAt.Add(time.Duration(q.Budget.CollectSeconds) * time.Second)
 			deadlinesMatch = j.CollectDeadline.Equal(collect) && j.CleanupDeadline.Equal(collect.Add(time.Duration(q.Budget.CleanupSeconds)*time.Second))
 		}
@@ -708,4 +719,25 @@ func rejectLegacyEvidenceField(raw []byte, field string) error {
 		}
 	}
 	return nil
+}
+
+func evidenceRecoveryBudgeted(q EvidenceRecoveryIntent) bool {
+	return q.Schema == "haepari.evidence-recovery-intent/v3" || q.Schema == "haepari.evidence-recovery-intent/v4" && q.Budget != nil
+}
+
+func EvidenceRecoveryHasPersistentIdentity(jobs []EvidenceRecoveryJob) bool {
+	for _, j := range jobs {
+		if j.Root.Persistent != (platform.FileIdentity{}) || j.Root.ObservedBoot != "" ||
+			j.AbsenceBinding != nil && (j.AbsenceBinding.WorkspaceRoot.Persistent != (platform.FileIdentity{}) || j.AbsenceBinding.WorkspaceRoot.ObservedBoot != "") {
+			return true
+		}
+	}
+	return false
+}
+
+func validRecoveryPathIdentity(p RetainedPath) bool {
+	if p.Persistent == (platform.FileIdentity{}) {
+		return p.ObservedBoot == ""
+	}
+	return p.Persistent.Valid() && p.ObservedBoot != ""
 }

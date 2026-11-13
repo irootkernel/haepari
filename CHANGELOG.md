@@ -8,7 +8,13 @@
 
 ### Fixed
 
-- Keep VM Job recovery plans stable across observation-only SSH measurements while retaining audit history and revision, lease, ownership and native-evidence fences. New VM Job plans use `haepari.recovery-plan/v4`; operator attestation still cannot produce PASS.
+- Identify the failed Job, validation stage and safe cause category in supplementary recovery refusals without exposing raw backend errors or changing error/exit/retry semantics.
+- Export immutable results, gaps and verified files when an explicitly uncollected guest log has no host file or durable binding; continue refusing lost, changed or unexplained evidence.
+
+- Bind new guest preparations to descriptor-observed volume UUID, 64-bit file ID and creation time using new guest/control/recovery contracts and explicit capabilities; preserve historical wire bytes, digests and replay, verify original evidence before cross-boot recovery, and reject replaced or legacy unidentified objects.
+
+- Allow a resource recollect plan to select one owned retained Job with `--job-id`, preserving target-bound replay, finite deadlines and global safety fences while unresolved peers continue to block reuse.
+- Keep VM Job recovery plans stable across observation-only SSH measurements while retaining audit history and revision, lease, ownership and native-evidence fences. Historical VM Job plans retain `haepari.recovery-plan/v4`; plans carrying prepared identity use v5. Operator attestation still cannot produce PASS.
 
 ## v0.1.0 - 2026-10-22
 

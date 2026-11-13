@@ -25,8 +25,8 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 	ctx, cancel := context.WithDeadline(ctx, q.Deadline)
 	defer cancel()
 	guest := q.Guest
-	reboot := q.Schema == "haepari.guest-recovery-request/v2"
-	if !reboot && (q.Schema != "haepari.guest-recovery-request/v1" || q.RecoveryBoot != "") || reboot && q.RecoveryBoot == "" && q.Operation != "probe" {
+	reboot := runner.GuestRecoveryIsReboot(q.Schema)
+	if !reboot && (q.Schema != runner.GuestRecoveryRequestSchema(guest, false) || q.RecoveryBoot != "") || reboot && q.RecoveryBoot == "" && q.Operation != "probe" {
 		return reply, ErrUnavailable
 	}
 	mac, err := normalizeMAC(spec.VM.MACAddress)
@@ -48,7 +48,9 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		if reboot {
 			// The trusted recovery executable supports classified identity proof.
 			// Do not change the original nested Guest request or its receipts.
-			probe.Schema = "haepari.guest-request/v2"
+			if !runner.GuestUsesPersistentIdentity(guest) {
+				probe.Schema = "haepari.guest-request/v2"
+			}
 			probe.BootID = q.RecoveryBoot
 		}
 		probe.Operation = "identity"
@@ -108,9 +110,9 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		reply, err = runner.DecodeGuestRecoveryReply(envelope.Data)
 	}
 	g := reply.Guest
-	expectedSchema, expectedBoot := "haepari.guest-recovery-reply/v1", guest.BootID
+	expectedSchema, expectedBoot := runner.GuestRecoveryReplySchema(q), guest.BootID
 	if reboot {
-		expectedSchema, expectedBoot = "haepari.guest-recovery-reply/v2", q.RecoveryBoot
+		expectedBoot = q.RecoveryBoot
 	}
 	if err != nil || reply.RecoveryDigest != q.RecoveryDigest || reply.Schema != expectedSchema || reply.ProtocolDigest != managed.RecoveryDigest(q) || g.Schema != runner.GuestReplySchema(guest) || g.VMUUID != guest.VMUUID || g.MAC != guest.MAC || g.BootID != expectedBoot || g.Challenge != challenge || g.OS != "darwin" || g.Arch != "arm64" || !lease.Expires.After(time.Now()) {
 		return runner.GuestRecoveryReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
@@ -140,7 +142,7 @@ func (s SSH) CallRecovery(ctx context.Context, spec managed.ResourceSpec, leases
 		return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 	}
 	if g.Absent {
-		if !reboot || q.Operation != "file" || guest.Schema != "haepari.guest-request/v2" || reply.Attestation == nil || reply.Basis.WorkspaceRoot == nil || !reflect.DeepEqual(*reply.Basis, reply.Attestation.Basis) || guest.Area != "" && guest.Area != "workspace" || !managed.ValidArtifactPath(guest.Path) || guest.Offset != 0 || guest.ExpectedFile != nil || g.File != nil || len(g.Output) != 0 || g.NextOffset != 0 {
+		if !reboot || q.Operation != "file" || !runner.GuestAbsenceAware(guest) || reply.Attestation == nil || reply.Basis.WorkspaceRoot == nil || !reflect.DeepEqual(*reply.Basis, reply.Attestation.Basis) || guest.Area != "" && guest.Area != "workspace" || !managed.ValidArtifactPath(guest.Path) || guest.Offset != 0 || guest.ExpectedFile != nil || g.File != nil || len(g.Output) != 0 || g.NextOffset != 0 {
 			return reply, errors.Join(ErrGuestUncertain, ErrUnavailable)
 		}
 		return reply, nil

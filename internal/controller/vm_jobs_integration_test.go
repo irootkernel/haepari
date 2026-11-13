@@ -427,6 +427,8 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 					return reply, e
 				}
 				control.NativeRequest, control.Observation = nil, nil
+				// This interrupted preparation predates the completed identity publication.
+				control.Preparation = nil
 				if unbound {
 					// Model the mkdir-before-bind interruption: the only Job
 					// effect is an empty root and the worker has not completed.
@@ -447,7 +449,7 @@ var _ = ginkgo.Describe("Task015VMJobs", ginkgo.Label("integration"), func() {
 					if observed != nil {
 						return reply, observed
 					}
-					control.Root = nil
+					control.Root, control.WorkspaceRoot = nil, nil
 					control.Owner = worker.Identity
 					control.Complete, control.Stopped = false, false
 				}

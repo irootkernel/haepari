@@ -4,7 +4,7 @@
   "revision_date": "2026-10-12",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 102,
+    "package_files_excluding_manifest": 103,
     "requirements": {
       "total": 81,
       "active": 58,
@@ -22,9 +22,9 @@
       "deferred": 4
     },
     "adrs": {
-      "total": 21,
+      "total": 22,
       "deferred": 2,
-      "active": 19
+      "active": 20
     },
     "verification_cases": {
       "total": 85,
@@ -32,15 +32,15 @@
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 86,
+    "markdown_documents": 87,
     "json_templates": 13,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 18499,
-      "sha256": "5016eff0b4e18e62a59c2399e5c3fe66e8ec7e9a05cbe61a5e2b2a9ae60ebeae"
+      "bytes": 18890,
+      "sha256": "92ffa1ec133e90727562af1e76ebea3e8d8e358052808b9431a95c8bfb74de26"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -168,29 +168,34 @@
       "sha256": "95a82e390eab969948cc6d120a7c53248a2f0c1557d594b220b50ecf1968a4ff"
     },
     {
+      "path": "architecture-decision-records/0022-prepared-identity-and-scoped-recollection.md",
+      "bytes": 4866,
+      "sha256": "8aeda58d226b3e3800b7649c6e111351864aa9a10916a0f12fae58c283447cc7"
+    },
+    {
       "path": "architecture-decision-records/README.md",
-      "bytes": 3787,
-      "sha256": "a47c3d89917e9c1fb0e0da72263de01e8c6cc9b7a505a80530d0dec0a5e5d927"
+      "bytes": 4009,
+      "sha256": "58fc5f8345a550d08ee4f7ee9a43bd948c241d3c5ca9dca540a4e11330398a91"
     },
     {
       "path": "architecture.md",
-      "bytes": 40562,
-      "sha256": "fad0999fdc2e360c470ca1bbccfc08f978d85713ca2d359b1e9e34b316c309d8"
+      "bytes": 41253,
+      "sha256": "47b03e66243cb5e3978516b4c07d02e9baec37660dea94c69ad7af348c211b09"
     },
     {
       "path": "checks.json",
       "bytes": 2000,
-      "sha256": "27d47e947c647a25365fec77673a485ad0cf8fefa02e1874ffbbd868ad2a2439"
+      "sha256": "1333eefa6feee3bac7da87c53bf380a02058270e84f932e65455c80785a65179"
     },
     {
       "path": "contracts/artifact-and-profile.md",
-      "bytes": 27608,
-      "sha256": "3ef4b862faac5d84d5381521255fddde953a70efc5f23496b6fe0edfd70da985"
+      "bytes": 28245,
+      "sha256": "2ce5fc2c76f512925f4ede8ca5fcc7a9e78b3b33700594d9b03ad7cd28d59f82"
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 55451,
-      "sha256": "d4d1a0b9de53fbab2de881eba607304ed053041accbb955815416685f76959c6"
+      "bytes": 58493,
+      "sha256": "a0a5bd5c46dfcdfa997aa360683178477d26a86255fd2c736af118ac869c1177"
     },
     {
       "path": "contracts/configuration.md",
@@ -214,8 +219,8 @@
     },
     {
       "path": "contracts/resource-and-runner.md",
-      "bytes": 58189,
-      "sha256": "cec4650cac66d940bd8f631cf00c9e6a1d7c7d4e7e38d803ad982bfb6dde82ce"
+      "bytes": 60983,
+      "sha256": "0c2509a178cfc1059703aa3e4163596c9650530b7c1a9d53c5028eb86b56cd3d"
     },
     {
       "path": "deferred-feedback.md",
@@ -324,13 +329,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 52962,
-      "sha256": "15261be52a6a61b4f1e74e924aed6b7f7b572ebb540ba848e14727fb6c57b166"
+      "bytes": 54592,
+      "sha256": "af07fb9fd2b407d7c98d1728f3d8fc62f65daaca67525a0d65def5df12b27270"
     },
     {
       "path": "package-validation.md",
       "bytes": 9006,
-      "sha256": "f15e1ce750c470e6c0ac04b0b84bec337849fb8237a750df6a6decb256f52181"
+      "sha256": "4f32731b0ffcc61f1218f4a64dcb7d6c7cb78fe53ef56aa79c78a10ceb7ed5b5"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",

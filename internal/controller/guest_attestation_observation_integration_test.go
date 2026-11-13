@@ -203,7 +203,7 @@ var _ = ginkgo.Describe("GuestAttestationObservationBudget", ginkgo.Label("integ
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
 			q := vmTransportRequest(input)
 			rows = append(rows, attestationExchange{q.Operation, q.Schema, q.Deadline, time.Now()})
-			if q.Operation == "probe" && q.Schema == "haepari.guest-recovery-request/v1" {
+			if q.Operation == "probe" && q.Schema == "haepari.guest-recovery-request/v3" {
 				return utm.CommandResult{}, errors.New("fixture refused v1 probe")
 			}
 			return native(ctx, exe, args, input)
@@ -216,7 +216,7 @@ var _ = ginkgo.Describe("GuestAttestationObservationBudget", ginkgo.Label("integ
 		gomega.Expect(plan.PlanToken).To(gomega.BeEmpty())
 		gomega.Expect(rows).To(gomega.HaveLen(3))
 		gomega.Expect(rows[2].Operation).To(gomega.Equal("identity"))
-		gomega.Expect(rows[2].Schema).To(gomega.Equal("haepari.guest-request/v2"))
+		gomega.Expect(rows[2].Schema).To(gomega.Equal(rows[0].Schema))
 		expectAttestationClock(rows, started)
 		expectAttestationObservationPreserved(f, original, exit)
 	})

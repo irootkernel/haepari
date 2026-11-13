@@ -154,6 +154,8 @@ For guest workloads, SSH starts or reattaches a transient supervisor whose lifet
 
 On daemon startup, block affected managed resources, inspect unfinished managed runs, reconcile known completion, collect evidence, and clean up.  Resume observation of an existing running supervisor when its identity is proven. Unknown state keeps the job `reconciling` with its occupancy retained and its resource quarantined; a verdict (INCOMPLETE) follows only recovery settlement, never a repeated workload. Independent healthy resources may resume after their own recovery checks.
 
+Prepared guest recovery binds descriptor-observed volume UUID, file ID and creation time into new guest/control/recovery contracts, the native request and immutable host preparation evidence. Same-boot device/inode guards remain; a proven new boot requires matching persistent identity and original request/receipt/runner digests. Selected recollection can recover one retained Job while unresolved peers continue to block reuse. Partial export retains explicit original gaps and safe refusal diagnostics preserve error classifications. Historical records and native proof are never upgraded; see [ADR-0022](architecture-decision-records/0022-prepared-identity-and-scoped-recollection.md).
+
 ## Immutable artifacts and profiles
 
 A submitted bundle explicitly lists its files and executable modes. Snapshot creation never follows unlisted host paths, reads credentials, or silently copies the complete home. A caller may package a selected dirty worktree, but the result binds actual bytes rather than claiming the base commit is the candidate.

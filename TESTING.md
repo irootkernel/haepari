@@ -42,6 +42,10 @@ The first common `make test` stays a separate result. It stopped in `test-int` o
 
 The later common `make test` passed by stage. `test-prepare` passed. Its documentation validation reported no failure, schema validation did not run because there is no standalone JSON Schema suite, and 11 collision lines were informational. `test-unit` seed 1792204843: 9 suites, 187 passed of 189, 2 skipped. Qualification: 84 passed in 2.92s. `test-int` seed 1792204893: 6 suites, 700 passed of 838, 138 skipped, in 24m41.136079958s. That duration is suite wall time, not a product performance result. The integration counts were Haepari 25/55, Controller 338/353, Managed 273/292, Runner 56/83, SQLite 3/3, UTM 5/52. `test-e2e`: 79 passed in 175.00s after a fresh `make build` of `bin/haepari`. That binary was not installed.
 
+On 2026-11-13, the defaults-materialization CLI spec was corrected to wait for the final manual Job to reach `awaiting_manual` before fixture cleanup cancels it. Its preparation workload creates the declared required output; cancelling that preparation early can correctly retain an uncollected-output workspace and fail owned cleanup. The wait uses the admitted preparation budget plus 2s observer slack. Cleanup still requires a verified cleanup outcome, termination, zero occupancy and unchanged fixture identity before removal.
+
+Verification for this correction used `tools/toolchain go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration --seed=1794566534 ./cmd/haepari`. The focused run added `--focus='Task023M2aCLI.*materializes accepted defaults' --repeat=4` and passed all five iterations. The full CLI package integration run added `--poll-progress-after=1m --poll-progress-interval=1m` and passed. These author-run checks used the working tree, including other uncommitted product changes; they were not an isolated index-only check. The initial author-run verification did not rerun the full `make test-int` or `make test`. On 2026-11-14, the repository owner confirmed personally observing a successful full `make test` run after this correction. This is owner-reported confirmation, not an agent rerun or isolated index-only verification. The earlier common-gate records above predate this correction.
+
 Historical TASK-038 log usability belongs to that old exact candidate. Current TASK-023 checks are the changed fake and native bounds. This task did not run a fresh VM. The accepted TASK-027 record holds the packaged-candidate observation. TASK-028 is the producer handoff, not another observation. The full UTM campaign and extra performance checks stay optional under [ADR-0020](docs/architecture-decision-records/0020-local-development-scope.md) and the hardware and environment gates in [the roadmap](docs/roadmap.md#hardware-and-environment-gates), lines 105-109. This record claims no Linux support, no unmeasured platform, and no benchmark.
 
 TASK-024 M1 qualifies an isolated test canary and synthetic prior-schema fixtures. There is no public predecessor. It did not run a fresh VM, install a controller, or produce a performance result. The same focused command ran three times: `go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --label-filter=integration --focus=Task024M1 ./internal/managed ./cmd/haepari`. The first exited 1 in 19.050706s, seed 1792218600: Managed passed 13 of 305, and the CLI spec failed in DeferCleanup because `t.Setenv` restored `HAEPARI_HOME` before the cleanup callback, so the cancel dialed the default controller socket. Its source aggregate was `79ce365b2952cf6dd584f955a0d7825d11e8b640cd8ad86b475d68375af787ba`. The fixture was retained. The second exited 1 in 17.855888s, seed 1792219309: Managed passed 13 specs in 5.438395833s, and CLI DeferCleanup failed in 6.710s. Cancel reached the isolated controller and returned exit 3, with cleanup failed, evidence partial, and the required output uncollected, because the workload wrote `results/out.txt` only after its done wait. Its source aggregate was `880bdc041609192180c8154d195b48cd21a7bd0b70ea3978aa338601af18f21a`. That fixture was retained. Neither failure is a product defect. The third exited 0 in 21.365041s, seed 1792219869: Managed passed 13 of 305 with 292 skipped in 6.535845083s, and the CLI passed 1 of 56 with 55 skipped in 7.368891208s. The corrected workload creates `results/out.txt` first, holds the real nonzero canary lease through the isolation actions, and then cancels through the existing cleanup checks.
@@ -306,3 +310,34 @@ TASK-027 resource-bound recovery fixtures cover new v3 recollect/dispose budgets
 `VMRecoveryObservationFence` covers durable audit retention, stable recovery snapshots across observation-only telemetry, exact ledger apply/replay and rejection after effectful exchanges. `Task015VMNativeEvidencePlan` enables `vmTransport=true` for its native false-proof scenario: repeated internal recovery plans append real SSH measurements without staling the original plan; exact apply/replay preserves operator provenance, INCOMPLETE, original native bytes and quarantine. Cross-boot and preflight Job plans use v4 while resource plans retain their existing versions. Fixtures use isolated native processes and scripted SSH, with no live VM or installed-service qualification.
 
 `VMRecoveryMeasuredProbe` recovers existing prior-boot Jobs using the current controller with `vmTransport=true`. Both cross-boot and completed-cleanup cases call public HTTP plan twice, require equal snapshot/native observations with additional `probe` audit pairs, then apply the original token and replay its exact receipt without new events, duplicate workload/cleanup or a second settlement. These are synthetic prior-boot receipts with native local processes, not a real reboot. The shared measurement wire shape has a canonical closed decoder; ledger regressions retain case aliases, unknown/missing/null fields, mismatched lease identity, effectful start/complete records and malformed gap notices in the fence.
+
+## Selected supplementary recovery
+
+`SelectedEvidenceRecovery` and `SelectedEvidenceRecoveryCLI` cover selected
+resource recollection through CLI/client and HTTP, two real local retained Jobs,
+resource-v1 and resource-v2 finite saved deadlines, target-bound plans and
+permanent replay after controller-key rotation. Unrelated ownership faults and
+live workers do not prevent the selected collection; target liveness/ownership,
+resource occupancy, adapter intents, stale snapshots and expiry still refuse it.
+Invalid/foreign/resolved targets and selected disposal are rejected, original
+results remain immutable, and unresolved peers continue to block health/reuse.
+Existing all-Job recollect/dispose and resource-budget tests remain in the common
+`make test` gate. All fixtures are isolated and operate no real VM or service.
+
+## Persistent guest preparation identity
+
+`PersistentGuestIdentity` exercises synthetic prior-boot mount-device changes
+through native probe, attestation, retained output/log reads, cleanup and health.
+It checks all five prepared descriptor identities, unchanged request bytes,
+same-boot device refusal, legacy/unsupported/foreign identity refusal, live
+worker locks, original request/receipt/runner digest changes between plan and
+apply, and copied/replaced root, workspace, control, runner and log before
+plan and after apply. `PersistentGuestHostBinding` checks the durable host
+projection and rejects missing/foreign preparation identities in recovery plans.
+`TestPersistentDescriptorIdentity` reads actual macOS descriptor attributes and
+proves pathname replacement cannot change the open object's identity. Existing
+reboot/controller, receipt/digest, cleanup and transport fixtures remain in the
+common gate. These are isolated fixtures, not a live reboot or installed-service
+qualification; release/adoption remains separately authorized.
+
+`GuestRecoveryCompatibility` checks historical native request bytes/digests and rejects preparation under frozen guest/recovery v1/v2. `GuestRecoveryCompatibilityNative` replays historical preparations without identity promotion and retains archived prior-boot records for every recovery operation. New native recovery fixtures exercise guest/control v3/v4, native request/v2 and recovery/attestation v3/v4; host fixtures preserve selected-target deadlines and v4 intent/receipt replay. Modeled device renumbering is not a real reboot qualification.

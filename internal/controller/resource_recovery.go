@@ -122,7 +122,7 @@ func (s *runtimeServer) planResourceRecovery(id string) (resourceRecoveryPlan, e
 	if len(p.Unknowns) == 0 {
 		p.Effects = []string{"commit resource recovery intent", "verify local readiness and owned workspace absence", "return availability without changing any Job result"}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, "reconcile", managed.RecoveryDigest(snap), managed.RecoveryDigest(observation), p.ExpiresAt, ""})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{Installation: s.installationID(), JobID: "resource:" + id, Action: "reconcile", SnapshotDigest: managed.RecoveryDigest(snap), ObservationDigest: managed.RecoveryDigest(observation), ExpiresAt: p.ExpiresAt, BudgetDigest: ""})
 	}
 	return p, nil
 }
@@ -135,7 +135,7 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	if q.Plan && q.Evidence != nil || q.Action != "" && (!q.Plan || q.Action != "recollect" && q.Action != "dispose" && q.Action != "attest-guest-stopped" && q.Action != "attest-power-stopped") {
+	if q.JobID != "" && (!q.Plan || q.Action != "recollect" || !managed.ValidRequestKey(q.JobID)) || q.Plan && q.Evidence != nil || q.Action != "" && (!q.Plan || q.Action != "recollect" && q.Action != "dispose" && q.Action != "attest-guest-stopped" && q.Action != "attest-power-stopped") {
 		reject(w, op, managed.ErrInvalid)
 		return
 	}
@@ -158,7 +158,7 @@ func (s *runtimeServer) resourceRecovery(w http.ResponseWriter, r *http.Request)
 		if q.Action == "attest-guest-stopped" {
 			plan, err = s.planGuestAttestation(id)
 		} else if q.Action != "" {
-			plan, err = s.planEvidenceRecovery(id, q.Action)
+			plan, err = s.planSelectedEvidenceRecovery(id, q.Action, q.JobID)
 		} else {
 			plan, err = s.planResourceRecovery(id)
 		}

@@ -21,6 +21,7 @@ import (
 // GuestControl is a guest-native filesystem-worker receipt, separate from the
 // workload receipts. A lost SSH observer never establishes worker termination.
 type GuestControl struct {
+	Preparation   *GuestPreparation        `json:"preparation,omitempty"`
 	Schema        string                   `json:"schema"`
 	Request       GuestRequest             `json:"request"`
 	NativeRequest *Request                 `json:"native_request,omitempty"`
@@ -48,7 +49,7 @@ type GuestFile struct {
 // encoders additionally budget the complete response through marshalGuestFileReply;
 // v1 file collection and live output retain their original 64 KiB bound.
 func GuestFilePageBytes(schema string) int {
-	if schema == "haepari.guest-request/v2" {
+	if GuestAbsenceAware(GuestRequest{Schema: schema}) {
 		return 512 << 10
 	}
 	return 64 << 10
@@ -104,30 +105,39 @@ func (c *guestControlFile) bindRoot(d *directory) error {
 	if err := unix.Fstat(int(d.file.Fd()), &st); err != nil {
 		return err
 	}
-	c.value.Root = &managed.RetainedPath{Path: "", Device: uint64(st.Dev), Inode: uint64(st.Ino), Directory: true}
+	root, err := guestRetainedDescriptor(d.file, "", true, GuestUsesPersistentIdentity(c.value.Request))
+	if err != nil {
+		return err
+	}
+	c.value.Root = &root
 	return c.save()
 }
 
 func (c *guestControlFile) bindWorkspace(d *directory) error {
-	if c.value.Schema != "haepari.guest-control/v2" {
+	if !guestBindsWorkspace(c.value.Request) {
 		return nil
 	}
 	var st unix.Stat_t
 	if err := unix.Fstat(int(d.file.Fd()), &st); err != nil {
 		return err
 	}
-	c.value.WorkspaceRoot = &managed.RetainedPath{Path: "workspace", Device: uint64(st.Dev), Inode: uint64(st.Ino), Directory: true}
+	root, err := guestRetainedDescriptor(d.file, "workspace", true, GuestUsesPersistentIdentity(c.value.Request))
+	if err != nil {
+		return err
+	}
+	c.value.WorkspaceRoot = &root
 	return c.save()
 }
 
 func validGuestControlSchema(c GuestControl, q GuestRequest) bool {
-	if c.Request.Schema != q.Schema {
+	if c.Request.Schema != q.Schema || c.Schema != guestControlSchema(q) ||
+		!validGuestIdentityVersion(q) || !validControlIdentityVersion(c) {
 		return false
 	}
-	if q.Schema == "haepari.guest-request/v2" {
-		return c.Schema == "haepari.guest-control/v2" && (c.WorkspaceRoot == nil && c.NativeRequest == nil || validGuestWorkspaceRoot(c.WorkspaceRoot))
+	if guestBindsWorkspace(q) {
+		return c.WorkspaceRoot == nil && c.NativeRequest == nil || validGuestWorkspaceRoot(c.WorkspaceRoot)
 	}
-	return c.Schema == "haepari.guest-control/v1" && c.WorkspaceRoot == nil
+	return c.WorkspaceRoot == nil
 }
 
 func validGuestWorkspaceRoot(root *managed.RetainedPath) bool {
@@ -137,7 +147,13 @@ func validGuestWorkspaceRoot(root *managed.RetainedPath) bool {
 // The outer Job inode does not prove that its prepared workspace is still
 // present. Never adopt a recreated directory or turn its absence into evidence.
 func validateGuestWorkspace(d *directory, c GuestControl) error {
-	if c.Schema != "haepari.guest-control/v2" {
+	if !guestBindsWorkspace(c.Request) {
+		if c.Preparation == nil {
+			return nil
+		}
+		if c.Preparation.Workspace == nil || !retainedAtMatches(int(d.file.Fd()), "workspace", *c.Preparation.Workspace) {
+			return ErrConflict
+		}
 		return nil
 	}
 	var st unix.Stat_t
@@ -145,7 +161,7 @@ func validateGuestWorkspace(d *directory, c GuestControl) error {
 	if c.WorkspaceRoot == nil && c.NativeRequest == nil && errors.Is(err, unix.ENOENT) {
 		return nil
 	}
-	if err != nil || !validGuestWorkspaceRoot(c.WorkspaceRoot) || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR || uint64(st.Dev) != c.WorkspaceRoot.Device || uint64(st.Ino) != c.WorkspaceRoot.Inode {
+	if err != nil || !validGuestWorkspaceRoot(c.WorkspaceRoot) || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR || !retainedAtMatches(int(d.file.Fd()), "workspace", *c.WorkspaceRoot) {
 		return ErrConflict
 	}
 	return nil
@@ -154,7 +170,9 @@ func sameGuestOwner(a, b GuestRequest) bool {
 	x, y := a.Request, b.Request
 	// Prepare's pre-publication request has no guest output inode yet.
 	x.LogDevice, x.LogInode = 0, 0
+	x.LogIdentity = platform.FileIdentity{}
 	y.LogDevice, y.LogInode = 0, 0
+	y.LogIdentity = platform.FileIdentity{}
 	return a.VMUUID == b.VMUUID && a.MAC == b.MAC && a.BootID == b.BootID &&
 		a.JobRoot == b.JobRoot && a.RunnerDigest == b.RunnerDigest && a.ObjectID == b.ObjectID &&
 		a.InputDigest == b.InputDigest && a.ProfileDigest == b.ProfileDigest && reflect.DeepEqual(x, y)
@@ -190,11 +208,10 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		!guestDigest(q.InputDigest) || !guestDigest(q.ProfileDigest) || !guestDigest(q.ObjectID) {
 		return reply, ErrInvalid
 	}
-	probe := q.Request
-	if probe.LogInode == 0 {
-		probe.LogInode = 1
+	if GuestUsesPersistentIdentity(q) && q.Request.Schema != PersistentRunnerRequestSchema {
+		return reply, ErrInvalid
 	}
-	if probe.Validate(filepath.Join(q.JobRoot, q.Request.Identity.JobID)) != nil {
+	if validateGuestRequest(q.Request, filepath.Join(q.JobRoot, q.Request.Identity.JobID)) != nil {
 		return reply, ErrInvalid
 	}
 	parent, err := openDirectory(q.JobRoot)
@@ -232,10 +249,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		owner.Inventory = nil
 		owner.Challenge = ""
 		owner.Root = nil
-		c.value = GuestControl{Schema: "haepari.guest-control/v1", Request: owner}
-		if q.Schema == "haepari.guest-request/v2" {
-			c.value.Schema = "haepari.guest-control/v2"
-		}
+		c.value = GuestControl{Schema: guestControlSchema(q), Request: owner}
 		if err = parent.file.Sync(); err != nil {
 			return reply, err
 		}
@@ -261,6 +275,12 @@ func Guest(q GuestRequest) (GuestReply, error) {
 	if q.Root != nil && !reflect.DeepEqual(q.Root, c.value.Root) {
 		return reply, ErrConflict
 	}
+	if !fresh {
+		if err := validatePersistentPreparation(&c, q, false); err != nil {
+			return reply, err
+		}
+	}
+	reply.Preparation = c.value.Preparation
 	reply.Control = &c.value
 	reply.Root = c.value.Root
 	reply.Request = c.value.NativeRequest
@@ -268,7 +288,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		if c.value.Root != nil {
 			var st unix.Stat_t
 			e := unix.Fstatat(int(parent.file.Fd()), q.Request.Identity.JobID, &st, unix.AT_SYMLINK_NOFOLLOW)
-			if e != nil && !(errors.Is(e, unix.ENOENT) && c.value.Phase == "cleanup") || e == nil && (uint64(st.Dev) != c.value.Root.Device || uint64(st.Ino) != c.value.Root.Inode || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR) {
+			if e != nil && !(errors.Is(e, unix.ENOENT) && c.value.Phase == "cleanup") || e == nil && (!retainedAtMatches(int(parent.file.Fd()), q.Request.Identity.JobID, *c.value.Root) || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR) {
 				return reply, ErrConflict
 			}
 		}
@@ -282,7 +302,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 		stopped := c.value.Complete || guestOwnerStopped(c.value.Owner)
 		nativeStopped := c.value.Observation != nil && (c.value.Observation.Exit != nil && c.value.Observation.Exit.TerminationProven || c.value.Retired && c.value.Observation.State == "prepared" && c.value.Observation.Intent == nil) || c.value.Retired && c.value.NativeRequest == nil
 		c.value.Stopped = stopped
-		if !absent || !stopped || c.value.Root == nil || !nativeStopped || c.value.Schema == "haepari.guest-control/v2" && (c.value.Phase != "cleanup" || c.value.Error != "") {
+		if !absent || !stopped || c.value.Root == nil || !nativeStopped || GuestAbsenceAware(c.value.Request) && (c.value.Phase != "cleanup" || c.value.Error != "") {
 			return reply, nil
 		}
 
@@ -302,7 +322,7 @@ func Guest(q GuestRequest) (GuestReply, error) {
 			return reply, ErrAmbiguous
 		}
 		var st unix.Stat_t
-		if unix.Fstatat(int(parent.file.Fd()), q.Request.Identity.JobID, &st, unix.AT_SYMLINK_NOFOLLOW) != nil || uint64(st.Dev) != c.value.Root.Device || uint64(st.Ino) != c.value.Root.Inode {
+		if unix.Fstatat(int(parent.file.Fd()), q.Request.Identity.JobID, &st, unix.AT_SYMLINK_NOFOLLOW) != nil || !retainedAtMatches(int(parent.file.Fd()), q.Request.Identity.JobID, *c.value.Root) {
 			return reply, ErrConflict
 		}
 	}
@@ -316,6 +336,12 @@ func Guest(q GuestRequest) (GuestReply, error) {
 			return reply, e
 		}
 		e = validateGuestWorkspace(d, c.value)
+		if e == nil && (c.value.Root == nil || !retainedDescriptorMatches(int(d.file.Fd()), *c.value.Root)) {
+			e = ErrConflict
+		}
+		if e == nil && q.Operation == "start" {
+			e = validatePreparedPayloads(d, c.value, q)
+		}
 		d.close()
 		if e != nil {
 			return reply, e
@@ -339,6 +365,10 @@ func Guest(q GuestRequest) (GuestReply, error) {
 	} else {
 		reply, err = guestEffect(q, &c)
 	}
+	if err == nil && fresh && q.Operation == "prepare" && GuestUsesPersistentIdentity(q) && c.value.Preparation == nil {
+		err = c.bindPreparation(q)
+	}
+	reply.Preparation = c.value.Preparation
 	c.value.Complete = true
 	c.value.Stopped = true
 	if err != nil {
@@ -386,18 +416,27 @@ func (c *guestControlFile) observeInitialRoot(parent *directory, q GuestRequest)
 	}
 	// State is read-only. The retirement effect syncs this observed binding
 	// with its worker intent before any barrier or cleanup can be authorized.
-	c.value.Root = &managed.RetainedPath{Path: "", Device: uint64(opened.Dev), Inode: uint64(opened.Ino), Directory: true}
+	root, err := guestRetainedDescriptor(d.file, "", true, GuestUsesPersistentIdentity(c.value.Request))
+	if err != nil {
+		return err
+	}
+	c.value.Root = &root
 	return nil
 }
 
 func guestFiles(parent, d *directory, q GuestRequest, reply GuestReply, c *guestControlFile) (GuestReply, error) {
 	var st unix.Stat_t
 	if unix.Fstat(int(d.file.Fd()), &st) != nil || c.value.Root == nil ||
-		c.value.Root.Device != uint64(st.Dev) || c.value.Root.Inode != uint64(st.Ino) {
+		!retainedDescriptorMatches(int(d.file.Fd()), *c.value.Root) {
 		return reply, ErrConflict
 	}
 	if err := validateGuestWorkspace(d, c.value); err != nil {
 		return reply, err
+	}
+	if q.Area == "log" && c.value.NativeRequest != nil {
+		if err := validatePreparedPayloads(d, c.value, q); err != nil {
+			return reply, err
+		}
 	}
 	reply.Root = c.value.Root
 	if q.Operation == "root" {
@@ -418,7 +457,7 @@ func guestFiles(parent, d *directory, q GuestRequest, reply GuestReply, c *guest
 		if err := validateGuestWorkspace(d, c.value); err != nil {
 			return reply, err
 		}
-		if err := guestRemoveJobBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, c.value.Root, c.value.WorkspaceRoot); err != nil {
+		if err := guestRemoveJobBound(int(parent.file.Fd()), q.Request.Identity.JobID, q.Deadline, c.value.Root, preparedWorkspace(c.value)); err != nil {
 			return reply, err
 		}
 		return reply, nil
@@ -427,7 +466,7 @@ func guestFiles(parent, d *directory, q GuestRequest, reply GuestReply, c *guest
 	if err != nil {
 		// ENOENT is meaningful only beneath this already validated root,
 		// after native workload termination. It never masks permission or SSH loss.
-		if q.Schema == "haepari.guest-request/v2" && (q.Area == "workspace" || q.Area == "") && q.Offset == 0 && q.ExpectedFile == nil && errors.Is(err, unix.ENOENT) {
+		if GuestAbsenceAware(q) && (q.Area == "workspace" || q.Area == "") && q.Offset == 0 && q.ExpectedFile == nil && errors.Is(err, unix.ENOENT) {
 			if err := validateGuestWorkspace(d, c.value); err != nil {
 				return reply, err
 			}
@@ -497,7 +536,7 @@ func guestOutputFile(d *directory, name, area string, workspace *managed.Retaine
 	defer func() { unix.Close(fd) }()
 	if workspace != nil {
 		var st unix.Stat_t
-		if unix.Fstat(fd, &st) != nil || uint64(st.Dev) != workspace.Device || uint64(st.Ino) != workspace.Inode {
+		if unix.Fstat(fd, &st) != nil || !retainedDescriptorMatches(fd, *workspace) {
 			return nil, ErrConflict
 		}
 	}
@@ -561,7 +600,7 @@ func guestRemoveJobBound(parent int, name string, deadline time.Time, expected, 
 	if err := unix.Fstatat(parent, name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
 	}
-	if expected != nil && (!expected.Directory || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR || uint64(st.Dev) != expected.Device || st.Ino != expected.Inode) {
+	if expected != nil && (!expected.Directory || uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR || !retainedAtMatches(parent, name, *expected)) {
 		return ErrConflict
 	}
 	if uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR {
@@ -583,7 +622,7 @@ func guestRemoveJobBound(parent int, name string, deadline time.Time, expected, 
 	}
 	if workspace != nil {
 		var current unix.Stat_t
-		if unix.Fstatat(fd, "workspace", &current, unix.AT_SYMLINK_NOFOLLOW) != nil || uint32(current.Mode)&unix.S_IFMT != unix.S_IFDIR || uint64(current.Dev) != workspace.Device || uint64(current.Ino) != workspace.Inode {
+		if unix.Fstatat(fd, "workspace", &current, unix.AT_SYMLINK_NOFOLLOW) != nil || uint32(current.Mode)&unix.S_IFMT != unix.S_IFDIR || !retainedAtMatches(fd, "workspace", *workspace) {
 			return ErrConflict
 		}
 	}
@@ -616,7 +655,7 @@ func guestRemoveJobBound(parent int, name string, deadline time.Time, expected, 
 	if err = unix.Unlinkat(parent, name, unix.AT_REMOVEDIR); err != nil {
 		return err
 	}
-	if expected != nil {
+	if expected != nil && expected.Path == "" {
 		boundary("guest_cleanup_root_unlinked")
 	}
 	return unix.Fsync(parent)
@@ -670,7 +709,7 @@ func retireGuest(parent *directory, q GuestRequest, reply GuestReply, c *guestCo
 	}
 	defer d.close()
 	var st unix.Stat_t
-	if unix.Fstat(int(d.file.Fd()), &st) != nil || uint64(st.Dev) != c.value.Root.Device || uint64(st.Ino) != c.value.Root.Inode {
+	if unix.Fstat(int(d.file.Fd()), &st) != nil || !retainedDescriptorMatches(int(d.file.Fd()), *c.value.Root) || !retainedAtMatches(int(parent.file.Fd()), q.Request.Identity.JobID, *c.value.Root) {
 		return reply, ErrConflict
 	}
 	probe := q

@@ -324,6 +324,9 @@ func decodeClosed(data []byte, target any) error {
 	}
 	switch value := target.(type) {
 	case *EvidenceRecoveryIntent:
+		if value.Schema != "haepari.evidence-recovery-intent/v4" && EvidenceRecoveryHasPersistentIdentity(value.Jobs) {
+			return ErrInvalid
+		}
 		if oneOf(value.Schema, "haepari.evidence-recovery-intent/v1", "haepari.evidence-recovery-intent/v2") {
 			var fields map[string]json.RawMessage
 			if json.Unmarshal(data, &fields) != nil {

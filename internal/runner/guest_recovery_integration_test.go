@@ -65,7 +65,7 @@ func retainedNativeGuest() (GuestRecoveryRequest, string) {
 }
 
 func retainedNativeGuestWithLogLimit(limit int64) (GuestRecoveryRequest, string) {
-	return retainedNativeGuestWithProtocol(limit, "haepari.guest-request/v1")
+	return retainedNativeGuestWithProtocol(limit, "haepari.guest-request/v3")
 }
 
 func retainedNativeGuestWithProtocol(limit int64, schema string) (GuestRecoveryRequest, string) {
@@ -75,14 +75,18 @@ func retainedNativeGuestWithProtocol(limit int64, schema string) (GuestRecoveryR
 func retainedNativeGuestWithEnvironment(limit int64, schema string, environment []string) (GuestRecoveryRequest, string) {
 	guest, parent := guestFixture("printf once > count.txt; printf native-log")
 	guest.Schema = schema
+	if GuestUsesPersistentIdentity(guest) {
+		guest.Request.Schema = PersistentRunnerRequestSchema
+	}
 	guest.Request.LogLimitBytes = limit
 	guest.Request.Environment = append(guest.Request.Environment, "GORACE=atexit_sleep_ms=0")
 	guest.Request.Environment = append(guest.Request.Environment, environment...)
-	envelope, err := nativeGuestProtocol(guest, false, "")
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	envelope, err, diagnostic := nativeGuestProtocolObserved(guest, false, "")
+	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "prepare diagnostic=%s envelope=%+v", diagnostic, envelope.Error)
 	var prepared GuestReply
 	gomega.Expect(json.Unmarshal(envelope.Data, &prepared)).To(gomega.Succeed())
 	guest.Request = *prepared.Request
+	guest.Preparation = prepared.Preparation
 	guest.Files = nil
 	guest.Inventory = nil
 	guest.Operation = "start"
@@ -106,7 +110,7 @@ func retainedNativeGuestWithEnvironment(limit int64, schema string, environment 
 	}
 	raw, _ := json.Marshal(exit)
 	gomega.Expect(os.WriteFile(path, raw, 0600)).To(gomega.Succeed())
-	q := GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "probe", Guest: guest, RecoveryDigest: guest.RunnerDigest, Deadline: time.Now().Add(time.Minute).UTC()}
+	q := GuestRecoveryRequest{Schema: GuestRecoveryRequestSchema(guest, false), Operation: "probe", Guest: guest, RecoveryDigest: guest.RunnerDigest, Deadline: time.Now().Add(time.Minute).UTC()}
 	envelope, err = nativeGuestProtocol(q, true, "")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	var probe GuestRecoveryReply
@@ -120,7 +124,7 @@ func retainedNativeGuestWithEnvironment(limit int64, schema string, environment 
 
 var _ = ginkgo.Describe("GuestRecoveryNative", ginkgo.Label("integration"), func() {
 	ginkgo.It("collects bounded v2 attested file envelopes with large request metadata", func() {
-		q, parent := retainedNativeGuestWithEnvironment(0, "haepari.guest-request/v2", []string{"LARGE=" + strings.Repeat("e", 128<<10)})
+		q, parent := retainedNativeGuestWithEnvironment(0, "haepari.guest-request/v4", []string{"LARGE=" + strings.Repeat("e", 128<<10)})
 		defer os.RemoveAll(parent)
 		envelope, err := nativeGuestProtocol(q, true, "")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -136,7 +137,7 @@ func (s *runtimeServer) artifactManifest(id string) (managed.ArtifactManifest, e
 	if !missingLogAllowed(o) {
 		f, _, _, err := openPrivateLog(s.root.Path, id, o.RunID)
 		if err != nil {
-			if err == errLogMissing && supplementaryGuestLog(m, private) {
+			if errors.Is(err, errLogMissing) && uncollectedGuestLog(s.root.Path, id, m.Result) {
 				return m, nil
 			}
 			return m, err
@@ -159,25 +160,30 @@ func (s *runtimeServer) artifactManifest(id string) (managed.ArtifactManifest, e
 	return m, nil
 }
 
-// A declared original collection gap stays in the immutable result. A
-// separately verified guest log may be delivered under its supplementary path;
-// it does not impersonate the original host log or excuse a lost accepted log.
-func supplementaryGuestLog(m managed.ArtifactManifest, private []managed.EvidenceRecoveryOutcome) bool {
+// An original collection gap permits a partial export only when neither the
+// host log nor its durable binding exists. A supplementary log cannot excuse
+// loss of a previously collected original. Probe both leaves under a verified
+// private Job directory; a missing parent or an access error is not absence.
+func uncollectedGuestLog(root, id string, result managed.Result) bool {
 	declared := false
-	for _, gap := range m.Result.EvidenceGaps {
+	for _, gap := range result.EvidenceGaps {
 		declared = declared || gap.Path == "output.log" && gap.Reason == "guest_log_uncollected"
 	}
 	if !declared {
 		return false
 	}
-	for _, record := range private {
-		for _, file := range record.GuestArtifacts {
-			if file.Path == "output.log" {
-				return true
-			}
+	fd, err := openPrivateJob(root, id)
+	if err != nil {
+		return false
+	}
+	defer unix.Close(fd)
+	for _, name := range []string{"output.log", "output-identity.json"} {
+		var st unix.Stat_t
+		if err := unix.Fstatat(fd, name, &st, unix.AT_SYMLINK_NOFOLLOW); !errors.Is(err, unix.ENOENT) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func (s *runtimeServer) artifacts(w http.ResponseWriter, r *http.Request) {
@@ -355,6 +361,6 @@ func (s *runtimeServer) bindArtifactPage(id string, a managed.ResultArtifact, f 
 	if err != nil {
 		return d, err
 	}
-	d.PageToken = s.signRecoveryToken(recoveryToken{s.installationID(), id, "artifact:" + a.Path, managed.RecoveryDigest(a), managed.RecoveryDigest(facts), time.Now().UTC().Add(time.Hour), ""})
+	d.PageToken = s.signRecoveryToken(recoveryToken{Installation: s.installationID(), JobID: id, Action: "artifact:" + a.Path, SnapshotDigest: managed.RecoveryDigest(a), ObservationDigest: managed.RecoveryDigest(facts), ExpiresAt: time.Now().UTC().Add(time.Hour), BudgetDigest: ""})
 	return d, nil
 }

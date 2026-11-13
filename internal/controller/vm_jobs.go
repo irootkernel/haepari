@@ -189,6 +189,7 @@ func (s *runtimeServer) vmBinding(jobID string) (runner.GuestRequest, error) {
 			q.Request = *r.Request
 		}
 		q.Root = r.Root
+		q.Preparation = r.Preparation
 	}
 	id, err := s.ledger.LocalIdentity(jobID)
 	if err != nil || id != q.Request.Identity {
@@ -204,9 +205,10 @@ func (s *runtimeServer) recordVMPrepared(q *runner.GuestRequest, r runner.GuestR
 		q.Request = *r.Request
 	}
 	q.Root = r.Root
+	q.Preparation = r.Preparation
 	// Only permanent identity facts are retained; fresh challenges and transient
 	// filesystem-worker owners cannot make an identical preparation a new fact.
-	binding := runner.GuestReply{Request: r.Request, Root: r.Root}
+	binding := runner.GuestReply{Request: r.Request, Root: r.Root, Preparation: r.Preparation}
 	raw, err := json.Marshal(binding)
 	if err != nil {
 		return err
@@ -331,9 +333,9 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	if err != nil {
 		return s.vmNoEffect(c, "prepare_failure", true, "", err)
 	}
-	guestSchema := "haepari.guest-request/v1"
+	guestSchema := "haepari.guest-request/v3"
 	if managed.AbsenceAware(job) {
-		guestSchema = "haepari.guest-request/v2"
+		guestSchema = "haepari.guest-request/v4"
 	}
 	probe := runner.GuestRequest{Schema: guestSchema, Operation: "identity", VMUUID: strings.ToLower(spec.VM.UTMVMUUID), MAC: strings.ToLower(spec.VM.MACAddress), JobRoot: spec.VM.GuestJobRoot, RunnerDigest: transport.RunnerDigest, Deadline: prepareDeadline, Request: runner.Request{Identity: c.identity}}
 	sshAt := time.Now()
@@ -383,7 +385,7 @@ func (s *runtimeServer) executeVM(r managed.Receipt, job managed.JobSpec, object
 	if err != nil {
 		return err
 	}
-	q.Request = runner.Request{Schema: managed.RunnerSchema("request"), Identity: id, BootID: identity.BootID, WorkDir: filepath.Join(root, "workspace", filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: vmEnvironment(job, chain), Deadline: prepareDeadline.Add(time.Duration(job.Deadlines.RunSeconds) * time.Second).UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds}
+	q.Request = runner.Request{Schema: runner.PersistentRunnerRequestSchema, Identity: id, BootID: identity.BootID, WorkDir: filepath.Join(root, "workspace", filepath.FromSlash(job.Workload.CWD)), Argv: job.Workload.Argv, Environment: vmEnvironment(job, chain), Deadline: prepareDeadline.Add(time.Duration(job.Deadlines.RunSeconds) * time.Second).UTC(), RunSeconds: job.Deadlines.RunSeconds, TerminationSeconds: job.Deadlines.CleanupSeconds}
 	if c.manual {
 		argv, err := preparationArgv(job, filepath.Join(root, "haepari"))
 		if err != nil {

@@ -89,7 +89,10 @@ func decodeRecoveryJSON(raw []byte, into any) error {
 func DecodeGuestRecoveryRequest(raw []byte) (GuestRecoveryRequest, error) {
 	var q GuestRecoveryRequest
 	err := decodeRecoveryJSON(raw, &q)
-	if err == nil && q.Schema == "haepari.guest-recovery-request/v1" && (q.RecoveryBoot != "" || len(q.AbsentOutputs) != 0 || q.Basis != nil && (q.Basis.RecoveryBoot != "" || len(q.Basis.Missing) != 0 || q.Basis.WorkspaceRoot != nil)) {
+	if !validRecoveryRequestFields(q) {
+		err = ErrInvalid
+	}
+	if err == nil && !GuestRecoveryIsReboot(q.Schema) && (q.RecoveryBoot != "" || len(q.AbsentOutputs) != 0 || q.Basis != nil && (q.Basis.RecoveryBoot != "" || len(q.Basis.Missing) != 0 || q.Basis.WorkspaceRoot != nil)) {
 		err = ErrInvalid
 	}
 	return q, err
@@ -98,7 +101,10 @@ func DecodeGuestRecoveryRequest(raw []byte) (GuestRecoveryRequest, error) {
 func DecodeGuestRecoveryReply(raw []byte) (GuestRecoveryReply, error) {
 	var r GuestRecoveryReply
 	err := decodeRecoveryJSON(raw, &r)
-	if err == nil && r.Schema == "haepari.guest-recovery-reply/v1" && (r.CompletedCleanup != nil || r.Basis != nil && (r.Basis.RecoveryBoot != "" || len(r.Basis.Missing) != 0 || r.Basis.WorkspaceRoot != nil)) {
+	if !validRecoveryReplyVersion(r) {
+		err = ErrInvalid
+	}
+	if err == nil && (guestVersion(r.Schema, "guest-recovery-reply") == 1 || guestVersion(r.Schema, "guest-recovery-reply") == 3) && (r.CompletedCleanup != nil || r.Basis != nil && (r.Basis.RecoveryBoot != "" || len(r.Basis.Missing) != 0 || r.Basis.WorkspaceRoot != nil)) {
 		err = ErrInvalid
 	}
 	return r, err
@@ -112,7 +118,7 @@ func GuestRecoveryCommand(in io.Reader, out, stderr io.Writer) int {
 	reply, err := GuestRecovery(q)
 	var encoded []byte
 	if err == nil {
-		if q.Guest.Schema == "haepari.guest-request/v2" && q.Operation == "file" {
+		if GuestAbsenceAware(q.Guest) && q.Operation == "file" {
 			encoded, err = marshalGuestFileReply("runner.guest-recovery", &reply, &reply.Guest)
 		} else {
 			encoded, _ = json.Marshal(reply)
@@ -121,7 +127,7 @@ func GuestRecoveryCommand(in io.Reader, out, stderr io.Writer) int {
 	envelope := managed.Envelope{Schema: "haepari.envelope/v1", Operation: "runner.guest-recovery", OK: err == nil}
 	if err != nil {
 		envelope.Error = runnerError(err)
-		if q.Schema == "haepari.guest-recovery-request/v2" {
+		if guestVersion(q.Schema, "guest-recovery-request") >= 2 {
 			envelope.Error.Message = DiagnosticCause(err)
 			_, _ = io.WriteString(stderr, DiagnosticCause(err)+"\n")
 		}
@@ -138,10 +144,13 @@ func GuestRecoveryCommand(in io.Reader, out, stderr io.Writer) int {
 	return 0
 }
 func ValidateGuestAttestation(a GuestAttestation, guest GuestRequest) error {
-	if a.Schema == "haepari.guest-attestation/v2" {
+	if !validGuestIdentityVersion(a.Guest) || !validGuestIdentityVersion(guest) || a.Schema != GuestAttestationSchema(guest, GuestAttestationIsReboot(a.Schema)) || !GuestUsesPersistentIdentity(guest) && !legacyRecoveryBasis(&a.Basis) {
+		return ErrConflict
+	}
+	if GuestAttestationIsReboot(a.Schema) {
 		return validateRebootAttestation(a, guest)
 	}
-	if a.Schema != "haepari.guest-attestation/v1" || a.Basis.RecoveryBoot != "" || len(a.Basis.Missing) != 0 || a.Basis.WorkspaceRoot != nil || !sameGuestOwner(a.Guest, guest) || a.Guest.Challenge != "" || a.Guest.Files != nil || a.Guest.Inventory != nil || a.Guest.Operation != "inspect" ||
+	if a.Schema != GuestAttestationSchema(guest, false) || a.Basis.RecoveryBoot != "" || len(a.Basis.Missing) != 0 || a.Basis.WorkspaceRoot != nil || !sameGuestOwner(a.Guest, guest) || a.Guest.Challenge != "" || a.Guest.Files != nil || a.Guest.Inventory != nil || a.Guest.Operation != "inspect" ||
 		!guestDigest(a.RecoveryDigest) || !managed.ValidRequestKey(a.MutationKey) || a.Deadline.IsZero() || managed.ValidateRecoveryEvidence(a.Evidence) != nil || a.Evidence.Source != "operator-attested" || a.Evidence.Mechanism != "guest-workload-and-descendants-stopped" || a.Evidence.Reference != "job:"+guest.Request.Identity.JobID || a.Evidence.Digest != managed.RecoveryDigest(a.Basis) || a.Evidence.ObservedAt.After(a.Deadline) ||
 		a.Basis.Root.Path != "" || !a.Basis.Root.Directory || a.Basis.Root.Inode == 0 || a.Basis.Control.Path != "" || a.Basis.Control.Directory || a.Basis.Control.Inode == 0 || a.Basis.Request.Identity != guest.Request.Identity || a.Basis.Request.BootID != guest.BootID || ValidateGuestObservation(a.Basis.Observation, a.Basis.Request) != nil || a.Basis.Observation.Intent == nil || a.Basis.Observation.Exit == nil || a.Basis.Observation.Exit.TerminationProven {
 		return ErrConflict
@@ -233,6 +242,12 @@ func recoveryBasis(d *directory, c *guestControlFile, guest GuestRequest, deadli
 		return b, ErrConflict
 	}
 	b.Control = managed.RetainedPath{Device: uint64(st.Dev), Inode: st.Ino}
+	if GuestUsesPersistentIdentity(guest) {
+		if c.value.Preparation == nil {
+			return b, ErrUnproven
+		}
+		b.Control = c.value.Preparation.Control
+	}
 	if c.value.Root == nil || c.value.NativeRequest == nil {
 		return b, ErrUnproven
 	}
@@ -279,18 +294,16 @@ func GuestRecovery(q GuestRecoveryRequest) (GuestRecoveryReply, error) {
 // Used only by the explicitly versioned transport capability. Historical
 // GuestRecovery keeps its original executor/recovery digest equality.
 func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, healthOnly bool) (GuestRecoveryReply, error) {
-	r := GuestRecoveryReply{RecoveryDigest: q.RecoveryDigest, Schema: "haepari.guest-recovery-reply/v1", ProtocolDigest: managed.RecoveryDigest(q)}
+	r := GuestRecoveryReply{RecoveryDigest: q.RecoveryDigest, Schema: GuestRecoveryReplySchema(q), ProtocolDigest: managed.RecoveryDigest(q)}
 	if healthOnly && q.Operation != "health" {
 		return r, ErrInvalid
 	}
-	reboot := q.Schema == "haepari.guest-recovery-request/v2"
-	if reboot {
-		r.Schema = "haepari.guest-recovery-reply/v2"
-	}
-	if !reboot && q.Schema != "haepari.guest-recovery-request/v1" || !guestDigest(q.RecoveryDigest) || q.Deadline.IsZero() || !time.Now().Before(q.Deadline) || !reboot && q.RecoveryBoot != "" {
+	reboot := GuestRecoveryIsReboot(q.Schema)
+
+	if !validRecoveryRequestVersion(q) || !guestDigest(q.RecoveryDigest) || q.Deadline.IsZero() || !time.Now().Before(q.Deadline) || !reboot && q.RecoveryBoot != "" {
 		return r, ErrInvalid
 	}
-	if len(q.AbsentOutputs) > 0 && (!reboot || q.Guest.Schema != "haepari.guest-request/v2" || q.Operation != "cleanup") {
+	if len(q.AbsentOutputs) > 0 && (!reboot || !GuestAbsenceAware(q.Guest) || q.Operation != "cleanup") {
 		return r, ErrInvalid
 	}
 	switch q.Operation {
@@ -349,6 +362,9 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 	if err != nil || decodeRecoveryJSON(raw, &c.value) != nil || ValidateGuestControl(c.value, guest) != nil || c.value.Root == nil || !guestOwnerStopped(c.value.Owner) {
 		return r, ErrUnproven
 	}
+	if err := validatePersistentPreparation(&c, guest, reboot); err != nil {
+		return r, err
+	}
 	var controlStat, current unix.Stat_t
 	if unix.Fstat(int(f.Fd()), &controlStat) != nil || unix.Fstatat(int(parent.file.Fd()), name, &current, unix.AT_SYMLINK_NOFOLLOW) != nil || controlStat.Dev != current.Dev || controlStat.Ino != current.Ino {
 		return r, ErrConflict
@@ -361,7 +377,7 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 		return r, attestationErr
 	}
 	attested := attestationErr == nil
-	if attested && (ValidateGuestAttestation(a, guest) != nil || reboot != (a.Schema == "haepari.guest-attestation/v2") || reboot && a.Basis.RecoveryBoot != q.RecoveryBoot || a.RecoveryDigest != q.RecoveryDigest || a.Basis.Control.Device != uint64(controlStat.Dev) || a.Basis.Control.Inode != controlStat.Ino || a.Basis.Root != *c.value.Root) {
+	if attested && (ValidateGuestAttestation(a, guest) != nil || reboot != (GuestAttestationIsReboot(a.Schema)) || reboot && a.Basis.RecoveryBoot != q.RecoveryBoot || a.RecoveryDigest != q.RecoveryDigest || !retainedDescriptorMatches(int(f.Fd()), a.Basis.Control) || a.Basis.Root != *c.value.Root) {
 		return r, ErrConflict
 	}
 	if q.Operation != "probe" && q.Operation != "attest" && (!attested || q.Attestation == nil || !reflect.DeepEqual(a, *q.Attestation) || !c.value.Retired) {
@@ -379,7 +395,7 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 	root := filepath.Join(guest.JobRoot, guest.Request.Identity.JobID)
 	d, err := openDirectory(root)
 	if errors.Is(err, unix.ENOENT) && reboot && q.Operation == "probe" && !attested && !cleanupExists {
-		proof := GuestCompletedCleanup{RecoveryBoot: q.RecoveryBoot, ControlInode: managed.RetainedPath{Device: uint64(controlStat.Dev), Inode: controlStat.Ino}, Control: c.value}
+		proof := GuestCompletedCleanup{RecoveryBoot: q.RecoveryBoot, ControlInode: c.value.Preparation.Control, Control: c.value}
 		if ValidateGuestCompletedCleanup(proof, guest, q.RecoveryBoot) != nil || !time.Now().Before(q.Deadline) {
 			return r, ErrUnproven
 		}
@@ -420,11 +436,16 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 	}
 	defer d.close()
 	var st unix.Stat_t
-	if unix.Fstat(int(d.file.Fd()), &st) != nil || st.Ino != c.value.Root.Inode || uint64(st.Dev) != c.value.Root.Device {
+	if unix.Fstat(int(d.file.Fd()), &st) != nil || !retainedDescriptorMatches(int(d.file.Fd()), *c.value.Root) {
 		return r, ErrConflict
 	}
 	if err := validateGuestWorkspace(d, c.value); err != nil {
 		return r, err
+	}
+	if reboot && !cleanupExists {
+		if err := validatePreparedPayloads(d, c.value, guest); err != nil {
+			return r, err
+		}
 	}
 	if attested && reboot && !reflect.DeepEqual(a.Basis.WorkspaceRoot, c.value.WorkspaceRoot) {
 		return r, ErrConflict
@@ -481,10 +502,7 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 		if q.Basis == nil || !reflect.DeepEqual(*q.Basis, basis) || q.Evidence == nil || !managed.ValidRequestKey(q.MutationKey) {
 			return r, ErrConflict
 		}
-		proposed := GuestAttestation{Schema: "haepari.guest-attestation/v1", Guest: recoveryGuestOwner(guest), Basis: basis, RecoveryDigest: q.RecoveryDigest, MutationKey: q.MutationKey, Deadline: q.Deadline, Evidence: *q.Evidence}
-		if reboot {
-			proposed.Schema = "haepari.guest-attestation/v2"
-		}
+		proposed := GuestAttestation{Schema: GuestAttestationSchema(guest, reboot), Guest: recoveryGuestOwner(guest), Basis: basis, RecoveryDigest: q.RecoveryDigest, MutationKey: q.MutationKey, Deadline: q.Deadline, Evidence: *q.Evidence}
 		if ValidateGuestAttestation(proposed, guest) != nil || q.Evidence.ObservedAt.After(time.Now()) || q.Evidence.ObservedAt.Before(q.Deadline.Add(-2*time.Minute)) {
 			return r, ErrInvalid
 		}
@@ -528,7 +546,7 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 		}
 		// This is an explicit attested capability, separate from guestFiles' native
 		// proof gate. File integrity and private path handling are shared below.
-		r.Guest, err = guestRecoveryFile(d, guest, basis.Request, r.Guest, c.value.WorkspaceRoot, reboot && guest.Schema == "haepari.guest-request/v2")
+		r.Guest, err = guestRecoveryFile(d, guest, basis.Request, r.Guest, c.value.WorkspaceRoot, reboot && GuestAbsenceAware(guest))
 		if err == nil {
 			err = validateGuestWorkspace(d, c.value)
 		}
@@ -537,9 +555,8 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 		if !managed.ValidRequestKey(q.MutationKey) || !guestDigest(q.CollectionDigest) {
 			return r, ErrInvalid
 		}
-		wanted := guestAttestedCleanup{Schema: "haepari.guest-attested-cleanup/v1", AttestationDigest: managed.RecoveryDigest(a), MutationKey: q.MutationKey, CollectionDigest: q.CollectionDigest, Deadline: q.Deadline, AbsentOutputs: q.AbsentOutputs}
+		wanted := guestAttestedCleanup{Schema: guestCleanupSchema(guest, len(q.AbsentOutputs) > 0), AttestationDigest: managed.RecoveryDigest(a), MutationKey: q.MutationKey, CollectionDigest: q.CollectionDigest, Deadline: q.Deadline, AbsentOutputs: q.AbsentOutputs}
 		if len(q.AbsentOutputs) > 0 {
-			wanted.Schema = "haepari.guest-attested-cleanup/v2"
 		}
 		if !validAttestedCleanup(wanted, a) {
 			return r, ErrInvalid
@@ -567,7 +584,7 @@ func guestRecoveryWithExecutor(q GuestRecoveryRequest, executorDigest string, he
 		if err = checkAttestedAbsentOutputs(d, c.value, wanted); err != nil {
 			return r, err
 		}
-		if err = guestRemoveJobBound(int(parent.file.Fd()), guest.Request.Identity.JobID, q.Deadline, &a.Basis.Root, c.value.WorkspaceRoot); err != nil {
+		if err = guestRemoveJobBound(int(parent.file.Fd()), guest.Request.Identity.JobID, q.Deadline, &a.Basis.Root, preparedWorkspace(c.value)); err != nil {
 			return r, err
 		}
 		boundary("guest_attested_cleanup_deleted")
@@ -607,7 +624,7 @@ func guestRecoveryFile(d *directory, q GuestRequest, original Request, reply Gue
 	}
 	if q.Area == "log" {
 		var st unix.Stat_t
-		if unix.Fstat(int(f.Fd()), &st) != nil || uint64(st.Dev) != original.LogDevice || uint64(st.Ino) != original.LogInode {
+		if unix.Fstat(int(f.Fd()), &st) != nil || !retainedDescriptorMatches(int(f.Fd()), managed.RetainedPath{Device: original.LogDevice, Inode: original.LogInode, Persistent: original.LogIdentity, ObservedBoot: original.BootID}) {
 			return reply, ErrConflict
 		}
 	}
@@ -620,9 +637,9 @@ func qReceiptName(name string) bool {
 
 func validAttestedCleanup(c guestAttestedCleanup, a GuestAttestation) bool {
 	if len(c.AbsentOutputs) == 0 {
-		return c.Schema == "haepari.guest-attested-cleanup/v1"
+		return c.Schema == guestCleanupSchema(a.Guest, false)
 	}
-	if c.Schema != "haepari.guest-attested-cleanup/v2" || a.Schema != "haepari.guest-attestation/v2" || a.Guest.Schema != "haepari.guest-request/v2" || !validGuestWorkspaceRoot(a.Basis.WorkspaceRoot) || len(c.AbsentOutputs) > 1000 {
+	if c.Schema != guestCleanupSchema(a.Guest, true) || !GuestAttestationIsReboot(a.Schema) || !GuestAbsenceAware(a.Guest) || !validGuestWorkspaceRoot(a.Basis.WorkspaceRoot) || len(c.AbsentOutputs) > 1000 {
 		return false
 	}
 	seen := map[string]bool{}

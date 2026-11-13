@@ -19,6 +19,7 @@ import (
 type jobRecoveryRequest = managed.RecoveryRequest
 
 type recoveryToken struct {
+	TargetJobID       string    `json:"target_job_id,omitempty"`
 	Installation      string    `json:"installation_id"`
 	JobID             string    `json:"job_id"`
 	Action            string    `json:"action"`
@@ -79,7 +80,13 @@ func (s *runtimeServer) readRecoveryToken(raw string) (recoveryToken, error) {
 	if json.Unmarshal(data, &fields) != nil {
 		return t, managed.ErrInvalid
 	}
+	if raw, present := fields["target_job_id"]; present && (string(raw) == "null" || !managed.ValidRequestKey(t.TargetJobID) || t.Action != "recollect" || !strings.HasPrefix(t.JobID, "resource:")) {
+		return t, managed.ErrInvalid
+	}
 	for name := range fields {
+		if name != "target_job_id" && strings.EqualFold(name, "target_job_id") {
+			return t, managed.ErrInvalid
+		}
 		if name != "budget_digest" && strings.EqualFold(name, "budget_digest") {
 			return t, managed.ErrInvalid
 		}
@@ -199,7 +206,7 @@ func (s *runtimeServer) planJobRecovery(jobID, action string) (jobRecoveryPlan, 
 			p.Effects[1] = "record scoped operator termination evidence; keep workload outcome inconclusive"
 		}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), jobID, action, managed.RecoveryDigest(snap), managed.RecoveryDigest(observation), p.ExpiresAt, ""})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{Installation: s.installationID(), JobID: jobID, Action: action, SnapshotDigest: managed.RecoveryDigest(snap), ObservationDigest: managed.RecoveryDigest(observation), ExpiresAt: p.ExpiresAt, BudgetDigest: ""})
 	}
 	return p, nil
 }
@@ -212,6 +219,10 @@ func (s *runtimeServer) jobRecovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if q.JobID != "" {
+		reject(w, op, managed.ErrInvalid)
+		return
+	}
 	if q.Plan {
 		if q.PlanToken != "" || q.MutationKey != "" || q.Evidence != nil {
 			reject(w, op, managed.ErrInvalid)

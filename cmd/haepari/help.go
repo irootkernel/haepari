@@ -37,7 +37,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		{"resource resume", "resource resume <id> --expected-revision <n> [--expected-config-revision <n> --expected-lease-generation <n>] [--request-key <key>] --json"},
 		{"resource update", "resource update --file <lock-or-vm-json> --expected-revision <n> [--expected-availability-revision <n> (required for VM)] --json"},
 		{"resource remove", "resource remove <lock-id> --expected-revision <n> --json (idle advisory locks only; local and VM removal unsupported)"},
-		{"resource recover", "resource recover <id> --plan [--action recollect|dispose|attest-guest-stopped|attest-power-stopped] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},
+		{"resource recover", "resource recover <id> --plan [--action recollect|dispose|attest-guest-stopped|attest-power-stopped] [--job-id <recollect-job-id>] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},
 		{"job recover", "job recover <id> --plan [--action reconcile|attest-stopped|attest-no-start] --json | --plan-token <token> --request-key <key> [--evidence-file <json>] --json"},
 		{"resources list", "resources list [--cursor <cursor>] [--limit <1-100>] --json"},
 		{"jobs list", "jobs list [--resource <id>] [--state <state>] [--cursor <cursor>] [--limit <1-100>] --json"},
@@ -81,7 +81,7 @@ func helpCommand(args []string, stdout, stderr io.Writer) int {
 		Canonicalization string                    `json:"canonicalization"`
 	}{
 		Schema: "haepari.help/v1", Protocol: "managed-execution/v1", Commands: commands,
-		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.recovery-plan/v3", "haepari.recovery-plan/v4", "haepari.recovery-budget/v1", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.evidence-recovery-receipt/v2", "haepari.evidence-recovery-receipt/v3", "haepari.doctor/v1", "haepari.manual-result/v1", "haepari.resource/v2", "haepari.operator-projection/v1", "haepari.operator-diagnostic/v1"},
+		Schemas:    []string{"haepari.envelope/v1", "haepari.job/v1", "haepari.job/v2", "haepari.resource/v1", "haepari.result/v1", "haepari.result/v2", "haepari.run-event/v1", "haepari.recovery-plan/v1", "haepari.recovery-plan/v2", "haepari.recovery-plan/v3", "haepari.recovery-plan/v4", "haepari.recovery-plan/v5", "haepari.recovery-budget/v1", "haepari.power-recovery-plan/v2", "haepari.artifact-manifest/v1", "haepari.artifact-page/v1", "haepari.purge-receipt/v1", "haepari.evidence-recovery-receipt/v1", "haepari.evidence-recovery-receipt/v2", "haepari.evidence-recovery-receipt/v3", "haepari.evidence-recovery-receipt/v4", "haepari.doctor/v1", "haepari.manual-result/v1", "haepari.resource/v2", "haepari.operator-projection/v1", "haepari.operator-diagnostic/v1"},
 		ErrorExits: errors, VerdictExits: map[managed.Verdict]int{managed.Pass: 0, managed.Fail: 1, managed.Incomplete: 3, managed.Cancelled: 4},
 		Enums: map[string][]string{
 			"job_state":             {"queued", "preparing", "ready", "running", "awaiting_manual", "cancelling", "collecting", "cleaning", "settling", "reconciling", "finished"},

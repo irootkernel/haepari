@@ -83,3 +83,5 @@ and version observations in records remain unchanged. Directory-guide adoption
 has no separate repository-wide coverage map; the existing runnable-example and
 qualification guides continue to cover their boundaries, and `tools/README.md`
 covers the new launcher boundary.
+
+The current recovery correction is defined by [ADR-0022](architecture-decision-records/0022-prepared-identity-and-scoped-recollection.md): versioned prepared filesystem identity, selected supplementary recollection, safe refusal diagnostics and partial export. Its source verification does not establish installation, publication, consumer adoption or automatic recovery of legacy orphans.

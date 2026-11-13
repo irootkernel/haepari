@@ -177,7 +177,12 @@ var _ = ginkgo.Describe("Task036OperationalRecovery", ginkgo.Label("integration"
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			reply, err := transport.Call(context.Background(), f.spec, leases, request)
 			gomega.Expect(leases.Close()).To(gomega.Succeed())
-			gomega.Expect(calls).To(gomega.Equal(2), mode)
+			expectedCalls := 2
+			if mode == "v1" {
+				// A mixed frozen protocol and new preparation refuses at identity proof.
+				expectedCalls = 1
+			}
+			gomega.Expect(calls).To(gomega.Equal(expectedCalls), mode)
 			if mode == "valid" {
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				gomega.Expect(reply.Absent).To(gomega.BeTrue())
@@ -322,7 +327,7 @@ var _ = ginkgo.Describe("Task036OperationalRecovery", ginkgo.Label("integration"
 				Schema string `json:"schema"`
 			}
 			gomega.Expect(json.Unmarshal(operationalRecoverySSHInput(input), &wire)).To(gomega.Succeed())
-			if wire.Schema == "haepari.guest-recovery-request/v2" {
+			if runner.GuestRecoveryIsReboot(wire.Schema) {
 				return operationalRecoveryRefusal("runner.guest-recovery", managed.DiagnosticPermissionDenied), nil
 			}
 			return native(ctx, exe, args, input)

@@ -25,6 +25,7 @@ func recoverManaged(kind string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet(kind+" recover", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	plan := flags.Bool("plan", false, "inspect a read-only recovery plan")
+	jobID := flags.String("job-id", "", "select one retained Job for a resource recollect plan")
 	action := flags.String("action", "", "reconciliation or scoped attestation plan")
 	token := flags.String("plan-token", "", "apply one current plan")
 	key := flags.String("request-key", "", "saved permanent mutation key")
@@ -33,13 +34,13 @@ func recoverManaged(kind string, args []string, stdout, stderr io.Writer) int {
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || !*outputJSON {
 		return 2
 	}
-	q := managed.RecoveryRequest{Plan: *plan, Action: *action, PlanToken: *token, MutationKey: *key}
+	q := managed.RecoveryRequest{Plan: *plan, Action: *action, JobID: *jobID, PlanToken: *token, MutationKey: *key}
 	limit := 100
 	if kind == "resource" {
 		limit = 90
 	}
 	validAction := *action == "" || kind == "resource" && (*action == "recollect" || *action == "dispose" || *action == "attest-guest-stopped" || *action == "attest-power-stopped") || kind == "job" && (*action == "reconcile" || *action == "attest-stopped" || *action == "attest-no-start")
-	if len(*key) > limit || !validAction {
+	if len(*key) > limit || !validAction || *jobID != "" && (kind != "resource" || !*plan || *action != "recollect" || !managed.ValidRequestKey(*jobID)) {
 		fmt.Fprintln(stderr, "invalid recovery action, evidence flags or request key length")
 		return 2
 	}

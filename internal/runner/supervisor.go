@@ -116,7 +116,7 @@ func supervise(d *directory, q Request, path string) (result error) {
 	if err := unix.Fstat(int(log.Fd()), &st); err != nil {
 		return err
 	}
-	if uint64(st.Dev) != q.LogDevice || uint64(st.Ino) != q.LogInode {
+	if uint64(st.Dev) != q.LogDevice || uint64(st.Ino) != q.LogInode || !retainedDescriptorMatches(int(log.Fd()), managed.RetainedPath{Device: q.LogDevice, Inode: q.LogInode, Persistent: q.LogIdentity, ObservedBoot: q.BootID}) {
 		return ErrConflict
 	}
 	executable, err := os.Executable()

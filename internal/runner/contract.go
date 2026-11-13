@@ -24,6 +24,7 @@ var (
 )
 
 type Request struct {
+	LogIdentity        platform.FileIdentity `json:"log_identity,omitzero"`
 	Schema             string                `json:"schema"`
 	Identity           managed.LocalIdentity `json:"identity"`
 	BootID             string                `json:"boot_id"`
@@ -85,7 +86,7 @@ func (q Request) Validate(root string) error {
 		return ErrInvalid
 	}
 	id := q.Identity
-	if q.Schema != managed.RunnerSchema("request") || !managed.ValidRequestKey(id.JobID) || !managed.ValidRequestKey(id.ResourceID) || !managed.ValidRequestKey(id.RunID) || id.ConfigRevision <= 0 || id.LeaseGeneration <= 0 || id.Slot < 0 || id.Nonce == "" || q.BootID == "" || q.Deadline.IsZero() || q.RunSeconds <= 0 || q.RunSeconds > (1<<63-1)/int64(time.Second) || q.TerminationSeconds <= 0 || q.TerminationSeconds > (1<<63-1)/int64(time.Second) || q.LogInode == 0 {
+	if (q.Schema != managed.RunnerSchema("request") && q.Schema != PersistentRunnerRequestSchema) || q.Schema == managed.RunnerSchema("request") && q.LogIdentity != (platform.FileIdentity{}) || q.Schema == PersistentRunnerRequestSchema && !q.LogIdentity.Valid() || !managed.ValidRequestKey(id.JobID) || !managed.ValidRequestKey(id.ResourceID) || !managed.ValidRequestKey(id.RunID) || id.ConfigRevision <= 0 || id.LeaseGeneration <= 0 || id.Slot < 0 || id.Nonce == "" || q.BootID == "" || q.Deadline.IsZero() || q.RunSeconds <= 0 || q.RunSeconds > (1<<63-1)/int64(time.Second) || q.TerminationSeconds <= 0 || q.TerminationSeconds > (1<<63-1)/int64(time.Second) || q.LogInode == 0 {
 		return ErrInvalid
 	}
 	workspace := filepath.Join(root, "workspace")

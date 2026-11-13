@@ -126,6 +126,7 @@ var _ = ginkgo.Describe("Task014NativeSSHProtocol", ginkgo.Label("integration"),
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			q.Request = *prepared.Request
 			q.Root = prepared.Root
+			q.Preparation = prepared.Preparation
 			q.Files = nil
 			q.Inventory = nil
 			defer func() {

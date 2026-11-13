@@ -115,13 +115,17 @@ var _ = ginkgo.Describe("Task037VMOperationalBounds", ginkgo.Label("integration"
 		_, err = os.Lstat(path)
 		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
 	})
-	ginkgo.It("keeps historical prepared Jobs on their original guest wire after enabling the new controller", func() {
+	ginkgo.It("keeps a prepared Job on its captured guest wire after enabling owned transport", func() {
 		f := nativeVMFixture(ginkgo.GinkgoT(), "mkdir -p ../results; printf old > ../results/output.txt")
+		originalSchema := ""
 		native := f.s.sshCommand
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
 			defer ginkgo.GinkgoRecover()
 			q := vmTransportRequest(input)
-			gomega.Expect(q.Schema).To(gomega.Equal("haepari.guest-request/v1"))
+			if originalSchema == "" {
+				originalSchema = q.Schema
+			}
+			gomega.Expect(q.Schema).To(gomega.Equal(originalSchema))
 			if q.Operation == "start" {
 				f.s.vmTransport = true
 			}

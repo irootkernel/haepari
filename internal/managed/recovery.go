@@ -23,6 +23,7 @@ type RecoveryEvidence struct {
 }
 
 type RecoveryRequest struct {
+	JobID       string            `json:"job_id,omitempty"`
 	Plan        bool              `json:"plan"`
 	Action      string            `json:"action,omitempty"`
 	PlanToken   string            `json:"plan_token,omitempty"`

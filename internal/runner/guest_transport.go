@@ -12,16 +12,18 @@ import (
 	"time"
 
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/platform"
 	"golang.org/x/sys/unix"
 )
 
 // GuestTransportBinding is an immutable preparation observation. It does not
 // replace the original native request, phase deadlines or control receipt.
 type GuestTransportBinding struct {
-	Schema string               `json:"schema"`
-	Guest  GuestRequest         `json:"guest"`
-	Root   managed.RetainedPath `json:"root"`
-	Runner managed.RetainedPath `json:"runner"`
+	Preparation *GuestPreparation    `json:"preparation,omitempty"`
+	Schema      string               `json:"schema"`
+	Guest       GuestRequest         `json:"guest"`
+	Root        managed.RetainedPath `json:"root"`
+	Runner      managed.RetainedPath `json:"runner"`
 }
 type GuestTransportRequest struct {
 	Recovery       *GuestRecoveryRequest  `json:"recovery,omitempty"`
@@ -41,10 +43,13 @@ type GuestTransportReply struct {
 func GuestTransportDigest(q GuestTransportRequest) string { return managed.RecoveryDigest(q) }
 
 func ValidateGuestTransportBinding(b GuestTransportBinding, q GuestRequest) error {
-	if b.Schema != "haepari.guest-transport-binding/v1" || !sameGuestOwner(b.Guest, q) || b.Guest.Schema != q.Schema || b.Guest.Operation != "prepare" || b.Guest.Challenge != "" || b.Guest.Root == nil || !reflect.DeepEqual(*b.Guest.Root, b.Root) ||
+	if !validPreparationVersion(b.Preparation) || !validPreparationVersion(q.Preparation) {
+		return ErrConflict
+	}
+	if (!reflect.DeepEqual(b.Preparation, q.Preparation) || !reflect.DeepEqual(b.Guest.Preparation, q.Preparation)) || b.Schema != guestTransportBindingSchema(q) || !sameGuestOwner(b.Guest, q) || b.Guest.Schema != q.Schema || b.Guest.Operation != "prepare" || b.Guest.Challenge != "" || b.Guest.Root == nil || !reflect.DeepEqual(*b.Guest.Root, b.Root) ||
 		!managed.ValidRequestKey(q.Request.Identity.JobID) || !filepath.IsAbs(q.JobRoot) || filepath.Clean(q.JobRoot) != q.JobRoot || q.Request.Validate(filepath.Join(q.JobRoot, q.Request.Identity.JobID)) != nil || !guestDigest(q.RunnerDigest) ||
 		!reflect.DeepEqual(b.Guest.Request, q.Request) || b.Root.Path != "" || !b.Root.Directory || b.Root.Inode == 0 ||
-		b.Runner.Path != "haepari" || b.Runner.Directory || b.Runner.Inode == 0 ||
+		(b.Preparation != nil && b.Preparation.Runner != b.Runner) || b.Runner.Path != "haepari" || b.Runner.Directory || b.Runner.Inode == 0 ||
 		q.Root == nil || !reflect.DeepEqual(*q.Root, b.Root) || len(b.Guest.Files) != 0 || len(b.Guest.Inventory) != 0 {
 		return ErrConflict
 	}
@@ -62,7 +67,7 @@ func transportRunner(q GuestRequest, root managed.RetainedPath) (managed.Retaine
 	}
 	defer d.close()
 	var st unix.Stat_t
-	if unix.Fstat(int(d.file.Fd()), &st) != nil || uint64(st.Dev) != root.Device || st.Ino != root.Inode {
+	if unix.Fstat(int(d.file.Fd()), &st) != nil || !retainedDescriptorMatches(int(d.file.Fd()), root) {
 		return managed.RetainedPath{}, ErrConflict
 	}
 	f, err := d.open("haepari", unix.O_RDONLY)
@@ -89,10 +94,13 @@ func transportRunner(q GuestRequest, root managed.RetainedPath) (managed.Retaine
 		return managed.RetainedPath{}, err
 	}
 	defer current.close()
-	if unix.Fstat(int(current.file.Fd()), &st) != nil || uint64(st.Dev) != root.Device || st.Ino != root.Inode {
+	if unix.Fstat(int(current.file.Fd()), &st) != nil || !retainedDescriptorMatches(int(current.file.Fd()), root) {
 		return managed.RetainedPath{}, ErrConflict
 	}
-	return managed.RetainedPath{Path: "haepari", Device: uint64(before.Dev), Inode: before.Ino}, nil
+	if root.Persistent == (platform.FileIdentity{}) {
+		return managed.RetainedPath{Path: "haepari", Device: uint64(before.Dev), Inode: before.Ino}, nil
+	}
+	return retainedDescriptor(f, "haepari", false)
 }
 
 func GuestTransport(q GuestTransportRequest) (GuestTransportReply, error) {
@@ -165,11 +173,12 @@ func GuestTransport(q GuestTransportRequest) (GuestTransportReply, error) {
 		owner.Request = *r.Guest.Request
 		owner.Files, owner.Inventory, owner.Challenge = nil, nil, ""
 		owner.Root = r.Guest.Root
+		owner.Preparation = r.Guest.Preparation
 		file, e := transportRunner(owner, *r.Guest.Root)
 		if e != nil {
 			return r, e
 		}
-		r.Binding = &GuestTransportBinding{Schema: "haepari.guest-transport-binding/v1", Guest: owner, Root: *r.Guest.Root, Runner: file}
+		r.Binding = &GuestTransportBinding{Schema: guestTransportBindingSchema(owner), Guest: owner, Root: *r.Guest.Root, Runner: file, Preparation: r.Guest.Preparation}
 	} else {
 		r.Binding = q.Binding
 	}
@@ -220,7 +229,7 @@ func GuestTransportCommand(in io.Reader, out, stderr io.Writer) int {
 	r, err := GuestTransport(q)
 	var encoded []byte
 	if err == nil {
-		if q.Guest.Schema == "haepari.guest-request/v2" && q.Guest.Operation == "file" && q.Recovery == nil {
+		if GuestAbsenceAware(q.Guest) && q.Guest.Operation == "file" && q.Recovery == nil {
 			encoded, err = marshalGuestFileReply("runner.guest-transport", &r, &r.Guest)
 		} else {
 			encoded, _ = json.Marshal(r)

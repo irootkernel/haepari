@@ -301,7 +301,7 @@ func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Leas
 		return reply, ErrUnavailable
 	}
 	if !envelope.OK {
-		return reply, guestRefusalError(envelope.Error, q.Schema == "haepari.guest-request/v2")
+		return reply, guestRefusalError(envelope.Error, runner.GuestClassifiedDiagnostics(q))
 	}
 	if s.Transport {
 		var r runner.GuestTransportReply
@@ -317,6 +317,7 @@ func (s SSH) exchange(ctx context.Context, spec managed.ResourceSpec, lease Leas
 			owner := q
 			owner.Request = *reply.Request
 			owner.Root = reply.Root
+			owner.Preparation = reply.Preparation
 			if r.Binding == nil || runner.ValidateGuestTransportBinding(*r.Binding, owner) != nil {
 				return reply, ErrUnavailable
 			}
@@ -409,7 +410,7 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	if err != nil {
 		// ResolveGuest intentionally collapses invalid identity observations.
 		// Preserve only a complete native v2 refusal from its proof exchange.
-		if q.Schema == "haepari.guest-request/v2" && errors.Is(proofErr, ErrGuestRefused) {
+		if runner.GuestClassifiedDiagnostics(q) && errors.Is(proofErr, ErrGuestRefused) {
 			return runner.GuestReply{}, proofErr
 		}
 		return runner.GuestReply{}, err
@@ -453,6 +454,7 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 	if q.Operation == "prepare" || expected.LogDevice == 0 && expected.LogInode == 0 {
 		expected.LogDevice = reply.Request.LogDevice
 		expected.LogInode = reply.Request.LogInode
+		expected.LogIdentity = reply.Request.LogIdentity
 	}
 	if !reflect.DeepEqual(expected, *reply.Request) || reply.Request.LogInode == 0 {
 		return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
@@ -474,7 +476,7 @@ func (s SSH) Call(ctx context.Context, spec managed.ResourceSpec, leases io.Read
 		return runner.GuestReply{}, ErrUnavailable
 	}
 	if reply.Absent {
-		if q.Schema != "haepari.guest-request/v2" || q.Operation != "file" || (q.Area != "workspace" && q.Area != "") || q.Offset != 0 || q.ExpectedFile != nil || reply.File != nil || len(reply.Output) != 0 || reply.NextOffset != 0 || reply.Root == nil || reply.Observation == nil || reply.Observation.Exit == nil || !reply.Observation.Exit.TerminationProven {
+		if !runner.GuestAbsenceAware(q) || q.Operation != "file" || (q.Area != "workspace" && q.Area != "") || q.Offset != 0 || q.ExpectedFile != nil || reply.File != nil || len(reply.Output) != 0 || reply.NextOffset != 0 || reply.Root == nil || reply.Observation == nil || reply.Observation.Exit == nil || !reply.Observation.Exit.TerminationProven {
 			return runner.GuestReply{}, errors.Join(ErrGuestUncertain, ErrUnavailable)
 		}
 		return reply, nil

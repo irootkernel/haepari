@@ -31,6 +31,7 @@ var guestUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // GuestRequest is stdin data, never a remote shell command. Prepare supplies
 // the sealed inventory and bytes; later operations carry the returned request.
 type GuestRequest struct {
+	Preparation   *GuestPreparation     `json:"preparation,omitempty"`
 	Schema        string                `json:"schema"`
 	Operation     string                `json:"operation"`
 	VMUUID        string                `json:"vm_uuid"`
@@ -54,6 +55,7 @@ type GuestRequest struct {
 }
 
 type GuestReply struct {
+	Preparation     *GuestPreparation     `json:"preparation,omitempty"`
 	Schema          string                `json:"schema"`
 	ProtocolDigest  string                `json:"protocol_digest"`
 	VMUUID          string                `json:"vm_uuid"`
@@ -77,7 +79,7 @@ type GuestReply struct {
 
 func guestIdentity(q GuestRequest) (GuestReply, error) {
 	mac, err := net.ParseMAC(q.MAC)
-	if err != nil || len(mac) != 6 || !guestUUID.MatchString(q.VMUUID) || q.Challenge == "" || len(q.Challenge) > 256 || (q.Schema != "haepari.guest-request/v1" && q.Schema != "haepari.guest-request/v2") {
+	if err != nil || !validGuestIdentityVersion(q) || len(mac) != 6 || !guestUUID.MatchString(q.VMUUID) || q.Challenge == "" || len(q.Challenge) > 256 || guestVersion(q.Schema, "guest-request") == 0 {
 		return GuestReply{}, ErrInvalid
 	}
 	// UUID is the host's registered alias. The pinned SSH key plus this actual
@@ -106,14 +108,7 @@ func guestIdentity(q GuestRequest) (GuestReply, error) {
 // GuestReplySchema owns the admitted request/reply version pairing. Unsupported
 // request versions have no reply schema and remain fail-closed at the transport.
 func GuestReplySchema(q GuestRequest) string {
-	switch q.Schema {
-	case "haepari.guest-request/v1":
-		return "haepari.guest-reply/v1"
-	case "haepari.guest-request/v2":
-		return "haepari.guest-reply/v2"
-	default:
-		return ""
-	}
+	return guestSchema("guest-reply", guestVersion(q.Schema, "guest-request"))
 }
 
 func GuestProtocolDigest(q GuestRequest) string {
@@ -133,7 +128,7 @@ func DecodeGuestReply(data []byte) (GuestReply, error) {
 		return reply, ErrInvalid
 	}
 	canonical, _ := json.Marshal(reply)
-	if !canonicalKeys(data, canonical) {
+	if !canonicalKeys(data, canonical) || !validReplyIdentityVersion(reply) {
 		return reply, ErrInvalid
 	}
 	return reply, nil
@@ -158,7 +153,7 @@ func GuestCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 	reply, err := Guest(q)
 	var encoded []byte
 	if err == nil {
-		if q.Schema == "haepari.guest-request/v2" && q.Operation == "file" {
+		if GuestAbsenceAware(q) && q.Operation == "file" {
 			encoded, err = marshalGuestFileReply("runner.guest", &reply, &reply)
 		} else {
 			encoded, _ = json.Marshal(reply)
@@ -167,7 +162,7 @@ func GuestCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 	response := managed.Envelope{Schema: "haepari.envelope/v1", Operation: "runner.guest", OK: err == nil}
 	if err != nil {
 		response.Error = runnerError(err)
-		if q.Schema == "haepari.guest-request/v2" {
+		if GuestClassifiedDiagnostics(q) {
 			response.Error.Message = DiagnosticCause(err)
 		}
 		_, _ = io.WriteString(stderr, DiagnosticCause(err)+"\n")
@@ -210,11 +205,7 @@ func guestEffect(q GuestRequest, control *guestControlFile) (GuestReply, error) 
 	}
 	defer parent.close()
 	root := filepath.Join(q.JobRoot, q.Request.Identity.JobID)
-	validationRequest := q.Request
-	if validationRequest.LogDevice == 0 && validationRequest.LogInode == 0 {
-		validationRequest.LogInode = 1
-	}
-	if validationRequest.Validate(root) != nil {
+	if validateGuestRequest(q.Request, root) != nil {
 		return reply, ErrInvalid
 	}
 	if q.Operation == "prepare" {
@@ -230,6 +221,9 @@ func guestEffect(q GuestRequest, control *guestControlFile) (GuestReply, error) 
 		return reply, err
 	}
 	defer d.close()
+	if control.value.Root == nil || !retainedDescriptorMatches(int(d.file.Fd()), *control.value.Root) {
+		return reply, ErrConflict
+	}
 	var owner GuestRequest
 	if d.read("guest.json", &owner) != nil || owner.VMUUID != q.VMUUID || owner.MAC != q.MAC || owner.BootID != q.BootID || owner.RunnerDigest != q.RunnerDigest || owner.JobRoot != q.JobRoot || owner.ObjectID != q.ObjectID || owner.InputDigest != q.InputDigest || owner.ProfileDigest != q.ProfileDigest {
 		return reply, ErrConflict
@@ -237,6 +231,7 @@ func guestEffect(q GuestRequest, control *guestControlFile) (GuestReply, error) 
 	expected := q.Request
 	if expected.LogDevice == 0 && expected.LogInode == 0 && reflect.DeepEqual(expected, owner.Request) {
 		expected.LogDevice, expected.LogInode = request.LogDevice, request.LogInode
+		expected.LogIdentity = request.LogIdentity
 	}
 	if !reflect.DeepEqual(request, expected) {
 		return reply, ErrConflict
@@ -295,7 +290,7 @@ func guestEffect(q GuestRequest, control *guestControlFile) (GuestReply, error) 
 		}
 		defer f.Close()
 		var st unix.Stat_t
-		if unix.Fstat(int(f.Fd()), &st) != nil || uint64(st.Dev) != request.LogDevice || uint64(st.Ino) != request.LogInode || q.Offset > st.Size {
+		if unix.Fstat(int(f.Fd()), &st) != nil || uint64(st.Dev) != request.LogDevice || uint64(st.Ino) != request.LogInode || q.Offset > st.Size || !retainedDescriptorMatches(int(f.Fd()), managed.RetainedPath{Device: request.LogDevice, Inode: request.LogInode, Persistent: request.LogIdentity, ObservedBoot: request.BootID}) {
 			return reply, ErrConflict
 		}
 		data := make([]byte, 64<<10)
@@ -314,9 +309,7 @@ func prepareGuest(parent *directory, root string, q GuestRequest, control *guest
 	if err != nil || manifest.TreeSHA256 != q.InputDigest || len(manifest.Entries) != len(q.Files) || q.Request.LogDevice != 0 || q.Request.LogInode != 0 {
 		return Request{}, ErrInvalid
 	}
-	probe := q.Request
-	probe.LogInode = 1
-	if probe.Validate(root) != nil {
+	if validateGuestRequest(q.Request, root) != nil {
 		return Request{}, ErrInvalid
 	}
 	for i, entry := range manifest.Entries {
@@ -364,6 +357,7 @@ func prepareGuest(parent *directory, root string, q GuestRequest, control *guest
 		requestDir.close()
 		expected := q.Request
 		expected.LogDevice, expected.LogInode = request.LogDevice, request.LogInode
+		expected.LogIdentity = request.LogIdentity
 		if !reflect.DeepEqual(expected, request) {
 			return Request{}, ErrConflict
 		}
@@ -419,6 +413,9 @@ func prepareGuest(parent *directory, root string, q GuestRequest, control *guest
 	}
 	var st unix.Stat_t
 	err = unix.Fstat(int(log.Fd()), &st)
+	if err == nil && GuestUsesPersistentIdentity(q) {
+		q.Request.LogIdentity, err = platform.PersistentFileIdentity(int(log.Fd()))
+	}
 	err = errors.Join(err, log.Sync(), log.Close())
 	if err != nil {
 		return Request{}, err

@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"github.com/irootkernel/haepari/internal/platform"
 )
 
 func checkRunnerSchemaTx(tx *sql.Tx) error {
@@ -33,6 +35,8 @@ func initRunnerSchemaTx(tx *sql.Tx, version int) error {
 // RecordRunnerReceipt imports a validated receipt under the current exact
 // Job/resource/configuration/slot/lease/run/nonce. No transaction spans a
 // native effect. Lost legacy evidence is never backfilled during migration.
+const PersistentRunnerRequestSchema = "haepari.runner-request/v2"
+
 func (l *Ledger) RecordRunnerReceipt(identity LocalIdentity, kind string, payload []byte) error {
 	if !identifier.MatchString(identity.JobID) || !identifier.MatchString(identity.RunID) || identity.Nonce == "" || len(payload) == 0 || len(payload) > 2<<20 {
 		return ErrInvalid
@@ -41,11 +45,12 @@ func (l *Ledger) RecordRunnerReceipt(identity LocalIdentity, kind string, payloa
 		return ErrInvalid
 	}
 	var header struct {
-		Identity      LocalIdentity `json:"identity"`
-		Schema        string        `json:"schema"`
-		RequestDigest string        `json:"request_digest"`
+		Identity      LocalIdentity         `json:"identity"`
+		Schema        string                `json:"schema"`
+		RequestDigest string                `json:"request_digest"`
+		LogIdentity   platform.FileIdentity `json:"log_identity"`
 	}
-	if ValidateUniqueJSONKeys(payload) != nil || json.Unmarshal(payload, &header) != nil || header.Identity != identity || header.Schema != RunnerSchema(kind) {
+	if ValidateUniqueJSONKeys(payload) != nil || json.Unmarshal(payload, &header) != nil || header.Identity != identity || (header.Schema != RunnerSchema(kind) && !(kind == "request" && header.Schema == PersistentRunnerRequestSchema && header.LogIdentity.Valid())) || kind == "request" && header.Schema == RunnerSchema(kind) && header.LogIdentity != (platform.FileIdentity{}) {
 		return ErrInvalid
 	}
 	sum := sha256.Sum256(payload)

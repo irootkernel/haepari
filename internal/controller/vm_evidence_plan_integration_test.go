@@ -119,7 +119,7 @@ var _ = ginkgo.Describe("Task015VMNativeEvidencePlan", ginkgo.Label("integration
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(plan.Unknowns).To(gomega.BeEmpty())
 		gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
-		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v4"))
+		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v5"))
 		beforeEvents, err := f.s.ledger.EventsAfter(r.JobID, 0, 1000)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		second, err := f.s.planJobRecovery(r.JobID, "attest-stopped")

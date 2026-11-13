@@ -33,14 +33,14 @@ func (s *runtimeServer) rebootIntent(guest runner.GuestRequest) (runner.GuestRec
 		return q, false, err
 	}
 	q, err = decodeAttestationRequest(raw)
-	if err != nil || q.Schema != "haepari.guest-recovery-request/v2" || !reflect.DeepEqual(guestRecoveryOwner(q.Guest), guestRecoveryOwner(guest)) {
+	if err != nil || !runner.GuestRecoveryIsReboot(q.Schema) || !reflect.DeepEqual(guestRecoveryOwner(q.Guest), guestRecoveryOwner(guest)) {
 		return q, false, managed.ErrBlocked
 	}
 	return q, true, nil
 }
 
 func rebootAttestation(q runner.GuestRecoveryRequest) runner.GuestAttestation {
-	return runner.GuestAttestation{Schema: "haepari.guest-attestation/v2", Guest: guestRecoveryOwner(q.Guest), Basis: *q.Basis, RecoveryDigest: q.RecoveryDigest, MutationKey: q.MutationKey, Deadline: q.Deadline, Evidence: *q.Evidence}
+	return runner.GuestAttestation{Schema: runner.GuestAttestationSchema(q.Guest, true), Guest: guestRecoveryOwner(q.Guest), Basis: *q.Basis, RecoveryDigest: q.RecoveryDigest, MutationKey: q.MutationKey, Deadline: q.Deadline, Evidence: *q.Evidence}
 }
 
 func (s *runtimeServer) vmRebootAttestation(guest runner.GuestRequest) (runner.GuestRecoveryRequest, bool, error) {
@@ -90,7 +90,7 @@ func (s *runtimeServer) observeVMRebootRecoveryUntil(guest runner.GuestRequest, 
 	if err != nil {
 		return guest, facts, err
 	}
-	q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v2", Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: until}
+	q := runner.GuestRecoveryRequest{Schema: runner.GuestRecoveryRequestSchema(guest, true), Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: until}
 	if saved, found, e := s.rebootIntent(guest); e != nil {
 		return guest, facts, e
 	} else if found {
@@ -137,7 +137,7 @@ func (s *runtimeServer) recoverVMReboot(snapshot managed.RecoverySnapshot, guest
 	}
 	if !found {
 		evidence := recoveryObservation("guest-reboot-observed", *reply.Basis, "job:"+snapshot.Identity.JobID)
-		q = runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v2", Operation: "attest", Guest: guest, RecoveryBoot: reply.Basis.RecoveryBoot, Basis: reply.Basis, RecoveryDigest: reply.RecoveryDigest, Deadline: plan.ExpiresAt, MutationKey: key, Evidence: &evidence}
+		q = runner.GuestRecoveryRequest{Schema: runner.GuestRecoveryRequestSchema(guest, true), Operation: "attest", Guest: guest, RecoveryBoot: reply.Basis.RecoveryBoot, Basis: reply.Basis, RecoveryDigest: reply.RecoveryDigest, Deadline: plan.ExpiresAt, MutationKey: key, Evidence: &evidence}
 		q.Guest.Deadline = time.Time{}
 		if runner.ValidateGuestAttestation(rebootAttestation(q), guest) != nil {
 			return managed.ErrBlocked

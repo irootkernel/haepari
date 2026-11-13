@@ -320,7 +320,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 				gomega.Expect(json.Unmarshal(originalControl, &control)).To(gomega.Succeed())
 				switch mode {
 				case "missing-control":
-					gomega.Expect(os.Remove(controlPath)).To(gomega.Succeed())
+					gomega.Expect(os.Rename(controlPath, controlPath+".hidden")).To(gomega.Succeed())
 				case "incomplete":
 					control.Complete = false
 				case "error":
@@ -365,7 +365,11 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 				if mode == "replacement-root" {
 					gomega.Expect(os.Remove(filepath.Join(f.guest, r.JobID))).To(gomega.Succeed())
 				}
-				gomega.Expect(os.WriteFile(controlPath, originalControl, 0600)).To(gomega.Succeed())
+				if mode == "missing-control" {
+					gomega.Expect(os.Rename(controlPath+".hidden", controlPath)).To(gomega.Succeed())
+				} else {
+					gomega.Expect(os.WriteFile(controlPath, originalControl, 0600)).To(gomega.Succeed())
+				}
 			}
 			if schema == "haepari.job/v2" && time.Now().Before(before.Phases["cleanup"].Deadline) {
 				time.Sleep(time.Until(before.Phases["cleanup"].Deadline) + time.Millisecond)
@@ -541,8 +545,8 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())
 		intent, receipt, _, err := f.s.ledger.EvidenceRecovery("evidence-recovery-absence-new-file", "")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(intent.Schema).To(gomega.Equal("haepari.evidence-recovery-intent/v2"))
-		gomega.Expect(receipt.Schema).To(gomega.Equal("haepari.evidence-recovery-receipt/v2"))
+		gomega.Expect(intent.Schema).To(gomega.Equal("haepari.evidence-recovery-intent/v4"))
+		gomega.Expect(receipt.Schema).To(gomega.Equal("haepari.evidence-recovery-receipt/v4"))
 		gomega.Expect(receipt.Jobs[0].Stage).To(gomega.Equal("failed"))
 		gomega.Expect(receipt.Jobs[0].AbsentOutputs).To(gomega.HaveLen(1))
 		gomega.Expect(os.ReadFile(filepath.Join(root, "workspace/results/output.txt"))).To(gomega.Equal([]byte("new evidence")))
@@ -594,6 +598,8 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		gomega.Expect(json.Unmarshal(savedIntent, &legacyIntent)).To(gomega.Succeed())
 		gomega.Expect(json.Unmarshal(savedReceipt, &legacyReceipt)).To(gomega.Succeed())
 		legacyIntent.Schema, legacyIntent.Jobs[0].AbsenceBinding = "haepari.evidence-recovery-intent/v1", nil
+		legacyIntent.Jobs[0].Root.Persistent = platform.FileIdentity{}
+		legacyIntent.Jobs[0].Root.ObservedBoot = ""
 		legacyReceipt.Schema, legacyReceipt.Jobs[0].AbsentOutputs = "haepari.evidence-recovery-receipt/v1", nil
 		legacyReceipt.Jobs[0].Stage, legacyReceipt.Jobs[0].Gap = "failed", "uncollected"
 		legacyQ, _ := json.Marshal(legacyIntent)
@@ -657,7 +663,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		probes := 0
 		f.s.sshCommand = func(ctx context.Context, exe string, args []string, input []byte) (utm.CommandResult, error) {
 			q := vmTransportRequest(input)
-			if q.Schema == "haepari.guest-recovery-request/v2" && q.Operation == "probe" {
+			if q.Schema == "haepari.guest-recovery-request/v4" && q.Operation == "probe" {
 				probes++
 				timer := time.NewTimer(6 * time.Second)
 				defer timer.Stop()
@@ -800,7 +806,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 						break
 					}
 				}
-				if wire.Schema != "haepari.guest-recovery-request/v2" || wire.Operation != "attest" {
+				if wire.Schema != "haepari.guest-recovery-request/v4" || wire.Operation != "attest" {
 					return native(ctx, exe, args, input)
 				}
 				attests++
@@ -824,7 +830,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 				gomega.Expect(e).NotTo(gomega.HaveOccurred())
 				expected := rebootAttestation(wire)
 				gomega.Expect(runner.ValidateGuestAttestation(expected, wire.Guest)).To(gomega.Succeed())
-				gomega.Expect(reply.Schema).To(gomega.Equal("haepari.guest-recovery-reply/v2"))
+				gomega.Expect(reply.Schema).To(gomega.Equal("haepari.guest-recovery-reply/v4"))
 				gomega.Expect(reply.RecoveryDigest).To(gomega.Equal(wire.RecoveryDigest))
 				gomega.Expect(reply.ProtocolDigest).To(gomega.Equal(managed.RecoveryDigest(wire)))
 				gomega.Expect(reply.Attestation).NotTo(gomega.BeNil())
@@ -929,7 +935,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 			})
 		}
 	}
-	ginkgo.It("plans and applies cross-boot resource attestation through supported recovery v2 without rewriting original facts", func() {
+	ginkgo.It("plans and applies cross-boot resource attestation through supported recovery v4 without rewriting original facts", func() {
 		f, r := previousBootVMFixtureWithResult(true)
 		original, err := f.s.ledger.Result(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -979,7 +985,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 			}
 			var shape struct{ Schema string }
 			gomega.Expect(json.Unmarshal(raw, &shape)).To(gomega.Succeed())
-			if shape.Schema == "haepari.guest-recovery-request/v2" {
+			if shape.Schema == "haepari.guest-recovery-request/v4" {
 				q, err := runner.DecodeGuestRecoveryRequest(raw)
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				requests = append(requests, q)
@@ -990,7 +996,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 				proofs = append(proofs, probe)
 			}
 			result, err := native(ctx, exe, args, input)
-			if shape.Schema == "haepari.guest-recovery-request/v2" {
+			if shape.Schema == "haepari.guest-recovery-request/v4" {
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				envelope, decodeErr := managed.DecodeEnvelope([]byte(result.Stdout))
 				gomega.Expect(decodeErr).NotTo(gomega.HaveOccurred())
@@ -1008,21 +1014,21 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		gomega.Expect(json.Unmarshal(response.Body.Bytes(), &envelope)).To(gomega.Succeed())
 		var plan resourceRecoveryPlan
 		gomega.Expect(json.Unmarshal(envelope.Data, &plan)).To(gomega.Succeed())
-		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v2"))
+		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v5"))
 		gomega.Expect(plan.Action).To(gomega.Equal("attest-guest-stopped"))
 		gomega.Expect(plan.Unknowns).To(gomega.BeEmpty())
 		gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
 		gomega.Expect(proofs).To(gomega.HaveLen(2))
 		gomega.Expect(proofs[0].Schema).To(gomega.Equal(guest.Schema))
 		gomega.Expect(proofs[0].BootID).To(gomega.Equal(guest.BootID))
-		gomega.Expect(proofs[1].Schema).To(gomega.Equal("haepari.guest-request/v2"))
+		gomega.Expect(proofs[1].Schema).To(gomega.Equal(guest.Schema))
 		gomega.Expect(proofs[1].BootID).To(gomega.BeEmpty())
 		gomega.Expect(proofs[1].Request).To(gomega.Equal(guest.Request))
 		gomega.Expect(requests).To(gomega.HaveLen(1))
 		gomega.Expect(requests[0].Operation).To(gomega.Equal("probe"))
 		gomega.Expect(requests[0].Guest.Request).To(gomega.Equal(guest.Request))
 		gomega.Expect(requests[0].Guest.RunnerDigest).To(gomega.Equal(guest.RunnerDigest))
-		gomega.Expect(replies[0].Schema).To(gomega.Equal("haepari.guest-recovery-reply/v2"))
+		gomega.Expect(replies[0].Schema).To(gomega.Equal("haepari.guest-recovery-reply/v4"))
 		basis := replies[0].Basis
 		gomega.Expect(basis).NotTo(gomega.BeNil())
 		gomega.Expect(basis.RecoveryBoot).NotTo(gomega.BeEmpty())
@@ -1043,7 +1049,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		gomega.Expect(intent.Jobs).To(gomega.HaveLen(1))
 		saved, err := runner.DecodeGuestRecoveryRequest(intent.Jobs[0].GuestAttestation)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(saved.Schema).To(gomega.Equal("haepari.guest-recovery-request/v2"))
+		gomega.Expect(saved.Schema).To(gomega.Equal("haepari.guest-recovery-request/v4"))
 		gomega.Expect(saved.RecoveryBoot).To(gomega.Equal(basis.RecoveryBoot))
 		gomega.Expect(saved.Deadline).To(gomega.Equal(plan.ExpiresAt))
 		gomega.Expect(saved.Guest.Request).To(gomega.Equal(guest.Request))
@@ -1051,7 +1057,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		raw, err := os.ReadFile(filepath.Join(f.guest, ".haepari-attestation-"+r.JobID+".json"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(json.Unmarshal(raw, &attestation)).To(gomega.Succeed())
-		gomega.Expect(attestation.Schema).To(gomega.Equal("haepari.guest-attestation/v2"))
+		gomega.Expect(attestation.Schema).To(gomega.Equal("haepari.guest-attestation/v4"))
 		gomega.Expect(attestation.Basis.RecoveryBoot).To(gomega.Equal(basis.RecoveryBoot))
 		gomega.Expect(attestation.Basis.Request).To(gomega.Equal(guest.Request))
 		gomega.Expect(attestation.Guest).To(gomega.Equal(guestRecoveryOwner(guest)))
@@ -1061,13 +1067,13 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		q, found, err := f.s.vmAttestation(r.JobID)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(found).To(gomega.BeTrue())
-		gomega.Expect(q.Schema).To(gomega.Equal("haepari.guest-recovery-request/v2"))
+		gomega.Expect(q.Schema).To(gomega.Equal("haepari.guest-recovery-request/v4"))
 		gomega.Expect(q.RecoveryBoot).To(gomega.Equal(basis.RecoveryBoot))
 		gomega.Expect(q.Attestation).To(gomega.Equal(&attestation))
 		q.Operation, q.Deadline = "state", time.Now().Add(5*time.Second)
 		echo, err := f.s.vmRecoveryCall(q)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(echo.Schema).To(gomega.Equal("haepari.guest-recovery-reply/v2"))
+		gomega.Expect(echo.Schema).To(gomega.Equal("haepari.guest-recovery-reply/v4"))
 		gomega.Expect(echo.Attestation).To(gomega.Equal(q.Attestation))
 		gomega.Expect(echo.Basis).To(gomega.Equal(q.Basis))
 		gomega.Expect(requests[len(requests)-1].Attestation).To(gomega.Equal(q.Attestation))
@@ -1100,7 +1106,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		f, r := previousBootVMFixture()
 		plan, err := f.s.planJobRecovery(r.JobID, "reconcile")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v4"))
+		gomega.Expect(plan.Schema).To(gomega.Equal("haepari.recovery-plan/v5"))
 		gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
 		root := filepath.Join(f.guest, r.JobID)
 		retained := root + "-retained-fixture"
@@ -1140,7 +1146,7 @@ var _ = ginkgo.Describe("GuestRebootControllerRecovery", ginkgo.Label("integrati
 		gomega.Expect(os.ReadFile(filepath.Join(f.guest, r.JobID, "workspace/source/once.txt"))).To(gomega.Equal([]byte("once")))
 		p, err := f.s.planEvidenceRecovery(f.spec.ID, "recollect")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.Schema).To(gomega.Equal("haepari.recovery-plan/v2"))
+		gomega.Expect(p.Schema).To(gomega.Equal("haepari.recovery-plan/v5"))
 		gomega.Expect(p.PlanToken).NotTo(gomega.BeEmpty())
 		response = recoveryHTTP(f.s, "/v1/resources/"+f.spec.ID+"/recover", managed.RecoveryRequest{PlanToken: p.PlanToken, MutationKey: "collect-previous-boot"})
 		gomega.Expect(response.Code).To(gomega.Equal(200), response.Body.String())

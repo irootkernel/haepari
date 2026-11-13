@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/irootkernel/haepari/internal/platform"
 	"strings"
 	"time"
 )
@@ -92,10 +93,12 @@ func (l *Ledger) bulkSnapshotTx(tx *sql.Tx, id string) (BulkSnapshot, error) {
 }
 
 type RetainedPath struct {
-	Path      string `json:"path"`
-	Device    uint64 `json:"device"`
-	Inode     uint64 `json:"inode"`
-	Directory bool   `json:"directory"`
+	Persistent   platform.FileIdentity `json:"persistent_identity,omitzero"`
+	ObservedBoot string                `json:"observed_boot,omitempty"`
+	Path         string                `json:"path"`
+	Device       uint64                `json:"device"`
+	Inode        uint64                `json:"inode"`
+	Directory    bool                  `json:"directory"`
 }
 type PurgeIntent struct {
 	Schema           string         `json:"schema"`

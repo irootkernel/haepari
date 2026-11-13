@@ -100,7 +100,7 @@ func (b vmEvidenceBackend) collectAttested(q runner.GuestRecoveryRequest, j mana
 	}
 	for _, name := range []string{"output.log", "guest.json", "request.json", "intent.json", "start.json", "outcome.json", "exit.json"} {
 		if name != "output.log" && q.Attestation.Basis.Digests[name] == "" {
-			if q.Schema != "haepari.guest-recovery-request/v2" {
+			if !runner.GuestRecoveryIsReboot(q.Schema) {
 				return collectionAttempt{}
 			}
 			continue // Explicit absence remains bound in the immutable v2 basis.
@@ -247,5 +247,5 @@ func attestedAbsenceBinding(q runner.GuestRecoveryRequest, j managed.EvidenceRec
 		return true
 	}
 	a := q.Attestation
-	return a != nil && runner.ValidateGuestAttestation(*a, q.Guest) == nil && q.Schema == "haepari.guest-recovery-request/v2" && q.Guest.Schema == "haepari.guest-request/v2" && a.Basis.WorkspaceRoot != nil && *a.Basis.WorkspaceRoot == j.AbsenceBinding.WorkspaceRoot && managed.RecoveryDigest(a) == j.AbsenceBinding.AttestationDigest && q.Guest.BootID == j.AbsenceBinding.OriginalBoot && a.Basis.RecoveryBoot == j.AbsenceBinding.RecoveryBoot && reflect.DeepEqual(a.Evidence, j.AbsenceBinding.Cessation)
+	return a != nil && runner.ValidateGuestAttestation(*a, q.Guest) == nil && runner.GuestRecoveryIsReboot(q.Schema) && runner.GuestAbsenceAware(q.Guest) && a.Basis.WorkspaceRoot != nil && *a.Basis.WorkspaceRoot == j.AbsenceBinding.WorkspaceRoot && managed.RecoveryDigest(a) == j.AbsenceBinding.AttestationDigest && q.Guest.BootID == j.AbsenceBinding.OriginalBoot && a.Basis.RecoveryBoot == j.AbsenceBinding.RecoveryBoot && reflect.DeepEqual(a.Evidence, j.AbsenceBinding.Cessation)
 }

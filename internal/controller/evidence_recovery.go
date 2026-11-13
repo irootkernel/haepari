@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,52 +23,91 @@ func retainedPath(fd int, name string, directory bool) (managed.RetainedPath, er
 	return managed.RetainedPath{Path: name, Device: uint64(st.Dev), Inode: st.Ino, Directory: directory}, nil
 }
 
+// evidenceRecoveryPlanRefusal adds bounded diagnostics without changing the cause's
+// public error classification. Never render raw backend errors or snapshots.
+type evidenceRecoveryPlanRefusal struct {
+	jobID string
+	stage string
+	cause error
+}
+
+func (e *evidenceRecoveryPlanRefusal) Error() string {
+	scope := "Resource"
+	if managed.ValidRequestKey(e.jobID) {
+		scope = "Job " + e.jobID
+	}
+	category := diagnosticCause(e.cause)
+	if errors.Is(e.cause, errVMNativeTermination) {
+		category = managed.DiagnosticTerminationUnproven
+	}
+	return fmt.Sprintf("Evidence recovery refused: %s; stage=%s; category=%s.", scope, e.stage, category)
+}
+
+func (e *evidenceRecoveryPlanRefusal) Unwrap() error { return e.cause }
+
+func evidencePlanRefusal(jobID, stage string, err error) error {
+	return &evidenceRecoveryPlanRefusal{jobID: jobID, stage: stage, cause: err}
+}
+
 func (s *runtimeServer) evidenceRecoveryBasis(id, action string) (managed.ResourceRecoverySnapshot, []managed.EvidenceRecoveryJob, error) {
+	return s.selectedEvidenceRecoveryBasis(id, action, "")
+}
+
+func (s *runtimeServer) selectedEvidenceRecoveryBasis(id, action, target string) (managed.ResourceRecoverySnapshot, []managed.EvidenceRecoveryJob, error) {
+	if target != "" && (action != "recollect" || !managed.ValidRequestKey(target)) {
+		return managed.ResourceRecoverySnapshot{}, nil, managed.ErrInvalid
+	}
 	snap, err := s.ledger.ResourceRecoverySnapshot(id)
 	if err != nil {
-		return snap, nil, err
+		return snap, nil, evidencePlanRefusal("", "resource_snapshot", err)
 	}
-	if snap.Resource.Availability != "quarantined" || len(snap.AdapterIntents) > 0 {
-		return snap, nil, managed.ErrBlocked
+	if snap.Resource.Availability != "quarantined" {
+		return snap, nil, evidencePlanRefusal("", "resource_availability", managed.ErrBlocked)
+	}
+	if len(snap.AdapterIntents) > 0 {
+		return snap, nil, evidencePlanRefusal("", "adapter_intents", managed.ErrBlocked)
 	}
 	backend, err := s.evidenceBackendFor(snap.Resource.Kind, id)
 	if err != nil {
-		return snap, nil, err
+		return snap, nil, evidencePlanRefusal("", "backend_selection", err)
 	}
 	jobs := []managed.EvidenceRecoveryJob{}
 	for _, j := range snap.Jobs {
-		if j.EvidenceResolved {
+		if j.EvidenceResolved || target != "" && j.JobID != target {
 			continue
 		}
 		b, err := s.ledger.BulkSnapshot(j.JobID)
 		if err != nil {
-			return snap, nil, err
+			return snap, nil, evidencePlanRefusal(j.JobID, "job_snapshot", err)
 		}
-		if b.Identity == nil || s.jobWorkerAlive(j.JobID) {
-			return snap, nil, managed.ErrBlocked
+		if b.Identity == nil || b.Receipt.ResultStatus == "unavailable" || b.Result.ResourceID != id {
+			return snap, nil, evidencePlanRefusal(j.JobID, "job_identity", managed.ErrBlocked)
+		}
+		if s.jobWorkerAlive(j.JobID) {
+			return snap, nil, evidencePlanRefusal(j.JobID, "worker_liveness", managed.ErrBlocked)
 		}
 		for _, p := range b.Result.ProtectedEvidence {
 			if p.Path != "workspace" || p.RecoveryReference != "job:"+j.JobID {
-				return snap, nil, managed.ErrBlocked
+				return snap, nil, evidencePlanRefusal(j.JobID, "protected_evidence_binding", managed.ErrBlocked)
 			}
 		}
 		until := time.Now().Add(recoveryObservationBudget)
 		root, err := backend.Observe(*b.Identity, action, until)
 		if err != nil {
-			return snap, nil, err
+			return snap, nil, evidencePlanRefusal(j.JobID, "ownership_observation", err)
 		}
 		job := managed.EvidenceRecoveryJob{JobID: j.JobID, ResultDigest: managed.RecoveryDigest(b.Result), Identity: *b.Identity, Root: root, Protected: b.Result.ProtectedEvidence, Outputs: b.Spec.Workload.RequiredOutputs}
 		if _, native := backend.(vmEvidenceBackend); native {
 			attestation, found, e := s.vmAttestation(j.JobID)
 			if e != nil {
-				return snap, nil, e
+				return snap, nil, evidencePlanRefusal(j.JobID, "guest_attestation", e)
 			}
 			if found {
 				job.GuestLogLimitBytes = attestation.Attestation.Basis.Request.LogLimitBytes
-				if action == "recollect" && managed.AbsenceAware(b.Spec) && attestation.Schema == "haepari.guest-recovery-request/v2" && attestation.Guest.Schema == "haepari.guest-request/v2" {
+				if action == "recollect" && managed.AbsenceAware(b.Spec) && runner.GuestRecoveryIsReboot(attestation.Schema) && runner.GuestAbsenceAware(attestation.Guest) {
 					a := attestation.Attestation
 					if a == nil || runner.ValidateGuestAttestation(*a, attestation.Guest) != nil || a.Basis.WorkspaceRoot == nil {
-						return snap, nil, managed.ErrBlocked
+						return snap, nil, evidencePlanRefusal(j.JobID, "guest_attestation_binding", managed.ErrBlocked)
 					}
 					job.AbsenceBinding = &managed.EvidenceAbsenceBinding{WorkspaceRoot: *a.Basis.WorkspaceRoot, AttestationDigest: managed.RecoveryDigest(a), OriginalBoot: attestation.Guest.BootID, RecoveryBoot: a.Basis.RecoveryBoot, Cessation: a.Evidence}
 				}
@@ -76,17 +116,23 @@ func (s *runtimeServer) evidenceRecoveryBasis(id, action string) (managed.Resour
 		jobs = append(jobs, job)
 	}
 	if len(jobs) == 0 {
-		return snap, nil, managed.ErrBlocked
+		return snap, nil, evidencePlanRefusal("", "retained_job_selection", managed.ErrBlocked)
 	}
 	return snap, jobs, nil
 }
 
 func (s *runtimeServer) planEvidenceRecovery(id, action string) (resourceRecoveryPlan, error) {
+	return s.planSelectedEvidenceRecovery(id, action, "")
+}
+
+func (s *runtimeServer) planSelectedEvidenceRecovery(id, action, target string) (resourceRecoveryPlan, error) {
 	p := resourceRecoveryPlan{Schema: "haepari.recovery-plan/v1", Action: action, ObservedAt: time.Now().UTC(), Unknowns: []string{}, Effects: []string{}, EvidenceLoss: []managed.ProtectedEvidence{}}
-	snap, jobs, err := s.evidenceRecoveryBasis(id, action)
+	snap, jobs, err := s.selectedEvidenceRecoveryBasis(id, action, target)
 	p.Snapshot = snap
 	if errors.Is(err, errVMNativeTermination) {
-		p.Unknowns = append(p.Unknowns, err.Error())
+		// Preserve the tokenless diagnostic plan, without rendering a wrapped
+		// backend message that might contain private guest data.
+		p.Unknowns = append(p.Unknowns, errVMNativeTermination.Error(), err.Error())
 		return p, nil
 	}
 	if err != nil {
@@ -95,15 +141,15 @@ func (s *runtimeServer) planEvidenceRecovery(id, action string) (resourceRecover
 	p.Observation = jobs
 	backend, err := s.evidenceBackendFor(snap.Resource.Kind, id)
 	if err != nil {
-		return p, err
+		return p, evidencePlanRefusal("", "backend_selection", err)
 	}
 	if _, native := backend.(vmEvidenceBackend); native {
 		for _, job := range jobs {
 			q, found, err := s.vmAttestation(job.JobID)
 			if err != nil {
-				return p, err
+				return p, evidencePlanRefusal(job.JobID, "guest_attestation", err)
 			}
-			if found && q.Schema == "haepari.guest-recovery-request/v2" {
+			if found && runner.GuestRecoveryIsReboot(q.Schema) {
 				p.Schema = "haepari.recovery-plan/v2"
 			}
 		}
@@ -125,12 +171,12 @@ func (s *runtimeServer) planEvidenceRecovery(id, action string) (resourceRecover
 	budgetDigest := ""
 	spec, digest, err := s.ledger.ResourceDocument(id)
 	if err != nil {
-		return p, err
+		return p, evidencePlanRefusal("", "resource_document", err)
 	}
 	if spec.Schema == "haepari.resource/v2" {
 		budget, err := managed.ResourceRecoveryBudget(spec, digest)
 		if err != nil {
-			return p, err
+			return p, evidencePlanRefusal("", "recovery_budget", err)
 		}
 		p.Schema = "haepari.recovery-plan/v3"
 		p.Budget = &budget
@@ -141,8 +187,11 @@ func (s *runtimeServer) planEvidenceRecovery(id, action string) (resourceRecover
 			}
 		}
 	}
+	if managed.EvidenceRecoveryHasPersistentIdentity(jobs) {
+		p.Schema = "haepari.recovery-plan/v5"
+	}
 	p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-	p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, action, managed.RecoveryDigest(snap), managed.RecoveryDigest(jobs), p.ExpiresAt, budgetDigest})
+	p.PlanToken = s.signRecoveryToken(recoveryToken{Installation: s.installationID(), JobID: "resource:" + id, Action: action, SnapshotDigest: managed.RecoveryDigest(snap), ObservationDigest: managed.RecoveryDigest(jobs), ExpiresAt: p.ExpiresAt, BudgetDigest: budgetDigest, TargetJobID: target})
 	return p, nil
 }
 
@@ -181,7 +230,7 @@ func (s *runtimeServer) applyEvidenceRecovery(w http.ResponseWriter, r *http.Req
 	}
 	s.evidenceMu.Lock()
 	defer s.evidenceMu.Unlock()
-	snap, jobs, err := s.evidenceRecoveryBasis(id, token.Action)
+	snap, jobs, err := s.selectedEvidenceRecoveryBasis(id, token.Action, token.TargetJobID)
 	if err != nil {
 		reject(w, op, err)
 		return
@@ -237,6 +286,9 @@ func (s *runtimeServer) applyEvidenceRecovery(w http.ResponseWriter, r *http.Req
 				intent.Schema = "haepari.evidence-recovery-intent/v2"
 			}
 		}
+	}
+	if managed.EvidenceRecoveryHasPersistentIdentity(jobs) {
+		intent.Schema = "haepari.evidence-recovery-intent/v4"
 	}
 	if token.Action == "dispose" {
 		intent.AuthorityReference = "request:" + key
@@ -315,6 +367,9 @@ func (s *runtimeServer) executeEvidenceRecovery(q managed.EvidenceRecoveryIntent
 		}
 		if q.Schema == "haepari.evidence-recovery-intent/v3" {
 			r.Schema = "haepari.evidence-recovery-receipt/v3"
+		}
+		if q.Schema == "haepari.evidence-recovery-intent/v4" {
+			r.Schema = "haepari.evidence-recovery-receipt/v4"
 		}
 		for _, j := range q.Jobs {
 			r.Jobs = append(r.Jobs, managed.EvidenceRecoveryOutcome{JobID: j.JobID, ResultDigest: j.ResultDigest, Stage: "pending", Artifacts: []managed.ResultArtifact{}})

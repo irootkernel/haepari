@@ -163,6 +163,11 @@ func reject(w http.ResponseWriter, op string, err error) {
 	if code == "INVALID_REQUEST" && strings.Contains(err.Error(), "request_bytes") {
 		message = err.Error()
 	}
+	// Apply last so a private cause containing request_bytes cannot bypass redaction.
+	var evidence *evidenceRecoveryPlanRefusal
+	if errors.As(err, &evidence) {
+		message = evidence.Error()
+	}
 	send(w, status, op, nil, &responseError{Code: code, Message: message, Retry: retry})
 }
 func (s *runtimeServer) routes() http.Handler {

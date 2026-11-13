@@ -1011,6 +1011,13 @@ var _ = ginkgo.Describe("Task023M2aCLI", ginkgo.Label("integration"), func() {
 		gomega.Expect(manualStored.Deadlines.RunSeconds).To(gomega.Equal(int64(0)))
 		gomega.Expect(manualStored.Deadlines.QueueSeconds).To(gomega.Equal(int64(41)))
 		gomega.Expect(manualStored.Mode).To(gomega.Equal("manual"))
+		// Let preparation create the declared output before fixture cleanup cancels
+		// the manual hold. Cancelling preparation can legitimately retain evidence.
+		prepareWindow := time.Duration(manualStored.Deadlines.PrepareSeconds)*time.Second + 2*time.Second
+		gomega.Eventually(func() (string, error) {
+			receipt, err := inspectCLI(manualReceipt.JobID)
+			return receipt.JobState, err
+		}, prepareWindow, 20*time.Millisecond).Should(gomega.Equal("awaiting_manual"))
 	})
 
 	ginkgo.It("refuses omitted budgets when the accepted row is missing or corrupt", func() {

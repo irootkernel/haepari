@@ -63,6 +63,7 @@ func (s *runtimeServer) observeVMRecovery(snapshot managed.RecoverySnapshot) (ru
 		return q, facts, managed.ErrBlocked
 	}
 	q.Root = state.Root
+	q.Preparation = state.Preparation
 	if state.Request == nil {
 		facts.PartialPreparation = state.Control.Phase == "prepare" || state.Control.Retired
 		if !facts.PartialPreparation || q.Root == nil {
@@ -109,7 +110,9 @@ func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, e
 		return p, nil
 	}
 	q, facts, err := s.observeVMRecovery(p.Snapshot)
-	_ = q
+	if runner.GuestUsesPersistentIdentity(q) {
+		p.Schema = "haepari.recovery-plan/v5"
+	}
 	p.Observation = facts
 	if facts.Reboot != nil || facts.CompletedCleanup != nil {
 		for _, name := range []string{"prepare", "collect", "cleanup"} {
@@ -149,7 +152,7 @@ func (s *runtimeServer) planVMJobRecovery(p jobRecoveryPlan) (jobRecoveryPlan, e
 	if len(p.Unknowns) == 0 {
 		p.Effects = []string{"commit exact guest and revision-bound recovery intent", "observe the original run without another prepare or start", "collect before owned Job cleanup, or retain evidence and quarantine"}
 		p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-		p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), p.Snapshot.Identity.JobID, p.Action, managed.RecoveryDigest(p.Snapshot), managed.RecoveryDigest(facts), p.ExpiresAt, ""})
+		p.PlanToken = s.signRecoveryToken(recoveryToken{Installation: s.installationID(), JobID: p.Snapshot.Identity.JobID, Action: p.Action, SnapshotDigest: managed.RecoveryDigest(p.Snapshot), ObservationDigest: managed.RecoveryDigest(facts), ExpiresAt: p.ExpiresAt, BudgetDigest: ""})
 	}
 	return p, nil
 }
@@ -281,7 +284,7 @@ func (s *runtimeServer) recoverVMInterrupted(snapshot managed.RecoverySnapshot, 
 		if !facts.PartialPreparation {
 			binding.Request = &q.Request
 		}
-		raw, _ := json.Marshal(runner.GuestReply{Request: binding.Request, Root: q.Root})
+		raw, _ := json.Marshal(runner.GuestReply{Request: binding.Request, Root: q.Root, Preparation: q.Preparation})
 		if err = s.ledger.RecordVMPrepared(c.identity, raw); err != nil {
 			s.unregisterLocal(c)
 			return err

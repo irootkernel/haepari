@@ -70,7 +70,7 @@ func (s *runtimeServer) vmRecoveryCall(q runner.GuestRecoveryRequest) (runner.Gu
 	}
 	defer leases.Close()
 	reply, err := transport.CallRecovery(context.Background(), spec, leases, q)
-	if err != nil && q.Schema == "haepari.guest-recovery-request/v2" && q.Guest.Request.Identity.JobID != "" {
+	if err != nil && runner.GuestRecoveryIsReboot(q.Schema) && q.Guest.Request.Identity.JobID != "" {
 		// Preserve failed exchanges before callers consume their error. A
 		// successful probe stays read-only and cannot invalidate a plan.
 		_ = s.ledger.RecordRecoveryDiagnosticCause(q.Guest.Request.Identity.JobID, diagnosticCause(err))
@@ -114,10 +114,10 @@ func (s *runtimeServer) guestAttestationBasis(id string) (managed.ResourceRecove
 		if e != nil {
 			return snap, nil, e
 		}
-		q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: time.Now().Add(recoveryObservationBudget)}
+		q := runner.GuestRecoveryRequest{Schema: runner.GuestRecoveryRequestSchema(guest, false), Operation: "probe", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: time.Now().Add(recoveryObservationBudget)}
 		reply, e := s.vmRecoveryCall(q)
 		if e != nil {
-			q.Schema = "haepari.guest-recovery-request/v2"
+			q.Schema = runner.GuestRecoveryRequestSchema(q.Guest, true)
 			reply, e = s.vmRecoveryCall(q)
 		}
 		if e != nil {
@@ -153,8 +153,13 @@ func (s *runtimeServer) planGuestAttestation(id string) (resourceRecoveryPlan, e
 		return p, nil
 	}
 	p.Effects = []string{"persist scoped operator attestation outside the original guest Job directory", "retire the original guest start path without upgrading native proof", "preserve all original receipts, evidence and terminal Job results; recollect and health require separate plans"}
+	for _, reply := range basis {
+		if reply.Basis != nil && reply.Basis.Root.Persistent.Valid() {
+			p.Schema = "haepari.recovery-plan/v5"
+		}
+	}
 	p.ExpiresAt = time.Now().UTC().Add(2 * time.Minute)
-	p.PlanToken = s.signRecoveryToken(recoveryToken{s.installationID(), "resource:" + id, p.Action, managed.RecoveryDigest(snap), managed.RecoveryDigest(basis), p.ExpiresAt, ""})
+	p.PlanToken = s.signRecoveryToken(recoveryToken{Installation: s.installationID(), JobID: "resource:" + id, Action: p.Action, SnapshotDigest: managed.RecoveryDigest(snap), ObservationDigest: managed.RecoveryDigest(basis), ExpiresAt: p.ExpiresAt, BudgetDigest: ""})
 	return p, nil
 }
 func (s *runtimeServer) applyGuestAttestation(w http.ResponseWriter, r *http.Request, id string, request managed.RecoveryRequest, token recoveryToken) {
@@ -195,9 +200,9 @@ func (s *runtimeServer) applyGuestAttestation(w http.ResponseWriter, r *http.Req
 			reject(w, op, e)
 			return
 		}
-		q := runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Operation: "attest", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: token.ExpiresAt, Basis: reply.Basis, MutationKey: key, Evidence: request.Evidence}
+		q := runner.GuestRecoveryRequest{Schema: runner.GuestRecoveryRequestSchema(guest, false), Operation: "attest", Guest: guest, RecoveryDigest: transport.RunnerDigest, Deadline: token.ExpiresAt, Basis: reply.Basis, MutationKey: key, Evidence: request.Evidence}
 		if reply.Basis.RecoveryBoot != "" {
-			q.Schema, q.RecoveryBoot = "haepari.guest-recovery-request/v2", reply.Basis.RecoveryBoot
+			q.Schema, q.RecoveryBoot = runner.GuestRecoveryRequestSchema(q.Guest, true), reply.Basis.RecoveryBoot
 		}
 		if request.Evidence.Source != "operator-attested" || request.Evidence.Mechanism != "guest-workload-and-descendants-stopped" || request.Evidence.Reference != "job:"+jobID || request.Evidence.Digest != managed.RecoveryDigest(*reply.Basis) || request.Evidence.ObservedAt.After(now) || request.Evidence.ObservedAt.Before(token.ExpiresAt.Add(-2*time.Minute)) {
 			reject(w, op, managed.ErrInvalid)
@@ -221,6 +226,9 @@ func (s *runtimeServer) applyGuestAttestation(w http.ResponseWriter, r *http.Req
 		Request    managed.RecoveryRequest
 	}{id, request})
 	intent := managed.EvidenceRecoveryIntent{Schema: "haepari.evidence-recovery-intent/v1", ResourceID: id, SnapshotDigest: token.SnapshotDigest, ResourceConfigRevision: snap.Resource.ConfigRevision, ResourceAvailabilityRevision: snap.Resource.AvailabilityRevision, MutationKey: key, ClientDigest: digest, Action: token.Action, RecordedAt: now, Owner: owner.Identity, Jobs: jobs}
+	if managed.EvidenceRecoveryHasPersistentIdentity(jobs) {
+		intent.Schema = "haepari.evidence-recovery-intent/v4"
+	}
 	if err = s.ledger.BeginEvidenceRecovery(intent); err != nil {
 		reject(w, op, err)
 		return
@@ -308,6 +316,9 @@ func (s *runtimeServer) executeGuestAttestation(intent managed.EvidenceRecoveryI
 	}
 	if receipt == nil {
 		receipt = &managed.EvidenceRecoveryReceipt{Schema: "haepari.evidence-recovery-receipt/v1", MutationKey: intent.MutationKey, Observation: recoveryObservation("guest-attestation-intent", intent, "resource:"+intent.ResourceID)}
+		if intent.Schema == "haepari.evidence-recovery-intent/v4" {
+			receipt.Schema = "haepari.evidence-recovery-receipt/v4"
+		}
 		for _, j := range intent.Jobs {
 			receipt.Jobs = append(receipt.Jobs, managed.EvidenceRecoveryOutcome{JobID: j.JobID, ResultDigest: j.ResultDigest, Stage: "pending", Artifacts: []managed.ResultArtifact{}})
 		}
@@ -329,9 +340,9 @@ func (s *runtimeServer) executeGuestAttestation(intent managed.EvidenceRecoveryI
 		if e != nil {
 			return e
 		}
-		expected := runner.GuestAttestation{Schema: "haepari.guest-attestation/v1", Guest: guestRecoveryOwner(q.Guest), Basis: *q.Basis, RecoveryDigest: q.RecoveryDigest, MutationKey: q.MutationKey, Deadline: q.Deadline, Evidence: *q.Evidence}
-		if q.Schema == "haepari.guest-recovery-request/v2" {
-			expected.Schema = "haepari.guest-attestation/v2"
+		expected := runner.GuestAttestation{Schema: runner.GuestAttestationSchema(q.Guest, false), Guest: guestRecoveryOwner(q.Guest), Basis: *q.Basis, RecoveryDigest: q.RecoveryDigest, MutationKey: q.MutationKey, Deadline: q.Deadline, Evidence: *q.Evidence}
+		if runner.GuestRecoveryIsReboot(q.Schema) {
+			expected.Schema = runner.GuestAttestationSchema(q.Guest, true)
 		}
 		if reply.Attestation == nil || !reflect.DeepEqual(*reply.Attestation, expected) {
 			return managed.ErrBlocked
@@ -397,9 +408,9 @@ func (s *runtimeServer) vmAttestation(jobID string) (runner.GuestRecoveryRequest
 		if !matched {
 			return q, false, managed.ErrBlocked
 		}
-		q = runner.GuestRecoveryRequest{Schema: "haepari.guest-recovery-request/v1", Guest: guest, RecoveryDigest: a.RecoveryDigest, Attestation: &a, Basis: &a.Basis}
-		if a.Schema == "haepari.guest-attestation/v2" {
-			q.Schema, q.RecoveryBoot = "haepari.guest-recovery-request/v2", a.Basis.RecoveryBoot
+		q = runner.GuestRecoveryRequest{Schema: runner.GuestRecoveryRequestSchema(guest, false), Guest: guest, RecoveryDigest: a.RecoveryDigest, Attestation: &a, Basis: &a.Basis}
+		if runner.GuestAttestationIsReboot(a.Schema) {
+			q.Schema, q.RecoveryBoot = runner.GuestRecoveryRequestSchema(q.Guest, true), a.Basis.RecoveryBoot
 		}
 		return q, true, nil
 	}

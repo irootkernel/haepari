@@ -15,7 +15,10 @@ var rebootReceiptNames = []string{"guest.json", "request.json", "intent.json", "
 
 func validateRebootAttestation(a GuestAttestation, guest GuestRequest) error {
 	b := a.Basis
-	if guest.Schema == "haepari.guest-request/v2" && !validGuestWorkspaceRoot(b.WorkspaceRoot) || guest.Schema != "haepari.guest-request/v2" && b.WorkspaceRoot != nil {
+	if guest.Preparation == nil || !validPreparationVersion(guest.Preparation) || !guest.Request.LogIdentity.Valid() || !b.Root.Persistent.Valid() || b.Control != guest.Preparation.Control || guest.Root == nil || b.Root != *guest.Root {
+		return ErrUnproven
+	}
+	if guestBindsWorkspace(guest) && !validGuestWorkspaceRoot(b.WorkspaceRoot) || !guestBindsWorkspace(guest) && b.WorkspaceRoot != nil {
 		return ErrConflict
 	}
 	if !sameGuestOwner(a.Guest, guest) || a.Guest.Challenge != "" || a.Guest.Files != nil || a.Guest.Inventory != nil || a.Guest.Operation != "inspect" || b.RecoveryBoot == "" || b.RecoveryBoot == guest.BootID ||
@@ -80,9 +83,9 @@ func rebootRecoveryBasis(d *directory, c *guestControlFile, guest GuestRequest, 
 	if c.value.Root == nil || c.value.NativeRequest == nil || unix.Fstat(int(c.file.Fd()), &st) != nil {
 		return b, ErrUnproven
 	}
-	b.Control = managed.RetainedPath{Device: uint64(st.Dev), Inode: st.Ino}
+	b.Control = c.value.Preparation.Control
 	b.Root = *c.value.Root
-	if unix.Fstat(int(d.file.Fd()), &st) != nil || uint64(st.Dev) != b.Root.Device || st.Ino != b.Root.Inode {
+	if unix.Fstat(int(d.file.Fd()), &st) != nil || !retainedDescriptorMatches(int(d.file.Fd()), b.Root) {
 		return b, ErrConflict
 	}
 	requestDir, request, err := readRequest(filepath.Join(d.file.Name(), "request.json"))
@@ -130,6 +133,9 @@ type GuestCompletedCleanup struct {
 
 func ValidateGuestCompletedCleanup(p GuestCompletedCleanup, guest GuestRequest, boot string) error {
 	c := p.Control
+	if guest.Preparation == nil || !validPreparationVersion(guest.Preparation) || !reflect.DeepEqual(c.Preparation, guest.Preparation) || p.ControlInode != guest.Preparation.Control || !guest.Preparation.Control.Persistent.Valid() {
+		return ErrUnproven
+	}
 	if boot == "" || boot == guest.BootID || p.RecoveryBoot != boot || guest.Root == nil || p.ControlInode.Path != "" || p.ControlInode.Directory || p.ControlInode.Inode == 0 ||
 		ValidateGuestControl(c, guest) != nil || c.Phase != "cleanup" || !c.Complete || !c.Stopped || c.Error != "" || c.NativeRequest == nil || !reflect.DeepEqual(*c.NativeRequest, guest.Request) || c.Root == nil || *c.Root != *guest.Root ||
 		c.Observation == nil || ValidateGuestObservation(*c.Observation, guest.Request) != nil || c.Observation.Exit == nil || !c.Observation.Exit.TerminationProven {

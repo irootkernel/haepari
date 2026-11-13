@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,6 +87,38 @@ var _ = ginkgo.Describe("Task011CLIValidation", ginkgo.Label("unit"), func() {
 			gomega.Expect(out.Len()).To(gomega.BeZero())
 			gomega.Expect(diagnostic.String()).NotTo(gomega.ContainSubstring("launchctl"))
 			gomega.Expect(diagnostic.String()).NotTo(gomega.ContainSubstring("never-opened"))
+		}
+	})
+})
+
+var _ = ginkgo.Describe("EvidenceRecoveryRefusalCLI", ginkgo.Label("unit"), func() {
+	ginkgo.It("preserves recovery refusal diagnostics and exit semantics through the Unix client", func() {
+		for _, tc := range []struct {
+			code, retry  string
+			status, exit int
+		}{
+			{"RECOVERY_BLOCKED", "none", 409, 2},
+			{"STALE_REVISION", "none", 409, 2},
+			{"STORAGE_UNAVAILABLE", "reconcile", 503, 6},
+		} {
+			message := "Evidence recovery refused: Job failed-job; stage=ownership_observation; category=observation_failed."
+			_, cleanup := diagnosticCLI(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/v1/hello" {
+					diagnosticHello(w)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"schema": "haepari.envelope/v1", "operation": "resource.recover", "ok": false,
+					"error": map[string]string{"code": tc.code, "message": message, "retry": tc.retry},
+				})
+			})
+			var out, diagnostic bytes.Buffer
+			gomega.Expect(run([]string{"resource", "recover", "resource-id", "--plan", "--action", "recollect", "--json"}, &out, &diagnostic)).To(gomega.Equal(tc.exit))
+			gomega.Expect(out.String() + diagnostic.String()).To(gomega.ContainSubstring(message))
+			gomega.Expect(out.String() + diagnostic.String()).NotTo(gomega.ContainSubstring("plan_token"))
+			cleanup()
 		}
 	})
 })

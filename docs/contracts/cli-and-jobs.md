@@ -202,7 +202,7 @@ Machine error codes and their exits are listed under [JSON envelopes and exit co
 
 ## Implemented artifact, retention and help surface (TASK-012)
 
-`haepari help --json` reads no controller and emits `haepari.help/v1` inside the ordinary envelope. It lists implemented commands and their flags, supported schemas, outcome/state enums, error/verdict exits, canonicalization, cursor behavior and current default bounds. `capabilities` and Unix hello share the same six implemented protocol capabilities; compiled command support remains distinct from backend qualification. Existing managed commands serve implemented local and automatic development VM Jobs; selected-resource doctor is implemented. General local/development VM manual completion is implemented by TASK-019; VM resource removal remains unsupported and release service status/stop commands remain planned.
+`haepari help --json` reads no controller and emits `haepari.help/v1` inside the ordinary envelope. It lists implemented commands and their flags, supported schemas, outcome/state enums, error/verdict exits, canonicalization, cursor behavior and current default bounds. `capabilities` and Unix hello share the same implemented protocol capabilities; compiled command support remains distinct from backend qualification. Existing managed commands serve implemented local and automatic development VM Jobs; selected-resource doctor is implemented. General local/development VM manual completion is implemented by TASK-019; VM resource removal remains unsupported and release service status/stop commands remain planned.
 
 Machine-readable help is frozen at F1. The TASK-025 release-service surface adds exactly one append-only synopsis entry (`service plan --release`); existing `haepari.help/v1` structure and entries are unchanged. That addition and the separate `haepari.release-service-plan/v1` schema decision (release services were outside F1's frozen scope) are recorded in the [TASK-025 packaging record](../records/TASK-025-release-packaging.md), following the TASK-023 recorded-delta precedent for synopsis additions.
 
@@ -210,7 +210,7 @@ Machine-readable help is frozen at F1. The TASK-025 release-service surface adds
 
 Unix routes `GET /v1/jobs/<id>/artifacts` and `POST /v1/jobs/<id>/purge` expose the same contract. Manifest GET has no query parameters. Page GET requires `path`, `after`, `sha256`, `size` and `page_token`, each once; unknown, malformed, duplicated or out-of-bound parameters reject. The page size is at most 64 KiB and offsets are exact bytes. JSON data is base64, without interpreting file contents.
 
-`resource recover <id> --plan --action recollect|dispose --json` plans protected-evidence recovery. Apply uses the returned token and saved `--request-key`, with no operator evidence file. It records a typed supplementary evidence receipt; an identical completed request replays after restart or token expiry. Disposal plans identify the precise lost references. Failed collection stays protected; successful collection/disposal does not lift quarantine by itself. A subsequent default resource-health plan/apply is separate and cannot rewrite the original result. Unsupported production VM plans are inspection-only with no token.
+`resource recover <id> --plan --action recollect|dispose --json` plans protected-evidence recovery. Add `--job-id <job-id>` to a recollect plan to select exactly one unresolved retained Job owned by that resource. Unrelated unresolved Jobs are not observed or collected by that selection; resource-wide occupancy, quarantine and adapter-intent fences still apply. The signed token binds the target and the full resource snapshot; apply uses only the token and saved request key. Its durable intent contains only the selected Job and preserves the existing finite collection/cleanup deadlines and permanent replay semantics. Omitting `--job-id` retains all-unresolved-Job behavior. Selected disposal and target flags on apply, health, Job recovery or attestation are rejected. Remaining unresolved Jobs continue to block health/reuse. Refusals identify the failed Job (or resource scope before a Job is selected), the validation stage and a fixed safe diagnostic category in the existing error message. Raw backend messages, paths, credentials, argv, environment and remote output are excluded. HTTP status, error code, exit code and retry policy retain their existing cause-based mapping; refused plans grant no apply token. Missing original guest native termination proof retains its successful inspection-only, tokenless plan with bounded diagnostic unknowns; it grants no collection or cleanup authority. Apply uses the returned token and saved `--request-key`, with no operator evidence file. It records a typed supplementary evidence receipt; an identical completed request replays after restart or token expiry. Disposal plans identify the precise lost references. Failed collection stays protected; successful collection/disposal does not lift quarantine by itself. A subsequent default resource-health plan/apply is separate and cannot rewrite the original result. Unsupported production VM plans are inspection-only with no token.
 
 After purge, `submit` returns the same unavailable admission, `run` emits that admission and exits 2, and `wait`, `events`, `logs` and artifact reads report `RESULT_UNAVAILABLE`. Saved cancellation mutation replay remains exact. Event cursor ownership is checked before result availability: a cursor recorded for another Job is `INVALID_REQUEST`, even after purge. Purged payloads retain their permanent cursor owner and floor.
 
@@ -223,3 +223,31 @@ F1's decision, initial delivery change inventory and field/compatibility decisio
 `haepari.job/v2` uses the same closed fields and admission canonicalization as v1, selecting the approved absence-aware settlement policy in [managed transitions](managed-transitions.md#epic-009-approved-recovery-delta-task-036). Every newly settled result for that admission uses `haepari.result/v2`; persisted v1 keys and results keep their original identities. The Unix transport/envelope protocol remains v1. Machine help advertises both supported Job/result versions and v2 recovery plans. Bounded `haepari.diagnostic/v1` event payloads supplement public Job events with classification codes; paths, secrets, argv, environment and raw SSH/provider output are excluded.
 
 Failed recovery/v2 observations can append bounded, deduplicated diagnostic events to an available retained finished Job. Such events are supplementary: they change no Job revision, immutable result, capacity, resource availability or recovery authority. Purged admissions cannot receive new diagnostic history. Ordinary diagnostic recording retains its terminal guard, and successful exchanges emit no failure event.
+
+### Prepared guest persistent identity
+
+`persistent-guest-identity/v1` identifies the new guest/control v3/v4,
+recovery/attestation v3/v4 and native request/v2 contracts. Frozen v1/v2
+messages reject the new identity fields; absent historical fields retain their
+original bytes and digests. Prepared-identity plans use `haepari.recovery-plan/v5`
+and supplementary intent/receipt v4; resource-owned budgets and exact saved-key
+replay remain unchanged. `job-evidence-recovery/v1` identifies selected recollect.
+See [ADR-0022](../architecture-decision-records/0022-prepared-identity-and-scoped-recollection.md).
+
+
+New guest preparations retain descriptor-observed local volume UUID, 64-bit file
+ID and creation time for the Job root, workspace, outside control receipt,
+original runner and output log. The host preparation record retains the same
+immutable observations; log identity is part of the original native request and
+its receipt bindings. These fields do not change the historical native request
+or upgrade termination proof.
+
+Same-boot operations retain device/inode checks and also compare persistent
+identity when recorded. Only recovery proving a different current boot may
+accept a changed mount device number, after matching every prepared persistent
+identity and checking the original request, native receipts and runner digest.
+Plan, apply, retained reads, cleanup and health share these guards. Copied control
+receipts, replaced directories/files, live workers, unsupported identity queries
+and legacy missing persistent evidence fail closed across boots. Historical
+same-boot recovery retains its original guards. No migration invents identities
+for old Jobs, and no recovery rewrites their requests or native receipts.
