@@ -1,6 +1,6 @@
 # Haepari roadmap
 
-Target: v0.1.0, Design Revision 3.5. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. The tables below record current task and epic lifecycle states. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
+Delivery targets: the historical v0.1.0 baseline and planned v0.1.1 EPIC-010, Design Revision 3.5. This file alone owns Haepari task identity, lifecycle status, recommended sequence and actual prerequisites. The tables below record current task and epic lifecycle states. The TASK-001 bootstrap is not a managed Job implementation or release acceptance.
 
 ## Execution policy
 
@@ -19,7 +19,7 @@ Lifecycle status vocabulary:
 | Deferred | Outside the current release; re-entry needs a recorded decision. |
 | Cancelled | Withdrawn; history is retained. |
 
-`Scope` separately says whether a task counts toward v0.1.0 (`Active`) or not (`Deferred`).
+`Scope` separately marks selected delivery work (`Active`) or deferred work (`Deferred`). EPIC-001 through EPIC-009 retain their v0.1.0 scope; EPIC-010 targets v0.1.1. Adding active v0.1.1 work does not reopen historical acceptance or make it a v0.1.0 prerequisite.
 
 ## Local development scope (Design Revision 3.5)
 
@@ -38,6 +38,7 @@ Lifecycle status vocabulary:
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Accepted |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Completed |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
+| [EPIC-010](roadmap/EPIC-010.md) | Separate development home and preserve one installation through relocation (v0.1.1) | TASK-040 through TASK-045 | Active | Planned |
 
 Master approved EPIC-007 final closeout on 2026-10-20 after the common-test corrections. TASK-025 through TASK-028 retain their Accepted status. Historical package and running-VM evidence remains bound to its recorded artifacts; the corrected package still requires its own qualification before release. This closeout neither records a new live observation nor authorizes installation or publication.
 
@@ -88,8 +89,21 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-030](roadmap/EPIC-008.md#task-030) | Implement native execution binding, release and reconciliation | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-031](roadmap/EPIC-008.md#task-031) | Implement linked segments and single-owner continuation | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-032](roadmap/EPIC-008.md#task-032) | Qualify external-client recovery and consumer contracts | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
+| [TASK-040](roadmap/EPIC-010.md#task-040) | Define home roles and the relocation contract | TASK-025 | Active | Planned |
+| [TASK-041](roadmap/EPIC-010.md#task-041) | Establish the isolated development home | TASK-040 | Active | Planned |
+| [TASK-042](roadmap/EPIC-010.md#task-042) | Support the default home in release services | TASK-040 | Active | Planned |
+| [TASK-043](roadmap/EPIC-010.md#task-043) | Implement installation-preserving relocation and rollback | TASK-042 | Active | Planned |
+| [TASK-044](roadmap/EPIC-010.md#task-044) | Qualify preservation, recovery and release packaging | TASK-041, TASK-043 | Active | Planned |
+| [TASK-045](roadmap/EPIC-010.md#task-045) | Prepare Aquarium adoption evidence and the cutover handoff | TASK-044 | Active | Planned |
 
-Every active task other than TASK-028 is an actual prerequisite of a later active task, so release acceptance cannot bypass it.
+Release endpoint v0.1.0: TASK-028.
+Release endpoint v0.1.1: TASK-045.
+
+Every other active task is an actual prerequisite of a later active task. Endpoints describe separate delivery targets, not a dependency from v0.1.0 publication to v0.1.1 work.
+
+## v0.1.1 home separation and Aquarium adoption
+
+EPIC-010 is planned work with [Detailed SOT](TODO-HOME-SEPARATION-AND-RELOCATION.md). TASK-041 makes the isolated development home usable during this Epic; it does not migrate the shared installation. TASK-045 ends at compatibility evidence, rehearsal and cutover readiness before Haepari v0.1.1 publication. Actual shared-home relocation belongs to the later Aquarium v0.1.24 official adoption operation, after the released combination is verified. Neither Epic completion nor Haepari publication alone triggers that operation. No second Epic or actual host cutover Task is created here.
 
 ## Contract freeze gates
 
@@ -107,7 +121,7 @@ After a gate, a change needs a recorded contract decision and a schema version c
 
 Historical real-UTM qualification tasks: TASK-016, TASK-038. These Accepted records retain their candidate-bound backend and operating observations. TASK-034's Accepted host probe and TASK-039's Accepted native local caller cycle also remain historical; TASK-039 is not real-VM evidence.
 
-Current real-VM acceptance tasks: TASK-027. It observes the exact packaged candidate's small already-running single-VM auto/manual loop. Current real-VM prerequisite closure: TASK-027, TASK-028. Missing that new observation blocks release acceptance and the subsequent final producer handoff, not independent local development. TASK-028 may prepare its handoff locally but cannot deliver an accepted release before TASK-027.
+Current real-VM acceptance tasks: TASK-027, TASK-044. TASK-027 retains the v0.1.0 exact-package gate; TASK-044 owns the planned v0.1.1 exact-package small already-running single-VM loop. This declaration records required future evidence, not execution or renewed acceptance of historical results. Current real-VM prerequisite closure: TASK-027, TASK-028, TASK-044, TASK-045. Missing a due new observation blocks the corresponding target's acceptance and final handoff, not independent local development. TASK-028 may prepare its handoff locally but cannot deliver an accepted release before TASK-027.
 
 TASK-017–026 implement and verify their changed behavior locally or with fake/native guest fixtures; their acceptance requires no new live campaign. The accepted VM prerequisites remain valid while a VM is temporarily unavailable. An optional TASK-014 smoke or selected `make test-utm` rerun needs its own actual observations and cannot substitute for TASK-027. No task ID, actual prerequisite or lifecycle status changes with this distinction.
 
@@ -117,4 +131,4 @@ TASK-004 needs a macOS host but no VM. TASK-011 implements the development Launc
 
 TASK-033 proves a production-path submit/wait/result/reconnect local slice inside EPIC-001. TASK-035 adds advisory named locks on the same store and wait path. EPIC-003 hardens its scheduling, supervision and recovery without a second scheduler and ends at freeze gate F1. TASK-034 probed UTM automation before bootstrap; EPIC-004 then qualifies the VM adapter independently of EPIC-008 and ends at freeze gate F2. EPIC-009 restores and measures the ordinary VM loop and proves a small isolated caller cycle before EPIC-005, which delivers generic automatic/manual integration and ends at freeze gate F3. EPIC-007 supplies the exact Aquarium handoff; the Aquarium-side prerequisites are listed in [external requests](to-external.md). EPIC-008, TASK-029–032 and E01–E20 retain their IDs and design history for post-v0.1.0 re-entry, subject to B1/B2 closure.
 
-Totals: nine epics (eight active, one deferred); 39 tasks (35 active, four deferred).
+Totals: ten epics (nine active, one deferred); 45 tasks (41 active, four deferred).

@@ -199,8 +199,13 @@ def check_dag(tasks):
             visit(p, stack + [t])
         state[t] = 2
 
-    for t in sorted(active):
-        visit(t, [])
+    if not errors:
+        for t in sorted(active):
+            visit(t, [])
+    if errors:
+        return errors, {"sinks": [], "utm_gated": [],
+                        "historical_utm_qualification": [],
+                        "current_live_vm_gates": [], "longest_chain": 0}
     children = {t: set() for t in active}
     for t in active:
         for p in tasks[t]["prereqs"]:
@@ -245,8 +250,22 @@ def check_dag(tasks):
             memo[t] = 1 + max((depth(p) for p in tasks[t]["prereqs"]), default=0)
         return memo[t]
 
-    if sinks != ["TASK-028"]:
-        errors.append(f"active sinks should be only TASK-028, found {sinks}")
+    # Older single-release packages retain their original endpoint policy.
+    # New delivery targets must declare endpoints; never infer them from leaves.
+    endpoint_lines = re.findall(r"^Release endpoint .*", prose, re.M)
+    endpoints = re.findall(r"^Release endpoint (v\d+\.\d+\.\d+): (TASK-\d{3})\.$", prose, re.M)
+    if len(endpoint_lines) != len(endpoints):
+        errors.append("malformed release endpoint declaration")
+    if len({release for release, _ in endpoints}) != len(endpoints):
+        errors.append("duplicate release endpoint target")
+    expected_sinks = [task for _, task in endpoints] if endpoint_lines else ["TASK-028"]
+    if len(set(expected_sinks)) != len(expected_sinks):
+        errors.append("duplicate release endpoint task")
+    for task in expected_sinks:
+        if task not in active:
+            errors.append(f"release endpoint names non-active {task}")
+    if sinks != sorted(expected_sinks):
+        errors.append(f"active sinks {sinks} differ from declared release endpoints {sorted(expected_sinks)}")
     if blocked != declared_blocked:
         errors.append(f"DAG closure of current real-VM tasks {sorted(blocked)} differs from the stated prerequisite closure {sorted(declared_blocked)}")
     return errors, {"sinks": sinks, "utm_gated": sorted(blocked),

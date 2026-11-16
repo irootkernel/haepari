@@ -4,7 +4,7 @@
   "revision_date": "2026-10-12",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 103,
+    "package_files_excluding_manifest": 105,
     "requirements": {
       "total": 81,
       "active": 58,
@@ -12,13 +12,13 @@
       "deferred": 17
     },
     "epics": {
-      "total": 9,
-      "active": 8,
+      "total": 10,
+      "active": 9,
       "deferred": 1
     },
     "tasks": {
-      "total": 39,
-      "active": 35,
+      "total": 45,
+      "active": 41,
       "deferred": 4
     },
     "adrs": {
@@ -32,20 +32,25 @@
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 87,
+    "markdown_documents": 89,
     "json_templates": 13,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 18890,
-      "sha256": "92ffa1ec133e90727562af1e76ebea3e8d8e358052808b9431a95c8bfb74de26"
+      "bytes": 19432,
+      "sha256": "1f884537f9f7c9d6aa73db9c3b08768eea980bdc7ae14fbd0166c1de65d1f097"
     },
     {
       "path": "REVISION-NOTES.md",
       "bytes": 17091,
       "sha256": "fb0ef4f265eef853bcc517eb8080819fc37e93f669ce546350b1b733562c5168"
+    },
+    {
+      "path": "TODO-HOME-SEPARATION-AND-RELOCATION.md",
+      "bytes": 11144,
+      "sha256": "753d82707056fe5837177dd678594272627c51e17c27ab1271c195b88be48685"
     },
     {
       "path": "TODO-VM-OPERATIONAL-READINESS.md",
@@ -54,8 +59,8 @@
     },
     {
       "path": "TODO.md",
-      "bytes": 24714,
-      "sha256": "2627bfd9eaf3bc6999f896ea215903dec59f2eb9640bfc0fb008fabdf7bb8d90"
+      "bytes": 25006,
+      "sha256": "b1023e0127f26b0146d8eb1da9682675e1ea55fb4b83d5a19d04915395054ed7"
     },
     {
       "path": "aquarium-adoption.md",
@@ -184,8 +189,8 @@
     },
     {
       "path": "checks.json",
-      "bytes": 2000,
-      "sha256": "1333eefa6feee3bac7da87c53bf380a02058270e84f932e65455c80785a65179"
+      "bytes": 2073,
+      "sha256": "0ac67cc8e4d8ecd531352e3c05364d8ae8f12a18b197c1efd66ab4ead3dfbdea"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -334,8 +339,8 @@
     },
     {
       "path": "package-validation.md",
-      "bytes": 9006,
-      "sha256": "4f32731b0ffcc61f1218f4a64dcb7d6c7cb78fe53ef56aa79c78a10ceb7ed5b5"
+      "bytes": 9398,
+      "sha256": "25a78d962873af517e1dce7e8c26519b1a069830b1d0cefb93b6d756c911c6b9"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -434,8 +439,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 16524,
-      "sha256": "24c23a0e191422d08788ff582b8a78b52a8eab500f5614ffed256c5d13e010d1"
+      "bytes": 18635,
+      "sha256": "25b44991d0fea756b7914b19ac1200f8270a957b823287079a366528cb7b3bbf"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -481,6 +486,11 @@
       "path": "roadmap/EPIC-009.md",
       "bytes": 13744,
       "sha256": "e70a2caf71ee355484a8426658dd2f3b4025aa3314d7e9ac19d692d55f8faaef"
+    },
+    {
+      "path": "roadmap/EPIC-010.md",
+      "bytes": 7236,
+      "sha256": "b5e510bf6bc87bbb6c60d401f782db296e3ae17b43f66e5e691ef60306501592"
     },
     {
       "path": "rollout-requests/01-podway.md",
@@ -539,8 +549,8 @@
     },
     {
       "path": "tools/validate_docs.py",
-      "bytes": 24559,
-      "sha256": "0ac40d7aff6aafaae96b7f669702dda3c3cc8e227ec5cd6b54a9cbda3f143a70"
+      "bytes": 25727,
+      "sha256": "1e7684060758dabdb19d5d8a167e6ac514e8a605854eaa9eefd9066ef4f59378"
     },
     {
       "path": "traceability.md",

@@ -1,6 +1,6 @@
 # Package validation: Design Revision 3.5
 
-Date: 2026-10-21. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
+Date: 2026-11-16. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
 
 The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks the package. `python3 docs/tools/validate_docs.py --write` regenerates checks.json and MANIFEST.json; a second non-writing run verifies their contents. Offline regression checks run through `make test-qualification` alongside the existing campaign-driver fixtures.
 
@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (789 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (815 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |
@@ -21,7 +21,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Product/VM tests and installed-service experiments | Not run by this documentation change |
 | Git staging, commit and publication | Not performed |
 
-**Roadmap DAG.** The graph is acyclic, no active task depends on a deferred task, and TASK-028 remains the only active sink. The longest prerequisite chain has 25 tasks. Historical real-UTM qualification (TASK-016/038) is distinct from the current live gate (TASK-027). The validator computes only the current gate's prerequisite closure: TASK-027 and its final-handoff successor TASK-028. TASK-017–026 can be implemented and accepted locally without a new VM campaign. Accepted evidence, task IDs, actual prerequisites and statuses remain unchanged.
+**Roadmap DAG.** The graph is acyclic and no active task depends on a deferred task. The roadmap declares separate release endpoints: TASK-028 for v0.1.0 and TASK-045 for v0.1.1. Legacy single-release inputs without declarations retain the original TASK-028 endpoint rule; explicit declarations are validated rather than inferred from leaves. The longest prerequisite chain has 27 tasks. Historical real-UTM qualification (TASK-016/038) remains distinct from the v0.1.0 gate (TASK-027) and planned v0.1.1 gate (TASK-044). Their current prerequisite closure is TASK-027/028 and TASK-044/045. EPIC-010 and all six new Tasks are Planned; no historical acceptance is reopened and no new runtime observation is claimed.
 
 **Traceability.** Every mandatory requirement has a mapped implementation owner and at least one mandatory case of its own; complete aggregate case coverage cannot hide an empty row. All 58 mandatory managed cases (V01–V24 and V32–V65) are referenced. Six consumer-owned requirements and seven consumer cases retain their IDs outside mandatory acceptance. Consumer-owned/deferred requirements cannot be owned by active Haepari tasks. Unclassified or duplicate IDs, duplicate traceability rows, missing requirement mappings and optional/deferred/unknown case references fail validation. Scope sections may be reordered and IDs need not be contiguous.
 
@@ -32,12 +32,12 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Item | Total | Active | Consumer-owned optional | Deferred |
 | --- | --- | --- | --- | --- |
 | Requirements | 81 | 58 | 6 | 17 |
-| Epics | 9 | 8 | 0 | 1 |
-| Tasks | 39 | 35 | 0 | 4 |
+| Epics | 10 | 9 | 0 | 1 |
+| Tasks | 45 | 41 | 0 | 4 |
 | ADRs | 22 | 20 | 0 | 2 |
 | Verification cases | 85 | 58 | 7 | 20 |
 
-The package also holds 87 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
+The package also holds 89 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
 
 ## Limits of these checks
 
@@ -121,7 +121,7 @@ This historical comparison is against commit `91a874d` (Design Revision 3.2). It
 
 **Consumer behavior** remains product-owned. Without a VM reset, each consumer recipe sets up and cleans up its own state.
 
-**Not applicable yet.** Migration from a prior public Haepari release has no predecessor to test.
+**Planned upgrade coverage.** EPIC-010 will qualify v0.1.0-to-v0.1.1 compatibility and installation-preserving relocation. Actual host migration remains outside Epic acceptance and waits for Aquarium v0.1.24 official adoption. Historical records about the absence of a public predecessor retain their original candidate scope.
 
 **Owner decisions** are recorded in [review disposition](review-disposition.md#owner-decisions-2026-09-28) and [its Revision 3.3 section](review-disposition.md#owner-decisions-2026-09-28-revision-33).
 
