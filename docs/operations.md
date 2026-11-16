@@ -32,6 +32,51 @@ Prepare `haepari service plan --instance <id> --binary <absolute-candidate> --ro
 
 Qualify product survival with the explicit installed-service check in [TESTING.md](../TESTING.md), then separately stop/remove the exact instance with `service uninstall --plan-file <json> --json`. A reachable controller must have no occupied resource; inaccessible or uncertain state is preserved. Uninstall removes only its exact plist after successful bootout, leaving state and evidence. Failed bootstrap/bootout preserves the instance for inspection. TASK-011's current candidate has observed the actual product runner surviving SIGTERM and SIGKILL of its isolated Aqua controller on macOS arm64, with exact incarnation reattachment, unchanged run deadline and one workload execution. The Job finished PASS with verified cleanup and zero occupancy. This observation covers that development instance. TASK-016/TASK-038 retain their accepted UTM observations; TASK-027 requires the small exact-release running-VM loop. Power-loss durability remains unqualified and optional unless advertised; it is not a mandatory power-cut experiment.
 
+## Independent Haepari development home
+
+Use this procedure only under authority to install and replace Haepari's dedicated development service. The shared installation and its consumers keep their explicitly selected root. Use a new, initially empty `~/.haepari-dev/`, development instance `main`, and initial global/host limits 1/1. Do not seed it from shared data, change shell profiles or global MCP settings, or reuse an unrelated legacy development instance. Native default-home support and relocation remain later TASK-042/043 work.
+
+Build through the pinned toolchain into a unique canonical `/tmp` directory. Compute the completed executable's SHA-256 after signing, then place it at ignored `bin/dev/<64-hex-sha256>/haepari`. Verify the copied bytes and native signature before use. Give the executable mode `0555`; create each digest directory exclusively and refuse an existing conflicting path. Never build over or modify a running candidate. A development version stamp records provenance only, not release qualification. Keep these exact executable bytes while their service plan or retained runner history still needs them.
+
+Prepare the saved plan from that absolute candidate path:
+
+```sh
+"$candidate" service plan --instance main --binary "$candidate" \
+  --root "$development_root" --global-limit 1 --host-macos-guest-limit 1 --json
+```
+
+Here `development_root` is the explicit absolute `~/.haepari-dev/` path, not a change to the shell's default selection. Save only the response `data` object as `bin/dev/<sha256>/service-plan.json`, with owner-only permissions and without overwriting an existing plan. Inspect its exact executable digest, root, instance, limits, Aqua domain and plist. Installation uses only that saved plan:
+
+```sh
+"$candidate" service install --plan-file "$service_plan" --json
+HAEPARI_HOME="$development_root" "$candidate" resources list --json
+HAEPARI_HOME="$development_root" "$candidate" doctor --projection --section queue --json
+```
+
+Native install success establishes service submission, not controller health. Require the private socket and successful public observations, a distinct installation ID and a distinct database/socket from the shared installation before admitting a harmless offline local Job. Register only the intended local resource in this home. Preserve the Job's exact spec/key before submit, observe the same Job through blocking wait, and require its actual verdict and verified cleanup. The new service has no VM registration merely because another installation has one.
+
+If a candidate on a removable volume is held at process startup, preserve its exact plan and service. A process sample and bounded macOS TCC observation may distinguish loader/file-access waiting from a controller failure. An actual macOS removable-volume or Automation prompt requires the operator's decision; do not relocate the binary, rewrite the plist, change privacy databases or repeatedly reinstall to bypass it. After the operator resolves access, observe the existing service again. Permission and Aqua readiness remain separate from Job and cleanup evidence.
+
+### Drain and replace the exact development candidate
+
+1. Prepare the next immutable binary and saved plan without changing the running candidate. Keep the previous binary and plan as the recovery pointers. Both plans must select the same development root, instance and approved limits.
+2. Stop new development admissions. Read all pages of Jobs, resources and advisory locks; prove no queued/active/unknown work, occupied resource, current grant or unfinished cleanup remains. A closed socket is not drain proof. Preserve and reconcile uncertain work under its original identity instead of cancelling, disposing or releasing it merely to permit replacement.
+3. Record the development installation ID, database identity, retained completed Job/result/replay identity and the bounded shared/legacy service and consumer-selection sentinels. Shared database contents may change through unrelated legitimate activity; compare declared stable identities/files rather than promising whole-live-database byte equality.
+4. Uninstall through the **previous** binary and exact **previous** saved plan. Verify successful bootout, absent exact plist, cessation of the recorded controller incarnation and a free original controller lock. Do not unlink that lock or remove the development state. If cessation is uncertain, stop before installing the successor.
+5. Install through the next binary and exact next saved plan. Require its expected live executable/argv, socket and successful public observations, unchanged development installation/database identity and retained Job result, same-key replay without a second workload, and zero occupancy. Recheck the selected shared/legacy/configuration sentinels and report unexpected changes as unresolved evidence rather than attributing them without proof.
+6. Keep the new dedicated development service available for subsequent development, with both immutable candidate/plan pointers retained. If replacement fails, preserve its exact failed/uncertain state. Return to the previous saved plan only after exact successor cessation and verified storage compatibility; no schema downgrade or fallback over newer state is automatic. Neither recovery path changes the shared controller.
+
+### Hand over one physical VM between installations
+
+Two installation-local queues or advisory locks cannot exclude each other from the same physical VM. The operator coordinates this handover under the selected live-test envelope; documenting it does not execute it.
+
+1. Suspend participating shared VM submissions and inspect their original work. Drain the selected registered resource and required cooperating grants; resolve uncertain execution/cleanup through their supported owner. Do not force-release or delete evidence to claim a drain.
+2. Pause the exact shared resource with its current native revision/request-key fences. Reinspect after pause and prove zero occupancy, no active/unknown work and no unresolved native cleanup before permitting development use. Handle queued shared work explicitly and keep its immutable pins; pause is not cancellation.
+3. Bind the development resource to the same verified already-running VM identity and existing SSH prerequisites only within the authorized handover. Admit bounded development work through that development installation. Never submit to the paused shared resource, acquire the parent allocation recursively, or issue VM power/reset effects.
+4. Observe the original development Jobs to their actual terminal results and verify both consumer and native cleanup. Pause the development resource, recheck zero occupancy and absence of unresolved work, and only then resume the exact shared resource with fresh native fences. Keep the development resource paused while shared consumption resumes.
+
+Retain the original failed observations and identities if either side cannot prove return; do not let the other installation run the VM. TASK-041's local service observation does not qualify this physical handover. TASK-044 owns its due exact-candidate single-VM loop.
+
 ## Release candidate package (TASK-025)
 
 The unpublished release candidate is assembled by `make release` (`build/release.sh`) into a fresh `dist/` directory: a version-stamped standalone `haepari` binary, the complete `use-haepari` skill tree, exercised portable examples, the packaged `verify_tree.py` complete-inventory helper, the unchanged MIT `LICENSE`, the repository `README.md` with installation instructions, a basename-relative archive sidecar and an in-tree `SHA256SUMS` that excludes itself. The package is a candidate, not official distribution; publication remains a separate authority.

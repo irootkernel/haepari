@@ -38,21 +38,21 @@ Requirement coverage: HP-REQ-082.
 
 #### Implement
 
-- [ ] Prepare the independent development home, immutable candidate binaries and exact saved service plans using the existing native development lifecycle.
-- [ ] Make that home usable for subsequent EPIC-010 development without changing the current shared controller or consumer configuration.
-- [ ] Document drained candidate replacement and the single-VM ownership handover procedure.
+- [x] Prepare the independent development home, immutable candidate binaries and exact saved service plans using the existing native development lifecycle.
+- [x] Make that home usable for subsequent EPIC-010 development without changing the current shared controller or consumer configuration.
+- [x] Document drained candidate replacement and the single-VM ownership handover procedure.
 
 #### Do not
 
-- [ ] Do not copy the shared database, replace a running candidate file, change global shell defaults, or let two controllers operate the same VM concurrently.
+- [x] Do not copy the shared database, replace a running candidate file, change global shell defaults, or let two controllers operate the same VM concurrently.
 
 #### Verify
 
-- [ ] Observe separate installation/socket/state identities, a harmless local Job and exact owned service replacement, preserving shared-state sentinels. Use the Task's separately authorized development-service envelope.
+- [x] Observe separate installation/socket/state identities, a harmless local Job and exact owned service replacement, preserving shared-state sentinels. Use the Task's separately authorized development-service envelope.
 
 #### Done when
 
-- [ ] The development home is usable and its isolation and replacement procedure have original evidence. Actual setup is future Task work, not part of this registration.
+- [x] The development home is usable and its isolation and replacement procedure have original evidence. Actual setup is future Task work, not part of this registration.
 
 ## TASK-042
 

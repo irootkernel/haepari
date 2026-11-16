@@ -39,8 +39,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 19677,
-      "sha256": "e67c3ac274e602bddaad6850dadd57a121fd0dc59321d2dbd0ee94ad78c14801"
+      "bytes": 20037,
+      "sha256": "4d34b10de82a03fe0c3d62afa66f5ae886363301a3a068f5ec29ccee33c2ba26"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -49,8 +49,8 @@
     },
     {
       "path": "TODO-HOME-SEPARATION-AND-RELOCATION.md",
-      "bytes": 12839,
-      "sha256": "9ea69d14af12d27872cdbd8fd0165841853901189e2abe05454d98ddf03e949d"
+      "bytes": 13214,
+      "sha256": "a2c07643a95e780ad0b7abd19ebf0c5beaeefe88788de127acbf371fb67ec724"
     },
     {
       "path": "TODO-VM-OPERATIONAL-READINESS.md",
@@ -195,7 +195,7 @@
     {
       "path": "checks.json",
       "bytes": 2073,
-      "sha256": "a37e309ad5de55f0ecb5175214d7c9f47eb27016ca05cf4e796f4a9264239fae"
+      "sha256": "dac2d1f960f74520e5e5734f5015ff403bcc072d66470328571539428d0f1c87"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -344,13 +344,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 55421,
-      "sha256": "7449a3802c73069fc8ff39295adc85b737ab7838de935bd24d1ec6d2fc417446"
+      "bytes": 62582,
+      "sha256": "b81a357a2bedc5ee2084c348fdd24a661b799640e6a52489f9b71202bdb1d08f"
     },
     {
       "path": "package-validation.md",
-      "bytes": 9514,
-      "sha256": "007b7778923931a6421defeee0c600e6ac2f2bbcc0bc38ce1f62c2f3fd272e93"
+      "bytes": 9536,
+      "sha256": "792d94ab26e5d0817fc309a204184819f12930e1ea5425077a0e47062ee13f77"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -450,7 +450,7 @@
     {
       "path": "roadmap.md",
       "bytes": 18640,
-      "sha256": "c2cc81ec8a6f7fae8b31f43ccd87be7e56eb5c4fef9253b79e63268b824d9362"
+      "sha256": "2389c4b97681243f39161eb68d2cd44098d598b76de3d2d8192d903d35cae074"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -500,7 +500,7 @@
     {
       "path": "roadmap/EPIC-010.md",
       "bytes": 7543,
-      "sha256": "4a235ac7d8889246ddcee235778e8191ca10b86ab0f9a3c24beda4d33aa98a64"
+      "sha256": "4516a8c125246fbd36cab03a81b5016ec3a87cbd61d82345c7c56d397c5878d0"
     },
     {
       "path": "rollout-requests/01-podway.md",
