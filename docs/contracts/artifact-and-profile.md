@@ -152,3 +152,7 @@ changed inputs cannot become an admission. Saved-key replay preserves the origin
 admission/profile reference after source changes or a resource update; current
 configuration is not a replacement for the original request. These helpers add
 no global registry, moving alias lookup, host installation discovery or F1/F2 schema.
+
+## Planned installation relocation
+
+The [home and relocation contract](home-and-relocation.md) requires moving the original retained files with their identities and immutable payloads. Existing absolute execution paths remain historical; only valid current-root evidence paths support post-move log/artifact/export reads. Historical FAIL/INCOMPLETE and missing-evidence gaps are preserved. Current unresolved holds still block relocation; copied backups do not inherit runnable identity bindings. TASK-043/044 implementation and qualification remain due.

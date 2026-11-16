@@ -251,3 +251,7 @@ receipts, replaced directories/files, live workers, unsupported identity queries
 and legacy missing persistent evidence fail closed across boots. Historical
 same-boot recovery retains its original guards. No migration invents identities
 for old Jobs, and no recovery rewrites their requests or native receipts.
+
+## Planned v0.1.1 service relocation
+
+The [home and relocation contract](home-and-relocation.md) defines the selected release-service plan v2 and `service relocate plan/apply/status/rollback` surface, closed plan/receipt/journal v1 records and existing envelope/error mapping. TASK-042/043 own implementation. No change to existing Job/resource/result/runner schemas, request-key replay, historical payload bytes or current CLI support is implied.

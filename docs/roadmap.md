@@ -38,7 +38,7 @@ Lifecycle status vocabulary:
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Accepted |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Completed |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
-| [EPIC-010](roadmap/EPIC-010.md) | Separate development home and preserve one installation through relocation (v0.1.1) | TASK-040 through TASK-045 | Active | Planned |
+| [EPIC-010](roadmap/EPIC-010.md) | Separate development home and preserve one installation through relocation (v0.1.1) | TASK-040 through TASK-045 | Active | In progress |
 
 Master approved EPIC-007 final closeout on 2026-10-20 after the common-test corrections. TASK-025 through TASK-028 retain their Accepted status. Historical package and running-VM evidence remains bound to its recorded artifacts; the corrected package still requires its own qualification before release. This closeout neither records a new live observation nor authorizes installation or publication.
 
@@ -89,7 +89,7 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-030](roadmap/EPIC-008.md#task-030) | Implement native execution binding, release and reconciliation | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-031](roadmap/EPIC-008.md#task-031) | Implement linked segments and single-owner continuation | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-032](roadmap/EPIC-008.md#task-032) | Qualify external-client recovery and consumer contracts | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
-| [TASK-040](roadmap/EPIC-010.md#task-040) | Define home roles and the relocation contract | TASK-025 | Active | Planned |
+| [TASK-040](roadmap/EPIC-010.md#task-040) | Define home roles and the relocation contract | TASK-025 | Active | Accepted |
 | [TASK-041](roadmap/EPIC-010.md#task-041) | Establish the isolated development home | TASK-040 | Active | Planned |
 | [TASK-042](roadmap/EPIC-010.md#task-042) | Support the default home in release services | TASK-040 | Active | Planned |
 | [TASK-043](roadmap/EPIC-010.md#task-043) | Implement installation-preserving relocation and rollback | TASK-042 | Active | Planned |

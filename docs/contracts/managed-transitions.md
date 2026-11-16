@@ -234,3 +234,7 @@ VM recovery observation uses one internal 15-second clock per checked Job. Plan 
 ## Observation-stable VM Job recovery
 
 VM Job recovery v4 uses the recovery-relevant event projection defined in the [CLI contract](cli-and-jobs.md). Observation-only SSH measurement churn cannot invalidate plan/apply or the ledger transaction. Original events and measurement-gap reporting remain intact. Effectful or unrecognized records continue to fence recovery. No receipt, lease, owner, resource, phase or native-observation fence is relaxed; operator attestation never produces PASS. Existing permanent replay receipts remain authoritative without rewriting stored requests. [ADR-0021](../architecture-decision-records/0021-recovery-observation-fence.md) records this frozen-contract correction.
+
+## Planned offline relocation fence
+
+The [home and relocation contract](home-and-relocation.md#eligibility-and-exclusive-apply) excludes queued/active work, leases/grants, unknown occupancy, unresolved native/recovery/retention intents and unfinished cleanup before rename. A nonterminal journal blocks supported daemon startup before normal DB/socket effects. The mover never clears a hold or modifies a terminal verdict to become eligible. Historical negative outcomes alone are not active holds. TASK-043 implements these selected fences.

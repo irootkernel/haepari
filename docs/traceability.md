@@ -63,6 +63,15 @@ Design Revision 3.5. This table is bidirectional: search by requirement, impleme
 | HP-REQ-080 | TASK-035 | V59,V60,V61,V63,V64 | fixture/unit + local integration |
 | HP-REQ-081 | TASK-035 | V62 | fixture/unit + local integration |
 
+| HP-REQ-082 | TASK-040, TASK-041 | V66 | contract review + scoped development service/local observation |
+| HP-REQ-083 | TASK-040, TASK-042 | V67 | contract review + disposable HOME/unit and scoped service observation |
+| HP-REQ-084 | TASK-040, TASK-043 | V68,V70 | contract review + local/fake-native integration/E2E |
+| HP-REQ-085 | TASK-040, TASK-043 | V69,V70 | contract review + deterministic crash/refusal fixtures |
+| HP-REQ-086 | TASK-040, TASK-044 | V68,V71 | exact package/common gate + small running-VM and actual manual observation |
+| HP-REQ-087 | TASK-040, TASK-045 | V72 | source-backed consumer comparison + disposable rehearsal/handoff review |
+
+HP-REQ-082–087 and V66–V72 target v0.1.1. TASK-040 supplies contract definition and mapping only; downstream Tasks supply the stated runtime/qualification evidence. Existing rows and historical v0.1.0 meanings are unchanged.
+
 ## Initial-slice and probe contributions
 
 TASK-033 implements the first slice of HP-REQ-007, 009, 010, 011, 012, 014, 015 and 016; the owning tasks harden the same path. TASK-034 contributes the UTM probe observations to HP-REQ-006 and HP-REQ-026. Freeze gates F1 (TASK-012), F2 (TASK-016) and F3 (TASK-020) complete HP-REQ-062.

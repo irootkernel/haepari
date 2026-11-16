@@ -247,3 +247,7 @@ candidate observability. Finished payload purge retains permanent replay facts;
 a separately pinned read-only verifier supports completed-cleanup health after
 payload removal or controller build changes. These mechanisms add no permanent
 guest service, mutable shared binary or implicit installation.
+
+## Planned v0.1.1 relocation boundary
+
+[ADR-0023](architecture-decision-records/0023-home-separation-and-relocation.md) selects an independent development home and an offline same-installation relocation. The [home and relocation contract](contracts/home-and-relocation.md) owns exact plans, persistent identity inventories, backup/WAL verification, the root-local durable journal, startup refusal during partial relocation and reverse-move limits. TASK-040 is contract work; TASK-042/043 runtime implementation and TASK-044 qualification remain due. SQLite payloads and historical runner/results/receipts are not rewritten, and no second scheduler or path-alias service is introduced.

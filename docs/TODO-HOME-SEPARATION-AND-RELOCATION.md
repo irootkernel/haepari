@@ -33,7 +33,7 @@ Use local/fake-native fixtures first. Before an authorized development VM observ
 
 ## Planned service and relocation interfaces
 
-These are future TASK-040/042/043 deliverables, not current native capabilities.
+TASK-040 defines the selected [home and relocation contract](contracts/home-and-relocation.md) and [ADR-0023](architecture-decision-records/0023-home-separation-and-relocation.md). TASK-042/043 still own implementation; none of these interfaces is a current native capability.
 
 New release plans use `haepari.release-service-plan/v2`, retaining the existing field structure and allowing the native default home. Development plans retain default-root refusal. Non-default release v1 and development v1/v2 remain supported with their original validation. Private-root, exact ownership, binary and plist fences remain mandatory.
 
@@ -44,7 +44,7 @@ haepari service relocate status --plan-file <relocation-plan> --json
 haepari service relocate rollback --plan-file <relocation-plan> --json
 ```
 
-Plan is read-only and emits `haepari.service-relocation-plan/v1`. Define a versioned relocation receipt and durable journal in TASK-040. Bind installation ID, source/target plans, binary digests, root/file identities, logical ledger and evidence inventories, backup location and one relocation identity. Recheck those observations before applying; drift refuses instead of silently refreshing the plan.
+Plan is read-only and emits `haepari.service-relocation-plan/v1`. The selected contract defines `haepari.service-relocation-receipt/v1` and `haepari.service-relocation-journal/v1`, exact closed fields, canonical digests and phase reconciliation. Bind installation ID, source/target plans, binary digests, root/file identities, logical ledger and evidence inventories, backup location and one relocation identity. Recheck those observations before applying; drift refuses instead of silently refreshing the plan.
 
 Apply requires the old service stopped, exclusive controller ownership, no active or queued work/current grants, no unresolved recovery, unknown occupancy, pending native effects or unfinished cleanup. An unreachable controller is not drain proof. Preserve unresolved state and report the blocker; never manufacture eligibility through disposal, SQL edits or forced release.
 
@@ -53,6 +53,10 @@ Use an absent, private, non-symlink target on the same local filesystem. Verify 
 Move the same database, objects and Job evidence; preserve installation/Job IDs, request keys, resource revisions/configuration, results, receipts, digests and historical failures/gaps. Existing old absolute work paths remain historical records, not permission to rerun completed Jobs. Update only authorized mutable service-root metadata; keep the existing service instance/label. Unknown live references into the old root block relocation until handled through their supported owner. Consumers' configuration is outside the native mover.
 
 Journal durable boundaries within the moving root and sync publication/rename metadata. Same-plan apply reconciles that journal with actual identities and continues or returns the recorded result. A conflicting plan or replaced object refuses. Partial relocation blocks ordinary daemon startup. Apply itself starts no service and edits no consumer/MCP configuration.
+
+Terminal-journal succession preserves an immutable snapshot before an exact-predecessor-bound new plan becomes current; old-plan mutations then refuse while retained status receipts remain readable where locatable. Backup creation follows a durable prepared journal, and copying follows a durable binding to the created directory's persistent identity. An interruption between mkdir and that binding leaves an unproven directory: preserve it, refuse adoption, and allow only verified pre-move rollback of the unchanged source. A later plan may use a different absent backup path. Full-inventory checks account only for the exact declared journal/history/owner metadata delta, never a blanket namespace exclusion.
+
+Publication staging is a fresh private sibling on the verified destination filesystem, outside both installation roots/history and backup payload. Only the live creator's descriptors authorize it; a fully synced complete record is atomically renamed into its guarded destination. A crashed creator's incomplete sibling remains untouched and is never adopted, while same-plan recovery derives a fresh attempt from the unchanged durable record. Unexpected files inside the root/history still refuse; no prefix-based inventory bypass or recursive staging-ownership journal is permitted.
 
 Rollback requires both services stopped and consumers not yet resumed; validate the same journal and identities, then reverse the directory move and restore root metadata. After a v0.1.1 startup, use v0.1.1 at the original path too: no automatic schema downgrade. A copied backup preserves data but is not automatically a runnable restoration because inode-bound evidence may differ. Never restore it over newer work or claim copied identity bindings remain valid.
 
@@ -80,4 +84,4 @@ The operator coordinating official Aquarium v0.1.24 adoption owns actual host cu
 5. Update only inventoried live consumer home references to the explicit absolute shared root, including Mulgae MCP. Preserve optional parent-context/borrowed-grant forwarding. Restart the necessary clients and resume consumers only after verification.
 6. Record actual cutover results and keep backups; do not delete them automatically. Before consumer resumption, use the validated rollback on failure. Uncertain new work must be reconciled before any reverse move.
 
-Publication, host installation, runtime updates, actual migration and Sorage transmission retain separate authority. This dossier and its unchecked criteria grant none of those effects. Scope for the current registration is documentation and its approved validator adjustment only.
+Publication, host installation, runtime updates, actual migration and Sorage transmission retain separate authority. This dossier and its unchecked criteria grant none of those effects. TASK-040 supplies contract and mapping decisions only; downstream implementation, service/VM observations and final acceptance remain separately evidenced under their execution envelope.

@@ -2,35 +2,39 @@
 
 Prepare Haepari v0.1.1 to separate its own development controller from the shared installation and relocate that shared installation without losing identity or history.
 
-Identity, lifecycle status, order and actual prerequisites belong to the [canonical roadmap](../roadmap.md). Detailed SOT: [Home separation and installation-preserving relocation](../TODO-HOME-SEPARATION-AND-RELOCATION.md). All checkboxes below are future acceptance criteria; this registration executes none of them. Requirement ownership and any new requirement/case mappings are reconciled in TASK-040, without changing existing traceability by implication.
+Identity, lifecycle status, order and actual prerequisites belong to the [canonical roadmap](../roadmap.md). Detailed SOT: [Home separation and installation-preserving relocation](../TODO-HOME-SEPARATION-AND-RELOCATION.md). Unchecked boxes remain acceptance obligations, not execution claims. TASK-040 defines the selected [home and relocation contract](../contracts/home-and-relocation.md), HP-REQ-082–087 and V66–V72 without changing historical traceability or accepted evidence.
 
 ## TASK-040
 
 ### Define home roles and the relocation contract
 
+Requirement coverage: HP-REQ-082, HP-REQ-083, HP-REQ-084, HP-REQ-085, HP-REQ-086, HP-REQ-087.
+
 Why: release services currently reject the native default home, while the shared controller uses a dev-named root. Moving a directory alone does not resolve ownership, immutable records or consumer references.
 
 #### Implement
 
-- [ ] Record the selected home policy, preservation guarantees, version treatment and unsupported states in an ADR and the affected canonical contracts.
-- [ ] Define release-service plan v2 and relocation plan/receipt v1, exact ownership and binary fences, durable recovery, refusal semantics and rollback boundaries.
-- [ ] Reconcile requirement and verification mappings before implementation; preserve historical contract bytes and accepted evidence.
+- [x] Record the selected home policy, preservation guarantees, version treatment and unsupported states in an ADR and the affected canonical contracts.
+- [x] Define release-service plan v2 and relocation plan/receipt v1, exact ownership and binary fences, durable recovery, refusal semantics and rollback boundaries.
+- [x] Reconcile requirement and verification mappings before implementation; preserve historical contract bytes and accepted evidence.
 
 #### Do not
 
-- [ ] Do not call a planned interface implemented, authorize host cutover, or rewrite historical results.
+- [x] Do not call a planned interface implemented, authorize host cutover, or rewrite historical results.
 
 #### Verify
 
-- [ ] Resolve the contract against current service, installation, runner, evidence and recovery authorities and the Detailed SOT acceptance matrix.
+- [x] Resolve the contract against current service, installation, runner, evidence and recovery authorities and the Detailed SOT acceptance matrix.
 
 #### Done when
 
-- [ ] The contract, compatibility treatment, migration limitations and Task-owned acceptance evidence are decision complete and reviewed.
+- [x] The contract, compatibility treatment, migration limitations and Task-owned acceptance evidence are decision complete and reviewed.
 
 ## TASK-041
 
 ### Establish the isolated development home
+
+Requirement coverage: HP-REQ-082.
 
 #### Implement
 
@@ -54,6 +58,8 @@ Why: release services currently reject the native default home, while the shared
 
 ### Support the default home in release services
 
+Requirement coverage: HP-REQ-083.
+
 #### Implement
 
 - [ ] Allow the native default home in new release-service plans while retaining development-home isolation, private-path checks and ownership fences.
@@ -70,6 +76,8 @@ Why: release services currently reject the native default home, while the shared
 ## TASK-043
 
 ### Implement installation-preserving relocation and rollback
+
+Requirement coverage: HP-REQ-084, HP-REQ-085.
 
 #### Implement
 
@@ -92,6 +100,8 @@ Why: release services currently reject the native default home, while the shared
 
 ### Qualify preservation, recovery and release packaging
 
+Requirement coverage: HP-REQ-086.
+
 #### Implement
 
 - [ ] Integrate the selected preservation, crash-boundary and refusal fixtures into the existing test layers and exercise the packaged binary outside its checkout.
@@ -109,6 +119,8 @@ Why: release services currently reject the native default home, while the shared
 ## TASK-045
 
 ### Prepare Aquarium adoption evidence and the cutover handoff
+
+Requirement coverage: HP-REQ-087.
 
 #### Implement
 

@@ -1,6 +1,6 @@
 {
   "design_revision": "3.5",
-  "validation_date": "2026-11-16",
+  "validation_date": "2026-11-17",
   "scope": "documentation only",
   "generator": "docs/tools/validate_docs.py",
   "document_checks": {
@@ -17,7 +17,7 @@
     "worktree_diff_check": "passed",
     "schema_validation": "not run; no standalone JSON Schema documents exist (Go decoder tests are separate)",
     "stated_counts_match": "passed",
-    "collision_id_review_lines": "22 lines listed for manual review (not a failure)"
+    "collision_id_review_lines": "25 lines listed for manual review (not a failure)"
   },
   "roadmap_dag": {
     "sinks": [
@@ -42,8 +42,8 @@
   },
   "counts": {
     "requirements": {
-      "total": 81,
-      "active": 58,
+      "total": 87,
+      "active": 64,
       "consumer_owned": 6,
       "deferred": 17
     },
@@ -58,20 +58,20 @@
       "deferred": 4
     },
     "adrs": {
-      "total": 22,
+      "total": 23,
       "deferred": 2,
-      "active": 20
+      "active": 21
     },
     "verification_cases": {
-      "total": 85,
-      "active_managed": 58,
+      "total": 92,
+      "active_managed": 65,
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 89,
+    "markdown_documents": 91,
     "json_templates": 13,
     "producer_request_drafts": 9,
-    "relative_links_checked": 815
+    "relative_links_checked": 838
   },
   "product_tests": "not run by documentation validator",
   "platform_experiments": "not run by documentation validator",

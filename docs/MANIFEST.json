@@ -4,10 +4,10 @@
   "revision_date": "2026-10-12",
   "status": "implementation in progress; no product acceptance or release claimed",
   "counts": {
-    "package_files_excluding_manifest": 105,
+    "package_files_excluding_manifest": 107,
     "requirements": {
-      "total": 81,
-      "active": 58,
+      "total": 87,
+      "active": 64,
       "consumer_owned": 6,
       "deferred": 17
     },
@@ -22,25 +22,25 @@
       "deferred": 4
     },
     "adrs": {
-      "total": 22,
+      "total": 23,
       "deferred": 2,
-      "active": 20
+      "active": 21
     },
     "verification_cases": {
-      "total": 85,
-      "active_managed": 58,
+      "total": 92,
+      "active_managed": 65,
       "consumer_owned": 7,
       "deferred_external": 20
     },
-    "markdown_documents": 89,
+    "markdown_documents": 91,
     "json_templates": 13,
     "producer_request_drafts": 9
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 19432,
-      "sha256": "1f884537f9f7c9d6aa73db9c3b08768eea980bdc7ae14fbd0166c1de65d1f097"
+      "bytes": 19677,
+      "sha256": "e67c3ac274e602bddaad6850dadd57a121fd0dc59321d2dbd0ee94ad78c14801"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -49,8 +49,8 @@
     },
     {
       "path": "TODO-HOME-SEPARATION-AND-RELOCATION.md",
-      "bytes": 11144,
-      "sha256": "753d82707056fe5837177dd678594272627c51e17c27ab1271c195b88be48685"
+      "bytes": 12839,
+      "sha256": "9ea69d14af12d27872cdbd8fd0165841853901189e2abe05454d98ddf03e949d"
     },
     {
       "path": "TODO-VM-OPERATIONAL-READINESS.md",
@@ -178,34 +178,39 @@
       "sha256": "8aeda58d226b3e3800b7649c6e111351864aa9a10916a0f12fae58c283447cc7"
     },
     {
+      "path": "architecture-decision-records/0023-home-separation-and-relocation.md",
+      "bytes": 5045,
+      "sha256": "57724f9a1d0528dcd074fc0092d4cff2083f87f9a368cdcef7964e2801f7ec43"
+    },
+    {
       "path": "architecture-decision-records/README.md",
-      "bytes": 4009,
-      "sha256": "58fc5f8345a550d08ee4f7ee9a43bd948c241d3c5ca9dca540a4e11330398a91"
+      "bytes": 4212,
+      "sha256": "30ca9e51865bf4b4a6938b42e595346d3cd98643ac0adce08ed12cf5cd8155d9"
     },
     {
       "path": "architecture.md",
-      "bytes": 41253,
-      "sha256": "47b03e66243cb5e3978516b4c07d02e9baec37660dea94c69ad7af348c211b09"
+      "bytes": 41940,
+      "sha256": "a92080923dddc4dce4dcd0553e4dc925963edcab2112267445b668a897db23c9"
     },
     {
       "path": "checks.json",
       "bytes": 2073,
-      "sha256": "0ac67cc8e4d8ecd531352e3c05364d8ae8f12a18b197c1efd66ab4ead3dfbdea"
+      "sha256": "a37e309ad5de55f0ecb5175214d7c9f47eb27016ca05cf4e796f4a9264239fae"
     },
     {
       "path": "contracts/artifact-and-profile.md",
-      "bytes": 28245,
-      "sha256": "2ce5fc2c76f512925f4ede8ca5fcc7a9e78b3b33700594d9b03ad7cd28d59f82"
+      "bytes": 28801,
+      "sha256": "39c542fddbc990c9b7301853fe3da933b2cf596620bfa7b46257cb2d9d6f3227"
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 58493,
-      "sha256": "a0a5bd5c46dfcdfa997aa360683178477d26a86255fd2c736af118ac869c1177"
+      "bytes": 58942,
+      "sha256": "8a3ac0ed2984ec5d9c8e140623dcf9a52be328926da19e785ec2b6c6c050b2b9"
     },
     {
       "path": "contracts/configuration.md",
-      "bytes": 27003,
-      "sha256": "8c532984249facf74ae29d8d9dabf05355de8444adc02ed54021bd58f744c0f5"
+      "bytes": 27454,
+      "sha256": "6883aa1a770fbdf7e334889d08bcc3719b6f684097096d4d97e5934994ad3af6"
     },
     {
       "path": "contracts/external-leases.md",
@@ -213,14 +218,19 @@
       "sha256": "4714512e8a2b97795041c3e0e79feb861840d49921c95e433ecdf7ebd4311ecc"
     },
     {
+      "path": "contracts/home-and-relocation.md",
+      "bytes": 28553,
+      "sha256": "dc9b3df74c490b4489d1903130606ecb3e71d016b5568fe690e18091e7117513"
+    },
+    {
       "path": "contracts/locks.md",
-      "bytes": 16824,
-      "sha256": "bde48990a8af34be048656b91319708ca970f73e8fac608cf683b44689d30bbf"
+      "bytes": 17331,
+      "sha256": "d252ba6a8ce82d440f6d5ece8b708b5a4d60f54d4d5d6542ef0d3e73dce8ec1e"
     },
     {
       "path": "contracts/managed-transitions.md",
-      "bytes": 40794,
-      "sha256": "512d6ecb7af78afbb1b6c3cc57497b966397df97ab1b017c35e93a254463d2db"
+      "bytes": 41337,
+      "sha256": "5bade1b0625a0692f109b8b94e1b25e210b5a180439c83ec8370613f3535535d"
     },
     {
       "path": "contracts/resource-and-runner.md",
@@ -334,13 +344,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 54592,
-      "sha256": "af07fb9fd2b407d7c98d1728f3d8fc62f65daaca67525a0d65def5df12b27270"
+      "bytes": 55421,
+      "sha256": "7449a3802c73069fc8ff39295adc85b737ab7838de935bd24d1ec6d2fc417446"
     },
     {
       "path": "package-validation.md",
-      "bytes": 9398,
-      "sha256": "25a78d962873af517e1dce7e8c26519b1a069830b1d0cefb93b6d756c911c6b9"
+      "bytes": 9514,
+      "sha256": "007b7778923931a6421defeee0c600e6ac2f2bbcc0bc38ce1f62c2f3fd272e93"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -429,8 +439,8 @@
     },
     {
       "path": "requirements.md",
-      "bytes": 36350,
-      "sha256": "af81a6e51b41f6e47a087bddaedeefaf805c5068f1fdb0d2ec76e41f22074404"
+      "bytes": 40360,
+      "sha256": "0aee1881b4930e8b75670d2c08dc5346bba8b5a28099c7fa7ae4036391c71cfd"
     },
     {
       "path": "review-disposition.md",
@@ -439,8 +449,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 18635,
-      "sha256": "25b44991d0fea756b7914b19ac1200f8270a957b823287079a366528cb7b3bbf"
+      "bytes": 18640,
+      "sha256": "c2cc81ec8a6f7fae8b31f43ccd87be7e56eb5c4fef9253b79e63268b824d9362"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -489,8 +499,8 @@
     },
     {
       "path": "roadmap/EPIC-010.md",
-      "bytes": 7236,
-      "sha256": "b5e510bf6bc87bbb6c60d401f782db296e3ae17b43f66e5e691ef60306501592"
+      "bytes": 7543,
+      "sha256": "4a235ac7d8889246ddcee235778e8191ca10b86ab0f9a3c24beda4d33aa98a64"
     },
     {
       "path": "rollout-requests/01-podway.md",
@@ -554,13 +564,13 @@
     },
     {
       "path": "traceability.md",
-      "bytes": 7944,
-      "sha256": "dae304e3b93207b8fde3d5977064491d99efe740f9c4bdf3098b160bb3f91d62"
+      "bytes": 8838,
+      "sha256": "ea58a771ab7992c8037771315226cc352e51d0fcba67ca4809ec27dad35cfc44"
     },
     {
       "path": "verification.md",
-      "bytes": 30199,
-      "sha256": "811c2049133f826305badd4c1a5852302be74b8ddbc81ca03b1fc80f9d0f482b"
+      "bytes": 34544,
+      "sha256": "9e7fb596ec15ce96edb501c740dde011a35c15a6d9e0c0b25f717260db883e9a"
     }
   ]
 }

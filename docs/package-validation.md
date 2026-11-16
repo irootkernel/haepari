@@ -1,6 +1,6 @@
 # Package validation: Design Revision 3.5
 
-Date: 2026-11-16. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
+Date: 2026-11-17. These are documentation-only checks, not product acceptance or new host/VM observations. [Revision notes](REVISION-NOTES.md) record the local-development scope change. Product evidence remains with its owning tasks and historical records.
 
 The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks the package. `python3 docs/tools/validate_docs.py --write` regenerates checks.json and MANIFEST.json; a second non-writing run verifies their contents. Offline regression checks run through `make test-qualification` alongside the existing campaign-driver fixtures.
 
@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (815 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (838 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |
@@ -21,9 +21,9 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Product/VM tests and installed-service experiments | Not run by this documentation change |
 | Git staging, commit and publication | Not performed |
 
-**Roadmap DAG.** The graph is acyclic and no active task depends on a deferred task. The roadmap declares separate release endpoints: TASK-028 for v0.1.0 and TASK-045 for v0.1.1. Legacy single-release inputs without declarations retain the original TASK-028 endpoint rule; explicit declarations are validated rather than inferred from leaves. The longest prerequisite chain has 27 tasks. Historical real-UTM qualification (TASK-016/038) remains distinct from the v0.1.0 gate (TASK-027) and planned v0.1.1 gate (TASK-044). Their current prerequisite closure is TASK-027/028 and TASK-044/045. EPIC-010 and all six new Tasks are Planned; no historical acceptance is reopened and no new runtime observation is claimed.
+**Roadmap DAG.** The graph is acyclic and no active task depends on a deferred task. The roadmap declares separate release endpoints: TASK-028 for v0.1.0 and TASK-045 for v0.1.1. Legacy single-release inputs without declarations retain the original TASK-028 endpoint rule; explicit declarations are validated rather than inferred from leaves. The longest prerequisite chain has 27 tasks. Historical real-UTM qualification (TASK-016/038) remains distinct from the v0.1.0 gate (TASK-027) and planned v0.1.1 gate (TASK-044). Their current prerequisite closure is TASK-027/028 and TASK-044/045. EPIC-010 and TASK-040 are In progress; TASK-041 through TASK-045 remain Planned; no historical acceptance is reopened and no new runtime observation is claimed.
 
-**Traceability.** Every mandatory requirement has a mapped implementation owner and at least one mandatory case of its own; complete aggregate case coverage cannot hide an empty row. All 58 mandatory managed cases (V01–V24 and V32–V65) are referenced. Six consumer-owned requirements and seven consumer cases retain their IDs outside mandatory acceptance. Consumer-owned/deferred requirements cannot be owned by active Haepari tasks. Unclassified or duplicate IDs, duplicate traceability rows, missing requirement mappings and optional/deferred/unknown case references fail validation. Scope sections may be reordered and IDs need not be contiguous.
+**Traceability.** Every mandatory requirement has a mapped implementation owner and at least one mandatory case of its own; complete aggregate case coverage cannot hide an empty row. All 65 mandatory managed cases are referenced: the unchanged 58-case v0.1.0 set (V01–V24 and V32–V65), plus seven planned v0.1.1 cases (V66–V72). Six consumer-owned requirements and seven consumer cases retain their IDs outside mandatory acceptance. Consumer-owned/deferred requirements cannot be owned by active Haepari tasks. Unclassified or duplicate IDs, duplicate traceability rows, missing requirement mappings and optional/deferred/unknown case references fail validation. Scope sections may be reordered and IDs need not be contiguous.
 
 **Deferred terms.** EPIC-008, TASK-029–032, E01–E20, HP-REQ-063–079 and lease commands appear in active documents only inside deferred sections or on lines that mark them deferred. Consumer scopes are classified structurally; product behavior is not inferred from words.
 
@@ -31,13 +31,13 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 
 | Item | Total | Active | Consumer-owned optional | Deferred |
 | --- | --- | --- | --- | --- |
-| Requirements | 81 | 58 | 6 | 17 |
+| Requirements | 87 | 64 | 6 | 17 |
 | Epics | 10 | 9 | 0 | 1 |
 | Tasks | 45 | 41 | 0 | 4 |
-| ADRs | 22 | 20 | 0 | 2 |
-| Verification cases | 85 | 58 | 7 | 20 |
+| ADRs | 23 | 21 | 0 | 2 |
+| Verification cases | 92 | 65 | 7 | 20 |
 
-The package also holds 89 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
+The package also holds 91 Markdown documents, 13 JSON design templates, nine unsent producer request drafts and one validation script. No runtime acceptance is inferred from these counts.
 
 ## Limits of these checks
 

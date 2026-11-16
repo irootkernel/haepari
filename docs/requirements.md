@@ -300,6 +300,40 @@ Implementation owner: `TASK-035`.
 Acceptance: Locks consume no managed resource or global capacity, grant no execution permit, and never run or observe the holder's work. A nested managed caller cannot acquire a lock. Documentation states that callers who skip the lock are outside its guarantee.
 Implementation owner: `TASK-035`.
 
+### v0.1.1 requirement boundary
+
+HP-REQ-082 through HP-REQ-087 are active EPIC-010 obligations for v0.1.1, selected by TASK-040. They do not reopen v0.1.0 acceptance or change the historical requirement meanings. TASK-040 defines their contracts and mappings; the named delivery Tasks supply implementation and original observations. Their full semantics are in [home and relocation](contracts/home-and-relocation.md).
+
+### HP-REQ-082
+- [ ] Keep Haepari's development controller independent of the explicitly selected shared installation.
+Acceptance: A new development home has distinct installation, state and socket identities; harmless local execution and drained exact candidate replacement preserve shared-state sentinels. VM handover never permits concurrent controllers on one physical VM.
+Implementation owner: `TASK-040`, `TASK-041`.
+
+### HP-REQ-083
+- [ ] Permit the native default home in new release-service v2 plans without weakening ownership or legacy validation.
+Acceptance: Disposable default/non-default plan/install/uninstall preserve state; development default, historical release-v1 default, foreign owner, changed executable and mismatched plist/plan inputs refuse. Development v1/v2 and non-default release v1 retain their original representation.
+Implementation owner: `TASK-040`, `TASK-042`.
+
+### HP-REQ-084
+- [ ] Relocate the same installation without replacing immutable history or retained evidence identities.
+Acceptance: An offline exclusive same-filesystem no-replace move preserves installation/Job/request IDs, resource revisions/configuration, results, receipts, hashes and file identities. Query/log/export/same-key replay remain available without reexecuting historical absolute paths. Only declared mutable service-root metadata changes.
+Implementation owner: `TASK-040`, `TASK-043`.
+
+### HP-REQ-085
+- [ ] Recover or roll back a relocation through its exact plan, verified backup and durable journal, refusing uncertain or unsupported state.
+Acceptance: Interrupted backup, rename and owner updates reconcile the original identities; identical continuation does not duplicate effects. Busy/unknown/current protected state, conflicting plans, changed inventories, replaced objects, links, existing destinations and cross-filesystem moves refuse. Historical negative verdicts/gaps stay immutable. Rollback requires stopped services and no consumer resumption or new work; no automatic schema downgrade or copied-identity restoration is claimed.
+Implementation owner: `TASK-040`, `TASK-043`.
+
+### HP-REQ-086
+- [ ] Qualify the exact v0.1.1 package and home/relocation behavior in the required existing verification layers.
+Acceptance: Local and fake-VM history includes PASS/FAIL/INCOMPLETE, manual records and supplementary/missing evidence. Focused/common gates, extracted-package checks and a small exact-candidate already-running VM loop pass with original identities, cleanup and honest human evidence. No full soak or VM power experiment is required.
+Implementation owner: `TASK-040`, `TASK-044`.
+
+### HP-REQ-087
+- [ ] Deliver a consumer-compatible candidate packet and explicit later official-adoption cutover/rollback owner.
+Acceptance: Current Aquarium contract compatibility and disposable rehearsal are demonstrated; candidate evidence is separated from official archive/combination verification still due after publication. External-reference inventory includes consumer/MCP selection and parent/borrowed-grant forwarding. No host cutover, consumer acceptance, transmission or publication is claimed.
+Implementation owner: `TASK-040`, `TASK-045`.
+
 ## Operational-readiness follow-up ownership
 
 [EPIC-009](roadmap/EPIC-009.md) adds corrective implementation and qualification contributions to existing active requirements. Original implementation owners and accepted evidence remain recorded above; the [traceability table](traceability.md) maps every additional task. No new requirement or implemented behavior is asserted by this plan.
@@ -442,6 +476,8 @@ No distributed controllers, public service, multi-tenant authorization, arbitrar
 
 ## Completion rule
 
-v0.1.0 requires every mandatory requirement in the Requirements section, the mandatory [verification matrix](verification.md) in its declared local/fake/live layers, managed local and small already-running single-VM auto/manual use cases, contracts frozen at F1, F2 and narrowed F3, a verified installation package, and the [Aquarium producer handoff](handoffs/haepari-to-aquarium.md). Missing TASK-027 exact-candidate live evidence leaves release acceptance incomplete; it does not block TASK-017–026 local acceptance or reopen historical qualification. Consumer-owned HP-REQ-037–039 and HP-REQ-042–044, V25–V31 and optional DF-001–004 experiments do not block v0.1.0. Publication and host activation are separate authorized effects.
+v0.1.0 requires HP-REQ-001 through HP-REQ-062 except the consumer-owned optional IDs, plus HP-REQ-080/081, the historical v0.1.0 cases V01–V24 and V32–V65 from the [verification matrix](verification.md) in their declared local/fake/live layers, managed local and small already-running single-VM auto/manual use cases, contracts frozen at F1, F2 and narrowed F3, a verified installation package, and the [Aquarium producer handoff](handoffs/haepari-to-aquarium.md). Missing TASK-027 exact-candidate live evidence leaves release acceptance incomplete; it does not block TASK-017–026 local acceptance or reopen historical qualification. Consumer-owned HP-REQ-037–039 and HP-REQ-042–044, V25–V31 and optional DF-001–004 experiments do not block v0.1.0. Publication and host activation are separate authorized effects.
+
+v0.1.1 additionally requires HP-REQ-082–087 and V66–V72 with their declared delivery and qualification owners, while retaining applicable existing invariants. EPIC-010 completion stops at candidate compatibility, rehearsal and handoff; official distribution verification and the later Aquarium adoption operation remain separate.
 
 HP-REQ-063 through HP-REQ-079 are preserved as **deferred** requirements owned by EPIC-008/TASK-029–032 or later consumer integration. HP-REQ-021 refers to managed external side effects of a submitted command, not the deferred public external-lease API. Linux and public lease acceptance require separate re-entry decisions.
