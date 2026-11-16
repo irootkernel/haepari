@@ -1,6 +1,6 @@
 # ADR-0023: Separate development state and move one preserved installation
 
-Status: Selected for EPIC-010 TASK-040; runtime implementation and exact-candidate qualification remain with TASK-041 through TASK-045.
+Status: Selected for EPIC-010 TASK-040. TASK-041 supplies development isolation and TASK-042 implements release v2/default-home support; relocation implementation, exact-candidate qualification and consumer handoff remain with TASK-043 through TASK-045.
 
 ## Context
 

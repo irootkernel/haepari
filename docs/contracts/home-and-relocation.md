@@ -1,6 +1,6 @@
 # Home roles and installation-preserving relocation
 
-Selected v0.1.1 contract for TASK-040, explained by [ADR-0023](../architecture-decision-records/0023-home-separation-and-relocation.md). TASK-042 and TASK-043 implement it; TASK-044 qualifies the exact candidate. These interfaces are planned, not commands supported by the current binary. The [roadmap](../roadmap.md) alone owns acceptance.
+Selected v0.1.1 contract for TASK-040, explained by [ADR-0023](../architecture-decision-records/0023-home-separation-and-relocation.md). TASK-042 implements release-service plan v2 and default-home support. Relocation remains planned TASK-043 work; TASK-044 qualifies the exact packaged candidate. The [roadmap](../roadmap.md) alone owns acceptance.
 
 ## Home roles and compatibility
 
@@ -8,7 +8,7 @@ The native default remains `~/.haepari/`. Root selection stays explicit CLI root
 
 New `service plan --release` responses select `haepari.release-service-plan/v2`, for both default and non-default roots. Its closed fields remain `schema`, `instance`, `label`, `domain`, `owner_uid`, `binary`, `binary_sha256`, `root`, `plist_path`, `plist`, `global_limit`, and `host_macos_guest_limit`. Limits remain explicit positive global and host 1 or 2, defaulting to 1/1. Label remains `io.rootkernel.haepari.<instance>`; the owner marker remains `.development-service.json` with `haepari.release-service-owner/v1`. The filename is historical, not a development-family permission.
 
-Release v2 permits the resolved native default; private-path, exact executable digest, owner, Aqua domain, plist and state-preserving install/uninstall fences remain mandatory. Development v1/v2 still reject the default. Reading or recreating a non-default release v1 plan uses its original schema and bytes, not the new planning default. Historical release v1 default plans remain invalid. New fields, duplicate keys and unknown versions refuse; there is no implicit plan upgrade. Existing help output receives append-only command/schema additions under the recorded freeze-delta rule, without changing earlier entries or wire schemas.
+Release v2 permits the resolved native default; private-path, exact executable digest, owner, Aqua domain, plist and state-preserving install/uninstall fences remain mandatory. Development v1/v2 still reject the default. Reading or recreating a non-default release v1 plan uses its original schema and bytes, not the new planning default. Historical release v1 default plans remain invalid. Install revalidates the executable bytes and complete saved plan. Uninstall retains the existing ability to remove an exact owned service when its executable has changed or disappeared: it validates the saved plan's root, owner/domain/label and pinned plist location, and the actual owned plist, without hashing the executable. Release v2 also checks the saved plist against its serialized fields. An unrelated unsafe default directory does not block removal of a valid non-default service. New fields, duplicate keys and unknown versions refuse; there is no implicit plan upgrade. Existing help output receives append-only command/schema additions under the recorded freeze-delta rule, without changing earlier entries or wire schemas.
 
 ## Relocation surface
 

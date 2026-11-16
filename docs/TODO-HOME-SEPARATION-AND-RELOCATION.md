@@ -33,9 +33,9 @@ Select the development root only for those commands and services. Do not change 
 
 Use local/fake-native fixtures first. Before an authorized development VM observation, stop new shared VM work, prove it drained, and pause that resource. Resume shared use only after the development workload, consumer/native cleanup and development-resource pause are verified. Two installation-local queues or locks cannot coordinate the same physical VM; add no second scheduler or assumed cross-installation exclusion. No VM power action is implied.
 
-## Planned service and relocation interfaces
+## Release service support and planned relocation interfaces
 
-TASK-040 defines the selected [home and relocation contract](contracts/home-and-relocation.md) and [ADR-0023](architecture-decision-records/0023-home-separation-and-relocation.md). TASK-042/043 still own implementation; none of these interfaces is a current native capability.
+TASK-040 defines the selected [home and relocation contract](contracts/home-and-relocation.md) and [ADR-0023](architecture-decision-records/0023-home-separation-and-relocation.md). TASK-042 implements release-service plan v2 and default-home support. The relocation commands below remain planned TASK-043 work, not current native capabilities.
 
 New release plans use `haepari.release-service-plan/v2`, retaining the existing field structure and allowing the native default home. Development plans retain default-root refusal. Non-default release v1 and development v1/v2 remain supported with their original validation. Private-root, exact ownership, binary and plist fences remain mandatory.
 

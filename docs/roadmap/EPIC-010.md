@@ -62,16 +62,16 @@ Requirement coverage: HP-REQ-083.
 
 #### Implement
 
-- [ ] Allow the native default home in new release-service plans while retaining development-home isolation, private-path checks and ownership fences.
-- [ ] Preserve non-default release v1 and development v1/v2 behavior; implement the selected release v2 contract and affected guidance.
+- [x] Allow the native default home in new release-service plans while retaining development-home isolation, private-path checks and ownership fences.
+- [x] Preserve non-default release v1 and development v1/v2 behavior; implement the selected release v2 contract and affected guidance.
 
 #### Verify
 
-- [ ] In a disposable HOME, verify default/non-default planning, install/uninstall, state preservation, development-default refusal, conflicting ownership, changed binary and mismatched plist/plan refusals.
+- [x] In a disposable HOME, verify default/non-default planning, install/uninstall, state preservation, development-default refusal, conflicting ownership, changed binary and mismatched plist/plan refusals.
 
 #### Done when
 
-- [ ] The supported default-root lifecycle and legacy compatibility pass focused checks without touching the host shared installation.
+- [x] The supported default-root lifecycle and legacy compatibility pass focused checks without touching the host shared installation.
 
 ## TASK-043
 

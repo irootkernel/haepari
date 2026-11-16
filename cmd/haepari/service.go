@@ -42,27 +42,32 @@ type developmentServicePlan struct {
 }
 
 const (
-	devServicePlanSchemaV1    = "haepari.development-service-plan/v1"
-	devServicePlanSchemaV2    = "haepari.development-service-plan/v2"
-	releaseServicePlanSchema  = "haepari.release-service-plan/v1"
-	devServiceOwnerSchema     = "haepari.development-service-owner/v1"
-	releaseServiceOwnerSchema = "haepari.release-service-owner/v1"
+	devServicePlanSchemaV1     = "haepari.development-service-plan/v1"
+	devServicePlanSchemaV2     = "haepari.development-service-plan/v2"
+	releaseServicePlanSchemaV1 = "haepari.release-service-plan/v1"
+	releaseServicePlanSchemaV2 = "haepari.release-service-plan/v2"
+	devServiceOwnerSchema      = "haepari.development-service-owner/v1"
+	releaseServiceOwnerSchema  = "haepari.release-service-owner/v1"
 )
 
 // serviceLabel keeps the isolated development prefix distinct from the release
 // identity; a release plan never carries the dev label and vice versa.
 func serviceLabel(schema, instance string) string {
-	if schema == releaseServicePlanSchema {
+	if isReleaseServiceSchema(schema) {
 		return "io.rootkernel.haepari." + instance
 	}
 	return "io.rootkernel.haepari.dev." + instance
 }
 
 func serviceOwnerSchema(schema string) string {
-	if schema == releaseServicePlanSchema {
+	if isReleaseServiceSchema(schema) {
 		return releaseServiceOwnerSchema
 	}
 	return devServiceOwnerSchema
+}
+
+func isReleaseServiceSchema(schema string) bool {
+	return schema == releaseServicePlanSchemaV1 || schema == releaseServicePlanSchemaV2
 }
 
 var developmentInstanceID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
@@ -125,17 +130,45 @@ func plistString(s string) string {
 }
 
 func planDevelopmentService(instance, binary, rootPath string) (developmentServicePlan, error) {
-	return planManagedService(instance, binary, rootPath, 1, 1, false, false)
+	return planManagedService(instance, binary, rootPath, 1, 1, devServicePlanSchemaV1)
 }
 func planDevelopmentServiceLimits(instance, binary, rootPath string, globalLimit, hostLimit int, explicit bool) (developmentServicePlan, error) {
-	return planManagedService(instance, binary, rootPath, globalLimit, hostLimit, explicit, false)
+	schema := devServicePlanSchemaV1
+	if explicit {
+		schema = devServicePlanSchemaV2
+	}
+	return planManagedService(instance, binary, rootPath, globalLimit, hostLimit, schema)
 }
 func planReleaseService(instance, binary, rootPath string, globalLimit, hostLimit int) (developmentServicePlan, error) {
-	return planManagedService(instance, binary, rootPath, globalLimit, hostLimit, true, true)
+	return planManagedService(instance, binary, rootPath, globalLimit, hostLimit, releaseServicePlanSchemaV2)
 }
-func planManagedService(instance, binary, rootPath string, globalLimit, hostLimit int, explicit, release bool) (developmentServicePlan, error) {
+func serviceRoot(schema, rootPath string) (state.Root, error) {
+	if !filepath.IsAbs(rootPath) || filepath.Clean(rootPath) != rootPath {
+		return state.Root{}, managed.ErrInvalid
+	}
+	root, err := state.Resolve(rootPath)
+	if err != nil {
+		return state.Root{}, err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return state.Root{}, err
+	}
+	// Do not inspect the unrelated default child when removing a saved,
+	// non-default service. Its HOME parent still determines default selection.
+	physicalHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		return state.Root{}, err
+	}
+	if root.Path == filepath.Join(physicalHome, ".haepari") && schema != releaseServicePlanSchemaV2 {
+		return state.Root{}, managed.ErrInvalid
+	}
+	return root, nil
+}
+
+func planManagedService(instance, binary, rootPath string, globalLimit, hostLimit int, schema string) (developmentServicePlan, error) {
 	p := developmentServicePlan{}
-	if globalLimit < 1 || hostLimit < 1 || hostLimit > 2 {
+	if globalLimit < 1 || hostLimit < 1 || hostLimit > 2 || schema != devServicePlanSchemaV1 && schema != devServicePlanSchemaV2 && !isReleaseServiceSchema(schema) {
 		return p, managed.ErrInvalid
 	}
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" || !developmentInstanceID.MatchString(instance) || !filepath.IsAbs(binary) || filepath.Clean(binary) != binary || !filepath.IsAbs(rootPath) || filepath.Clean(rootPath) != rootPath {
@@ -145,11 +178,13 @@ func planManagedService(instance, binary, rootPath string, globalLimit, hostLimi
 	if err != nil {
 		return p, err
 	}
+	// Preserve planning's original default-path safety check. Uninstall above
+	// needs only its selected root, not availability of an unrelated default.
 	defaultRoot, err := state.Resolve("")
 	if err != nil {
 		return p, err
 	}
-	if root.Path == defaultRoot.Path {
+	if root.Path == defaultRoot.Path && schema != releaseServicePlanSchemaV2 {
 		return p, managed.ErrInvalid
 	}
 	info, err := os.Lstat(binary)
@@ -181,20 +216,21 @@ func planManagedService(instance, binary, rootPath string, globalLimit, hostLimi
 	if err != nil {
 		return p, err
 	}
-	p = developmentServicePlan{Schema: devServicePlanSchemaV1, Instance: instance, Label: "io.rootkernel.haepari.dev." + instance, Domain: "gui/" + strconv.Itoa(os.Geteuid()), OwnerUID: os.Geteuid(), Binary: binary, BinarySHA256: "sha256:" + hex.EncodeToString(h.Sum(nil)), Root: root.Path}
-	if release {
-		p.Schema, p.Label = releaseServicePlanSchema, serviceLabel(releaseServicePlanSchema, instance)
-	}
+	p = developmentServicePlan{Schema: schema, Instance: instance, Label: serviceLabel(schema, instance), Domain: "gui/" + strconv.Itoa(os.Geteuid()), OwnerUID: os.Geteuid(), Binary: binary, BinarySHA256: "sha256:" + hex.EncodeToString(h.Sum(nil)), Root: root.Path}
 	p.PlistPath = filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist")
-	limitArguments := ""
-	if explicit {
-		if !release {
-			p.Schema = devServicePlanSchemaV2
-		}
+	if schema != devServicePlanSchemaV1 {
 		p.GlobalLimit, p.HostMACOSGuestLimit = globalLimit, hostLimit
-		limitArguments = plistString("--global-limit") + plistString(strconv.Itoa(globalLimit)) + plistString("--host-macos-guest-limit") + plistString(strconv.Itoa(hostLimit))
 	}
-	p.Plist = `<?xml version="1.0" encoding="UTF-8"?>
+	p.Plist = servicePlist(p)
+	return p, nil
+}
+
+func servicePlist(p developmentServicePlan) string {
+	limitArguments := ""
+	if p.Schema != devServicePlanSchemaV1 {
+		limitArguments = plistString("--global-limit") + plistString(strconv.Itoa(p.GlobalLimit)) + plistString("--host-macos-guest-limit") + plistString(strconv.Itoa(p.HostMACOSGuestLimit))
+	}
+	return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key>` + plistString(p.Label) + `
@@ -209,7 +245,6 @@ func planManagedService(instance, binary, rootPath string, globalLimit, hostLimi
 <key>StandardErrorPath</key>` + plistString(filepath.Join(p.Root, "service.stderr.log")) + `
 </dict></plist>
 `
-	return p, nil
 }
 
 func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServicePlan, error) {
@@ -242,7 +277,7 @@ func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServ
 		if !hasGlobal || !hasHost || p.GlobalLimit < 1 || p.HostMACOSGuestLimit < 1 || p.HostMACOSGuestLimit > 2 {
 			return p, managed.ErrInvalid
 		}
-	case releaseServicePlanSchema:
+	case releaseServicePlanSchemaV1, releaseServicePlanSchemaV2:
 		if !hasGlobal || !hasHost || p.GlobalLimit < 1 || p.HostMACOSGuestLimit < 1 || p.HostMACOSGuestLimit > 2 {
 			return p, managed.ErrInvalid
 		}
@@ -258,11 +293,21 @@ func readDevelopmentServicePlan(path string, verifyBinary bool) (developmentServ
 			return p, managed.ErrConflict
 		}
 	} else {
+		root, err := serviceRoot(p.Schema, p.Root)
+		if err != nil {
+			return p, err
+		}
+		if root.Path != p.Root {
+			return p, managed.ErrInvalid
+		}
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return p, err
 		}
 		if p.OwnerUID != os.Geteuid() || p.Domain != "gui/"+strconv.Itoa(os.Geteuid()) || p.Label != serviceLabel(p.Schema, p.Instance) || !developmentInstanceID.MatchString(p.Instance) || p.PlistPath != filepath.Join(home, "Library", "LaunchAgents", p.Label+".plist") {
+			return p, managed.ErrInvalid
+		}
+		if p.Schema == releaseServicePlanSchemaV2 && (!filepath.IsAbs(p.Binary) || filepath.Clean(p.Binary) != p.Binary || p.Plist != servicePlist(p)) {
 			return p, managed.ErrInvalid
 		}
 	}
@@ -275,8 +320,8 @@ func recreateDevelopmentServicePlan(p developmentServicePlan) (developmentServic
 		return planDevelopmentService(p.Instance, p.Binary, p.Root)
 	case devServicePlanSchemaV2:
 		return planDevelopmentServiceLimits(p.Instance, p.Binary, p.Root, p.GlobalLimit, p.HostMACOSGuestLimit, true)
-	case releaseServicePlanSchema:
-		return planReleaseService(p.Instance, p.Binary, p.Root, p.GlobalLimit, p.HostMACOSGuestLimit)
+	case releaseServicePlanSchemaV1, releaseServicePlanSchemaV2:
+		return planManagedService(p.Instance, p.Binary, p.Root, p.GlobalLimit, p.HostMACOSGuestLimit, p.Schema)
 	default:
 		return developmentServicePlan{}, managed.ErrInvalid
 	}
@@ -297,6 +342,10 @@ func launchctlService(args ...string) error {
 }
 
 func installDevelopmentService(p developmentServicePlan) error {
+	return installDevelopmentServiceWithLauncher(p, launchctlService)
+}
+
+func installDevelopmentServiceWithLauncher(p developmentServicePlan, launch func(...string) error) error {
 	current, err := recreateDevelopmentServicePlan(p)
 	if err != nil {
 		return err
@@ -329,10 +378,18 @@ func installDevelopmentService(p developmentServicePlan) error {
 	}
 	// A failed or uncertain bootstrap preserves the exact plist and state for
 	// native inspection. It never overwrites another service or rolls it out.
-	return launchctlService("bootstrap", p.Domain, p.PlistPath)
+	return launch("bootstrap", p.Domain, p.PlistPath)
 }
 
 func uninstallDevelopmentService(p developmentServicePlan) error {
+	return uninstallDevelopmentServiceWithLauncher(p, launchctlService)
+}
+
+func uninstallDevelopmentServiceWithLauncher(p developmentServicePlan, launch func(...string) error) error {
+	root, err := serviceRoot(p.Schema, p.Root)
+	if err != nil {
+		return err
+	}
 	if err := developmentRootOwner(p, false); err != nil {
 		return err
 	}
@@ -350,10 +407,6 @@ func uninstallDevelopmentService(p developmentServicePlan) error {
 	}
 	if string(raw) != p.Plist {
 		return managed.ErrConflict
-	}
-	root, err := state.Resolve(p.Root)
-	if err != nil {
-		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -373,7 +426,7 @@ func uninstallDevelopmentService(p developmentServicePlan) error {
 			return managed.ErrBlocked
 		}
 	}
-	if err = launchctlService("bootout", p.Domain+"/"+p.Label); err != nil {
+	if err = launch("bootout", p.Domain+"/"+p.Label); err != nil {
 		return err
 	}
 	// Remove only the exact owned regular file; never remove the state root or

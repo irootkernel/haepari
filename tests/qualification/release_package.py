@@ -310,7 +310,7 @@ def main() -> None:
         service_env = dict(scoped, HAEPARI_HOME=str(service_root))
         plan_data = respond(scoped, "service", "plan", "--release", "--instance", instance,
                             "--binary", str(binary), "--root", str(service_root), "--json")["data"]
-        assert plan_data["schema"] == "haepari.release-service-plan/v1"
+        assert plan_data["schema"] == "haepari.release-service-plan/v2"
         assert plan_data["label"] == f"io.rootkernel.haepari.{instance}"
         assert plan_data["global_limit"] == 1 and plan_data["host_macos_guest_limit"] == 1
         assert "sha256:" + _digest_bytes(binary.read_bytes()) == plan_data["binary_sha256"]

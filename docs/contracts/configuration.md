@@ -142,4 +142,4 @@ Errors add no ErrorCode. A bad query is 400 `INVALID_REQUEST`, retry `none`. An 
 
 ## Planned v0.1.1 home and release-service policy
 
-The [home and relocation contract](home-and-relocation.md#home-roles-and-compatibility) selects release-service plan v2 with default-home support while preserving development v1/v2 default refusal and non-default release v1 validation. Root/config precedence and configuration pins remain unchanged. TASK-042 implements the selected change; this section does not advertise it in the current binary.
+The [home and relocation contract](home-and-relocation.md#home-roles-and-compatibility) selects release-service plan v2 with default-home support while preserving development v1/v2 default refusal and non-default release v1 validation. Root/config precedence and configuration pins remain unchanged. TASK-042 implements release v2 planning and the guarded install/uninstall lifecycle for the selected default or non-default root. Relocation remains planned TASK-043 work.

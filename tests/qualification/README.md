@@ -19,6 +19,8 @@ uses the locked dev environment prepared by `make deps`. Syntax and documentatio
 checks use the same pinned interpreter. Runtime preparation does not authorize
 any service or VM scenario.
 
+Release-package qualification now expects newly generated `haepari.release-service-plan/v2` plans. TASK-042's disposable-HOME, controlled-launcher service checks are documented in [TESTING.md](../../TESTING.md#development-and-release-selection); they perform no host service or VM effects and do not replace TASK-044's exact-package qualification. Legacy saved-plan fixtures remain version-specific.
+
 ## Approval and reproducibility
 
 Before execution, disclose the exact source/executable/runner candidate, saved

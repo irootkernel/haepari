@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Allow the private native default home in new release-service plans while preserving development-home isolation and legacy saved-plan validation.
 - Pin developer Go, CPython and uv through one manifest and an explicit user-cache bootstrap; group dependency preparation, formatting, static/build checks and documentation generation under test preparation and carry portable toolchain snapshots and verified build metadata with examples and release archives.
 
 ### Fixed

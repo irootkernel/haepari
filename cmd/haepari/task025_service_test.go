@@ -21,7 +21,7 @@ var _ = ginkgo.Describe("Task025ReleaseServicePlan", ginkgo.Label("unit"), func(
 		root := filepath.Join(parent, "release-state")
 		p, err := planReleaseService("h7-t25", binary, root, 2, 1)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Expect(p.Schema).To(gomega.Equal(releaseServicePlanSchema))
+		gomega.Expect(p.Schema).To(gomega.Equal(releaseServicePlanSchemaV2))
 		gomega.Expect(p.Label).To(gomega.Equal("io.rootkernel.haepari.h7-t25"))
 		gomega.Expect(p.PlistPath).To(gomega.HaveSuffix("io.rootkernel.haepari.h7-t25.plist"))
 		gomega.Expect(p.GlobalLimit).To(gomega.Equal(2))
@@ -59,7 +59,7 @@ var _ = ginkgo.Describe("Task025ReleaseServicePlan", ginkgo.Label("unit"), func(
 		gomega.Expect(err).To(gomega.MatchError(managed.ErrInvalid))
 		defaultRoot, err := state.Resolve("")
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		_, err = planReleaseService("h7-t25", binary, defaultRoot.Path, 1, 1)
+		_, err = planManagedService("h7-t25", binary, defaultRoot.Path, 1, 1, releaseServicePlanSchemaV1)
 		gomega.Expect(err).To(gomega.MatchError(managed.ErrInvalid))
 	})
 	ginkgo.It("rejects malformed release plans and keeps development plan shapes unchanged", func() {
@@ -100,7 +100,7 @@ var _ = ginkgo.Describe("Task025ReleaseServicePlan", ginkgo.Label("unit"), func(
 	ginkgo.It("separates release and development owner markers on the same root", func() {
 		root := filepath.Join(ginkgo.GinkgoT().TempDir(), "state")
 		gomega.Expect(os.MkdirAll(root, 0700)).To(gomega.Succeed())
-		release := developmentServicePlan{Schema: releaseServicePlanSchema, Root: root, Instance: "h7-t25", OwnerUID: os.Geteuid()}
+		release := developmentServicePlan{Schema: releaseServicePlanSchemaV1, Root: root, Instance: "h7-t25", OwnerUID: os.Geteuid()}
 		gomega.Expect(developmentRootOwner(release, true)).To(gomega.Succeed())
 		raw, err := os.ReadFile(filepath.Join(root, ".development-service.json"))
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())

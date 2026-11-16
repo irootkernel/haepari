@@ -93,7 +93,11 @@ Or install the explicit user release service (user LaunchAgent, Aqua session,
 no root): plan first, review the pinned digest/root/label, then install as a
 separate action. `service install` refuses an existing plist; `uninstall`
 refuses while any resource is occupied and removes only its exact plist,
-preserving state and evidence.
+preserving state and evidence. New release plans use
+`haepari.release-service-plan/v2`; select `--root "$HOME/.haepari"` for the
+private native default home or an absolute non-default root. Existing non-default
+release v1 and development v1/v2 saved plans remain valid; those older schemas
+still refuse the native default home. Development uses a separate home.
 
 ```sh
 ./haepari service plan --release --instance <unique-id> \
