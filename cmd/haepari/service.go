@@ -22,24 +22,12 @@ import (
 
 	"github.com/irootkernel/haepari/internal/client"
 	"github.com/irootkernel/haepari/internal/managed"
+	"github.com/irootkernel/haepari/internal/relocation"
 	"github.com/irootkernel/haepari/internal/state"
 	"golang.org/x/sys/unix"
 )
 
-type developmentServicePlan struct {
-	GlobalLimit         int    `json:"global_limit,omitempty"`
-	HostMACOSGuestLimit int    `json:"host_macos_guest_limit,omitempty"`
-	Schema              string `json:"schema"`
-	Instance            string `json:"instance"`
-	Label               string `json:"label"`
-	Domain              string `json:"domain"`
-	OwnerUID            int    `json:"owner_uid"`
-	Binary              string `json:"binary"`
-	BinarySHA256        string `json:"binary_sha256"`
-	Root                string `json:"root"`
-	PlistPath           string `json:"plist_path"`
-	Plist               string `json:"plist"`
-}
+type developmentServicePlan = relocation.ServicePlan
 
 const (
 	devServicePlanSchemaV1     = "haepari.development-service-plan/v1"
@@ -439,6 +427,9 @@ func uninstallDevelopmentServiceWithLauncher(p developmentServicePlan, launch fu
 }
 
 func serviceCommand(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "relocate" {
+		return relocateCommand(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: haepari service plan [--release] --instance <id> --binary <absolute-path> --root <private-root> --json | install/uninstall --plan-file <json> --json")
 		return 2

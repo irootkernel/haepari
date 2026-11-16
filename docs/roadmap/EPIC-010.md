@@ -81,20 +81,20 @@ Requirement coverage: HP-REQ-084, HP-REQ-085.
 
 #### Implement
 
-- [ ] Deliver the planned native plan/apply/status/rollback surface, offline exclusive ownership, verified backup, no-replace same-filesystem rename and durable recovery journal.
-- [ ] Preserve installation/Job/request identities, resource configuration, immutable results, receipt bindings and retained evidence; update only the authorized mutable service-root metadata.
+- [x] Deliver the planned native plan/apply/status/rollback surface, offline exclusive ownership, verified backup, no-replace same-filesystem rename and durable recovery journal.
+- [x] Preserve installation/Job/request identities, resource configuration, immutable results, receipt bindings and retained evidence; update only the authorized mutable service-root metadata.
 
 #### Do not
 
-- [ ] Do not merge roots, use a copy fallback, edit historical SQLite payloads or runner requests, discard unresolved evidence, start services automatically, or rewrite consumer configuration.
+- [x] Do not merge roots, use a copy fallback, edit historical SQLite payloads or runner requests, discard unresolved evidence, start services automatically, or rewrite consumer configuration.
 
 #### Verify
 
-- [ ] Verify same-plan continuation and rollback after interruption, original file identities and history, and refusal of busy, uncertain, conflicting, replaced or unsupported inputs.
+- [x] Verify same-plan continuation and rollback after interruption, original file identities and history, and refusal of busy, uncertain, conflicting, replaced or unsupported inputs.
 
 #### Done when
 
-- [ ] Relocation and recovery obey the complete dossier contract and preserve query/export/replay behavior without duplicate workload execution.
+- [x] Relocation and recovery obey the complete dossier contract and preserve query/export/replay behavior without duplicate workload execution.
 
 ## TASK-044
 

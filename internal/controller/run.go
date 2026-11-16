@@ -18,6 +18,7 @@ import (
 	"github.com/irootkernel/haepari/internal/config"
 	"github.com/irootkernel/haepari/internal/managed"
 	"github.com/irootkernel/haepari/internal/platform"
+	"github.com/irootkernel/haepari/internal/relocation"
 	"github.com/irootkernel/haepari/internal/snapshot"
 	"github.com/irootkernel/haepari/internal/state"
 	"github.com/irootkernel/haepari/internal/store/sqlite"
@@ -56,7 +57,7 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 	if err := root.Prepare(); err != nil {
 		return err
 	}
-	ownership, err := root.AcquireController()
+	ownership, err := relocation.AcquireController(root)
 	if err != nil {
 		return err
 	}
@@ -66,6 +67,9 @@ func RunWithOptions(ctx context.Context, root state.Root, options Options) error
 			_ = ownership.Close()
 		}
 	}()
+	if err := relocation.Activate(root.Path, ownership); err != nil {
+		return err
+	}
 	db, err := sqlite.Open(root.DBPath)
 	if err != nil {
 		return err

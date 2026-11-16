@@ -259,3 +259,8 @@ not zero or a theoretical estimate. Record host retained runner bytes using the
 approved exact Job inventory, not recursive payload deletion. Promote only
 bounded non-secret measurements to the qualification record after assessment;
 private runtime evidence stays private.
+
+
+## Relocation boundary
+
+TASK-043 adds isolated source-level relocation fixtures described in [TESTING.md](../../TESTING.md#offline-relocation-source-checks). They preserve local, fake-native guest and synthetic manual histories and exercise process interruption, committed WAL and refusal paths without host-service or VM effects. TASK-044 still owns enrollment into common layers, packaged v0.1.1 migration fixtures, the required small already-running-VM loop and a fresh exact-candidate human observation. Existing campaign records and Task acceptance are unchanged; a synthetic manual fixture cannot satisfy that human boundary.

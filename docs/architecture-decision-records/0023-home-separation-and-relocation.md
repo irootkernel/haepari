@@ -1,6 +1,6 @@
 # ADR-0023: Separate development state and move one preserved installation
 
-Status: Selected for EPIC-010 TASK-040. TASK-041 supplies development isolation and TASK-042 implements release v2/default-home support; relocation implementation, exact-candidate qualification and consumer handoff remain with TASK-043 through TASK-045.
+Status: Selected for EPIC-010 TASK-040. TASK-041 supplies development isolation and TASK-042 implements release v2/default-home support; TASK-043 implements offline relocation and startup fencing. Exact-candidate qualification and consumer handoff remain with TASK-044 and TASK-045.
 
 ## Context
 
@@ -28,3 +28,5 @@ Stage every journal/snapshot/owner-marker publication in a fresh private sibling
 - Automatic service restart, consumer rewrites or schema downgrade would exceed the mover's authority and make rollback ambiguous. Their owners retain separate actions.
 
 Qualification must include preserved PASS/FAIL/INCOMPLETE, missing and supplementary evidence, same-key replay without workload execution, interruption at durable boundaries, busy/uncertain/foreign/replaced input refusals, and exact-package service and small already-running VM evidence. Local fixtures do not establish those live observations. Existing accepted v0.1.0 evidence and frozen contracts retain their original scope.
+
+The implementation observes original DB/WAL through unchanged descriptor inventories and gives SQLite only private disposable copies. A read-only engine transaction supplies both logical inventory and engine backup; this avoids SQLite sidecar writes to the source while retaining committed WAL state. Darwin stale-socket identity uses native descriptor-relative `getattrlistat` file-ID/creation attributes and the held parent's verified volume capability, rather than opening the socket vnode. Read-only archived status is separate from exact-target-binary mutation authority and follows the verified current predecessor chain.

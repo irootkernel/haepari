@@ -1,6 +1,6 @@
 # Home separation and installation-preserving relocation
 
-Detailed SOT for [EPIC-010](roadmap/EPIC-010.md), targeting Haepari v0.1.1 readiness and later Aquarium v0.1.24 official adoption. The [roadmap](roadmap.md) alone owns Task membership, prerequisites, order and lifecycle status. This dossier integrates the approved execution decisions; it does not announce implemented commands or authorize execution.
+Detailed SOT for [EPIC-010](roadmap/EPIC-010.md), targeting Haepari v0.1.1 readiness and later Aquarium v0.1.24 official adoption. The [roadmap](roadmap.md) alone owns Task membership, prerequisites, order and lifecycle status. This dossier integrates the approved execution decisions; implemented capabilities are identified below, and the dossier itself grants no execution authority.
 
 ## Goal and delivery boundary
 
@@ -33,9 +33,9 @@ Select the development root only for those commands and services. Do not change 
 
 Use local/fake-native fixtures first. Before an authorized development VM observation, stop new shared VM work, prove it drained, and pause that resource. Resume shared use only after the development workload, consumer/native cleanup and development-resource pause are verified. Two installation-local queues or locks cannot coordinate the same physical VM; add no second scheduler or assumed cross-installation exclusion. No VM power action is implied.
 
-## Release service support and planned relocation interfaces
+## Release service support and relocation interfaces
 
-TASK-040 defines the selected [home and relocation contract](contracts/home-and-relocation.md) and [ADR-0023](architecture-decision-records/0023-home-separation-and-relocation.md). TASK-042 implements release-service plan v2 and default-home support. The relocation commands below remain planned TASK-043 work, not current native capabilities.
+TASK-040 defines the selected [home and relocation contract](contracts/home-and-relocation.md) and [ADR-0023](architecture-decision-records/0023-home-separation-and-relocation.md). TASK-042 implements release-service plan v2 and default-home support. TASK-043 implements the offline relocation commands below, durable recovery, pre-database startup guard and isolated preservation/refusal fixtures. Exact-package and running-VM qualification remain TASK-044 work; current Task lifecycle remains on the roadmap.
 
 New release plans use `haepari.release-service-plan/v2`, retaining the existing field structure and allowing the native default home. Development plans retain default-root refusal. Non-default release v1 and development v1/v2 remain supported with their original validation. Private-root, exact ownership, binary and plist fences remain mandatory.
 
@@ -46,7 +46,7 @@ haepari service relocate status --plan-file <relocation-plan> --json
 haepari service relocate rollback --plan-file <relocation-plan> --json
 ```
 
-Plan is read-only and emits `haepari.service-relocation-plan/v1`. The selected contract defines `haepari.service-relocation-receipt/v1` and `haepari.service-relocation-journal/v1`, exact closed fields, canonical digests and phase reconciliation. Bind installation ID, source/target plans, binary digests, root/file identities, logical ledger and evidence inventories, backup location and one relocation identity. Recheck those observations before applying; drift refuses instead of silently refreshing the plan.
+Plan reads the unchanged original inventory and gives SQLite only operation-owned DB/WAL copies; the engine reads committed WAL without creating source sidecars or migrating the source. Plan is read-only and emits `haepari.service-relocation-plan/v1`. The selected contract defines `haepari.service-relocation-receipt/v1` and `haepari.service-relocation-journal/v1`, exact closed fields, canonical digests and phase reconciliation. Bind installation ID, source/target plans, binary digests, root/file identities, logical ledger and evidence inventories, backup location and one relocation identity. Recheck those observations before applying; drift refuses instead of silently refreshing the plan.
 
 Apply requires the old service stopped, exclusive controller ownership, no active or queued work/current grants, no unresolved recovery, unknown occupancy, pending native effects or unfinished cleanup. An unreachable controller is not drain proof. Preserve unresolved state and report the blocker; never manufacture eligibility through disposal, SQL edits or forced release.
 

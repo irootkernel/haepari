@@ -2,6 +2,10 @@
 
 ## v0.1.1 - Unreleased
 
+### Added
+
+- Add offline installation relocation and rollback with verified backups, durable recovery and preserved history and evidence.
+
 ### Changed
 
 - Allow the private native default home in new release-service plans while preserving development-home isolation and legacy saved-plan validation.

@@ -343,3 +343,16 @@ common gate. These are isolated fixtures, not a live reboot or installed-service
 qualification; release/adoption remains separately authorized.
 
 `GuestRecoveryCompatibility` checks historical native request bytes/digests and rejects preparation under frozen guest/recovery v1/v2. `GuestRecoveryCompatibilityNative` replays historical preparations without identity promotion and retains archived prior-boot records for every recovery operation. New native recovery fixtures exercise guest/control v3/v4, native request/v2 and recovery/attestation v3/v4; host fixtures preserve selected-target deadlines and v4 intent/receipt replay. Modeled device renumbering is not a real reboot qualification.
+
+
+## Offline relocation source checks
+
+TASK-043's [relocation package guide](internal/relocation/README.md) owns focused source checks for the original V68–V70 contract. Run:
+
+```sh
+tools/toolchain go run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --fail-on-pending --label-filter=unit ./internal/relocation ./cmd/haepari
+tools/toolchain go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --focus=Task043WALObservation ./internal/store/sqlite
+tools/toolchain go run github.com/onsi/ginkgo/v2/ginkgo --race --tags=integration --fail-on-empty --fail-on-pending --focus='Task043RetainedHistory|Task043ControllerStartupLock|Task043PurgedInventory' ./internal/controller
+```
+
+These checks use private disposable roots, real SQLite/WAL, real process interruptions and local runners, plus controlled service observations and scripted native guest transport. They never operate host services or a real VM. Retained synthetic manual records test preservation, not human acceptance. Historical FAIL and absence-aware missing-evidence INCOMPLETE remain immutable; current protected cleanup/recovery holds refuse. The new relocation package is not yet enrolled in `make test-unit`; TASK-044 owns common-layer enrollment and exact-package/local/running-VM qualification. Focused source passes do not substitute for those original future criteria.

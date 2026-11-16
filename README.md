@@ -363,3 +363,8 @@ TASK-014 provides the authenticated guest transport and transient runner used by
 The foreground daemon accepts `--host-macos-guest-limit 1|2` (default 1) as a legacy compatibility setting. It grants no VM power-control authority. Reservations enforce managed global/per-resource occupancy and unresolved historical power fences, and the selected VM must already be running.
 
 VM results are immutable after settlement. Failed required collection retains the exact guest Job directory and quarantines the VM; unknown workload or collector termination also retains occupancy. Use the original Job's revision-bound recovery plan before idle resource recollection or explicit disposal, then a separate health plan before reuse. See [TASK-015's boundary](https://github.com/irootkernel/haepari/blob/main/docs/records/TASK-015-vm-job-recovery.md). Neither implemented dispatch nor fake/native fixtures qualify a real UTM installation.
+
+
+### Relocate an existing release installation
+
+The offline `service relocate plan/apply/status/rollback` commands preserve the same installation, immutable history and retained evidence with a verified backup. Follow the [drain, exact-service removal, saved-plan, recovery and target-start procedure](docs/operations.md#v011-home-separation-and-relocation). Relocation does not start services or change consumer selection; shared adoption remains separately authorized.

@@ -9,7 +9,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Check | Result |
 | --- | --- |
 | UTF-8, code fences and JSON syntax | Passed |
-| Relative links and anchors (840 links, GitHub-style anchors) | Passed |
+| Relative links and anchors (842 links, GitHub-style anchors) | Passed |
 | Roadmap DAG and task titles | Passed; IDs, prerequisites and lifecycle statuses preserved |
 | Requirement–task–case traceability | Passed; mandatory/consumer-owned/deferred scopes are distinct |
 | Scope parser and invalid-reference regression tests | Passed through the offline qualification stage |
@@ -21,7 +21,7 @@ The standard-library [`tools/validate_docs.py`](tools/validate_docs.py) checks t
 | Product/VM tests and installed-service experiments | Not run by this documentation change |
 | Git staging, commit and publication | Not performed |
 
-**Roadmap DAG.** The graph is acyclic and no active task depends on a deferred task. The roadmap declares separate release endpoints: TASK-028 for v0.1.0 and TASK-045 for v0.1.1. Legacy single-release inputs without declarations retain the original TASK-028 endpoint rule; explicit declarations are validated rather than inferred from leaves. The longest prerequisite chain has 27 tasks. Historical real-UTM qualification (TASK-016/038) remains distinct from the v0.1.0 gate (TASK-027) and planned v0.1.1 gate (TASK-044). Their current prerequisite closure is TASK-027/028 and TASK-044/045. EPIC-010 is In progress; TASK-040 through TASK-042 are Accepted; TASK-043 through TASK-045 remain Planned; no historical acceptance is reopened and no new runtime observation is claimed.
+**Roadmap DAG.** The graph is acyclic and no active task depends on a deferred task. The roadmap declares separate release endpoints: TASK-028 for v0.1.0 and TASK-045 for v0.1.1. Legacy single-release inputs without declarations retain the original TASK-028 endpoint rule; explicit declarations are validated rather than inferred from leaves. The longest prerequisite chain has 27 tasks. Historical real-UTM qualification (TASK-016/038) remains distinct from the v0.1.0 gate (TASK-027) and planned v0.1.1 gate (TASK-044). Their current prerequisite closure is TASK-027/028 and TASK-044/045. EPIC-010 is In progress; TASK-040 through TASK-043 are Accepted; TASK-044 through TASK-045 remain Planned; no historical acceptance is reopened and no new runtime observation is claimed.
 
 **Traceability.** Every mandatory requirement has a mapped implementation owner and at least one mandatory case of its own; complete aggregate case coverage cannot hide an empty row. All 65 mandatory managed cases are referenced: the unchanged 58-case v0.1.0 set (V01–V24 and V32–V65), plus seven planned v0.1.1 cases (V66–V72). Six consumer-owned requirements and seven consumer cases retain their IDs outside mandatory acceptance. Consumer-owned/deferred requirements cannot be owned by active Haepari tasks. Unclassified or duplicate IDs, duplicate traceability rows, missing requirement mappings and optional/deferred/unknown case references fail validation. Scope sections may be reordered and IDs need not be contiguous.
 

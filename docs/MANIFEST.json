@@ -39,8 +39,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 20214,
-      "sha256": "f4325c164cc62f3650b8cc86cfe5508314c06ffaf67b06f31ec1e07dc813f95a"
+      "bytes": 20535,
+      "sha256": "ee0defbd66bba6bb21ced8a8ad07806234d7e70dd239d0703d3ca6c3469a0848"
     },
     {
       "path": "REVISION-NOTES.md",
@@ -49,8 +49,8 @@
     },
     {
       "path": "TODO-HOME-SEPARATION-AND-RELOCATION.md",
-      "bytes": 13297,
-      "sha256": "6f502512482666b05d6c75e2e1e7ef522c26c9877a5083c76a9fa3e38c42b126"
+      "bytes": 13677,
+      "sha256": "eae11299809a3a140f041ec8156b4c71320706974b33bf3349604f9cce9d6d6c"
     },
     {
       "path": "TODO-VM-OPERATIONAL-READINESS.md",
@@ -179,8 +179,8 @@
     },
     {
       "path": "architecture-decision-records/0023-home-separation-and-relocation.md",
-      "bytes": 5163,
-      "sha256": "44d01364891a7cbc8a3e0d75d621a8c57a053988eaf9e809d349b42dac6b906c"
+      "bytes": 5821,
+      "sha256": "4955362b5b4c4e0400a87822a712c47a628b748e100ac9a8450ce882a623dca5"
     },
     {
       "path": "architecture-decision-records/README.md",
@@ -189,13 +189,13 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 42059,
-      "sha256": "13486ff21a09cb5e4d44b1576c9135d1d928a6d21d01b9b52418946e7c277414"
+      "bytes": 42305,
+      "sha256": "623a2b2fd48f74c1371d4ef82e91539c90e60172ccf677776cff499090ba0252"
     },
     {
       "path": "checks.json",
       "bytes": 2073,
-      "sha256": "dac2d1f960f74520e5e5734f5015ff403bcc072d66470328571539428d0f1c87"
+      "sha256": "33e8058c0ac08f8b86b260c005be735c217a3abdfcada2955bbfd6e75cc3d658"
     },
     {
       "path": "contracts/artifact-and-profile.md",
@@ -204,13 +204,13 @@
     },
     {
       "path": "contracts/cli-and-jobs.md",
-      "bytes": 59615,
-      "sha256": "7cb077105ed522b08c0374cb985d5e27982edb194e7ee163d9a2c5d44cf403c8"
+      "bytes": 60283,
+      "sha256": "999ca57ad233ab44a2697f74bd72176918ea729c943e46e218f4b7e52e85c5fa"
     },
     {
       "path": "contracts/configuration.md",
-      "bytes": 27527,
-      "sha256": "d797ce114eebf3a26dba1738921cda01f0a3201f81a286e6eb3579ba27625ceb"
+      "bytes": 27765,
+      "sha256": "954c61c9691871b7c15668ddff75b2b6534e72cc895310655dba682a669163fc"
     },
     {
       "path": "contracts/external-leases.md",
@@ -219,8 +219,8 @@
     },
     {
       "path": "contracts/home-and-relocation.md",
-      "bytes": 29053,
-      "sha256": "c38e1d9cd98c156918fbd832120f210235291ddd22f4bc6fc6de7d93223e27d9"
+      "bytes": 32192,
+      "sha256": "4bd3e5641d1818735cc5f45d19ab5290016ae9a21dd8bb994cdd01cf537939aa"
     },
     {
       "path": "contracts/locks.md",
@@ -344,13 +344,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 63155,
-      "sha256": "8a291e5b8f760591be10c17102f3ee11600e91487e77e466093de532f12996f9"
+      "bytes": 67048,
+      "sha256": "08e579fb699050d9e67e707da751c3337d481f99d609b23c332e71d284834799"
     },
     {
       "path": "package-validation.md",
       "bytes": 9540,
-      "sha256": "eb916642fb55ae6c539514e61fd963db15c414d23b664475e0e4165143573f47"
+      "sha256": "fafb251985824c42e298b455f12958731fc7cbfa2c3ed75d66635ed4a794cd1f"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -449,8 +449,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 18641,
-      "sha256": "6ec8251261639246493b2266c0614f6f9d7f04e35214be5190a91ae610a752cc"
+      "bytes": 18642,
+      "sha256": "f23d573c5f3276d94479dfd7f615a27ee169b66735fa6bf840d37b74ca42bd24"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -500,7 +500,7 @@
     {
       "path": "roadmap/EPIC-010.md",
       "bytes": 7543,
-      "sha256": "cd5456052b90537892d4fcceb344278555fba0cdb90558fba02cbd941e68c387"
+      "sha256": "ca9d714cab1cf3bb3d3e4d58fc84726fc12e5c0f931a2d49923b1b5d57d92970"
     },
     {
       "path": "rollout-requests/01-podway.md",
