@@ -73,7 +73,35 @@ func expectRelocatedHistory(db *sql.DB, s *runtimeServer, id, key string, job ma
 		_, err = db.Exec("UPDATE managed_runner_receipts SET payload_json=?,digest=? WHERE job_id=? AND kind=?", historicalRaw, "sha256:"+hex.EncodeToString(sum[:]), id, receiptKind)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
+	// Preserve the completed recovery authority separately from its public view.
+	// These are native recovery rows, not synthesized supplementary fixtures.
+	recoveryRows := func(database *sql.DB) [][3]string {
+		rows, err := database.Query("SELECT mutation_key,request_json,COALESCE(receipt_json,'') FROM managed_evidence_recovery WHERE resource_id=(SELECT resource_id FROM managed_jobs WHERE id=?) ORDER BY mutation_key", id)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		defer rows.Close()
+		retained := [][3]string{}
+		for rows.Next() {
+			var row [3]string
+			gomega.Expect(rows.Scan(&row[0], &row[1], &row[2])).To(gomega.Succeed())
+			retained = append(retained, row)
+		}
+		gomega.Expect(rows.Err()).NotTo(gomega.HaveOccurred())
+		return retained
+	}
+	recoveryBefore := recoveryRows(db)
+	supplementaryBefore, err := s.ledger.SupplementaryEvidence(id)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	stableManifest := func(manifest managed.ArtifactManifest) managed.ArtifactManifest {
+		for i := range manifest.Files {
+			// Delivery tokens bind a current read; compare retained file metadata.
+			manifest.Files[i].PageToken = ""
+		}
+		return manifest
+	}
 	beforeClient, closeBefore := relocationClient(s)
+	manifestBefore, _, err := beforeClient.Artifacts(ctx, id)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	manifestBefore = stableManifest(manifestBefore)
 	inspection, _, err := beforeClient.Inspect(ctx, id)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	logs, _, err := beforeClient.Logs(ctx, id, client.LogsOptions{})
@@ -86,25 +114,26 @@ func expectRelocatedHistory(db *sql.DB, s *runtimeServer, id, key string, job ma
 	closeBefore()
 	immutable := map[string][]byte{}
 	identities := map[string]os.FileInfo{}
-	jobs := filepath.Join(s.root.Path, "jobs")
-	gomega.Expect(filepath.Walk(jobs, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.Mode().IsRegular() {
-			relative, e := filepath.Rel(s.root.Path, p)
-			if e != nil {
-				return e
+	for _, retained := range []string{"jobs", "objects"} {
+		gomega.Expect(filepath.Walk(filepath.Join(s.root.Path, retained), func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
-			raw, e := os.ReadFile(p)
-			if e != nil {
-				return e
+			if info.Mode().IsRegular() {
+				relative, e := filepath.Rel(s.root.Path, p)
+				if e != nil {
+					return e
+				}
+				raw, e := os.ReadFile(p)
+				if e != nil {
+					return e
+				}
+				immutable[relative] = raw
+				identities[relative] = info
 			}
-			immutable[relative] = raw
-			identities[relative] = info
-		}
-		return nil
-	})).To(gomega.Succeed())
+			return nil
+		})).To(gomega.Succeed())
+	}
 	gomega.Expect(db.Close()).To(gomega.Succeed())
 	lock, err := s.root.AcquireController()
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -161,9 +190,16 @@ func expectRelocatedHistory(db *sql.DB, s *runtimeServer, id, key string, job ma
 		current, err := newRuntime(moved, ledger, store)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(current.installationID()).To(gomega.Equal(s.installationID()))
+		gomega.Expect(recoveryRows(newDB)).To(gomega.Equal(recoveryBefore))
+		supplementaryAfter, err := ledger.SupplementaryEvidence(id)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(supplementaryAfter).To(gomega.Equal(supplementaryBefore))
 		afterClient, closeAfter := relocationClient(current)
 		defer closeAfter()
 		defer ownership.Close()
+		manifestAfter, _, err := afterClient.Artifacts(ctx, id)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(stableManifest(manifestAfter)).To(gomega.Equal(manifestBefore))
 		after, _, err := afterClient.Inspect(ctx, id)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		gomega.Expect(after).To(gomega.Equal(inspection))
@@ -199,6 +235,8 @@ func expectRelocatedHistory(db *sql.DB, s *runtimeServer, id, key string, job ma
 		gomega.Expect(replay.JobState).To(gomega.Equal("finished"))
 		var count int
 		gomega.Expect(newDB.QueryRow("SELECT COUNT(*) FROM managed_jobs").Scan(&count)).To(gomega.Succeed())
+		gomega.Expect(count).To(gomega.Equal(1))
+		gomega.Expect(newDB.QueryRow("SELECT COUNT(*) FROM managed_runs").Scan(&count)).To(gomega.Succeed())
 		gomega.Expect(count).To(gomega.Equal(1))
 		for relative, raw := range immutable {
 			file := filepath.Join(rootPath, relative)
@@ -257,6 +295,60 @@ var _ = ginkgo.Describe("Task043RetainedHistory", ginkgo.Label("integration"), f
 			gomega.Expect(result.FinalVerdict).To(gomega.Equal(expected[kind]))
 			expectRelocatedHistory(db, s, r.JobID, "cancel-key", job)
 		}
+	})
+	ginkgo.It("preserves completed supplementary recollection through move, legal reverse and same-Job replay", func() {
+		db, s, r, job, object := cancellationRuntime(ginkgo.GinkgoT(), "mkdir -p ../results; printf recoverable > ../results/output.txt")
+		control, err := s.registerLocal(r)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		control.beforePhase = func(phase string) {
+			if phase == "collecting" {
+				gomega.Expect(os.WriteFile(filepath.Join(s.root.Path, "jobs", r.JobID, "artifacts"), []byte("collection destination fault"), 0600)).To(gomega.Succeed())
+			}
+		}
+		gomega.Expect(s.executeLocalControlled(control, job, object, time.Now().Add(5*time.Second))).To(gomega.Succeed())
+		s.unregisterLocal(control)
+		original, err := s.ledger.Result(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(original.FinalVerdict).To(gomega.Equal(managed.Incomplete))
+		gomega.Expect(original.ProtectedEvidence).NotTo(gomega.BeEmpty())
+		gomega.Expect(os.Remove(filepath.Join(s.root.Path, "jobs", r.JobID, "artifacts"))).To(gomega.Succeed())
+
+		fresh, err := newRuntime(s.root, s.ledger, s.store)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(fresh.reconcileStartup()).To(gomega.Succeed())
+		plan, err := fresh.planEvidenceRecovery(r.ResourceID, "recollect")
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(plan.PlanToken).NotTo(gomega.BeEmpty())
+		w := recoveryHTTP(fresh, "/v1/resources/"+r.ResourceID+"/recover", managed.RecoveryRequest{PlanToken: plan.PlanToken, MutationKey: "relocation-supplementary"})
+		gomega.Expect(w.Code).To(gomega.Equal(200), w.Body.String())
+		var recovered struct {
+			Data managed.EvidenceRecoveryReceipt `json:"data"`
+		}
+		gomega.Expect(json.Unmarshal(w.Body.Bytes(), &recovered)).To(gomega.Succeed())
+		gomega.Expect(recovered.Data.Complete).To(gomega.BeTrue())
+		gomega.Expect(recovered.Data.Jobs).To(gomega.HaveLen(1))
+		gomega.Expect(recovered.Data.Jobs[0].Stage).To(gomega.Equal("resolved"))
+		gomega.Expect(recovered.Data.Jobs[0].Artifacts).To(gomega.HaveLen(1))
+		health, err := fresh.planResourceRecovery(r.ResourceID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(health.PlanToken).NotTo(gomega.BeEmpty())
+		w = recoveryHTTP(fresh, "/v1/resources/"+r.ResourceID+"/recover", managed.RecoveryRequest{PlanToken: health.PlanToken, MutationKey: "relocation-supplementary-health"})
+		gomega.Expect(w.Code).To(gomega.Equal(200), w.Body.String())
+		status, err := fresh.ledger.ResourceStatus(r.ResourceID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(status.Availability).To(gomega.Equal("available"))
+		gomega.Expect(status.Occupancy).To(gomega.BeZero())
+		current, err := fresh.ledger.Result(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(current).To(gomega.Equal(original))
+		manifest, err := fresh.artifactManifest(r.JobID)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Expect(manifest.Supplementary).To(gomega.HaveLen(1))
+		gomega.Expect(manifest.Files).To(gomega.HaveLen(2))
+		gomega.Expect(os.ReadFile(filepath.Join(s.root.Path, "jobs", r.JobID, recovered.Data.Jobs[0].ArtifactRoot, "results/output.txt"))).To(gomega.Equal([]byte("recoverable")))
+		_, err = os.Stat(filepath.Join(s.root.Path, "jobs", r.JobID, "workspace"))
+		gomega.Expect(os.IsNotExist(err)).To(gomega.BeTrue())
+		expectRelocatedHistory(db, fresh, r.JobID, "cancel-key", job)
 	})
 	ginkgo.It("refuses a legacy missing-output history whose cleanup evidence remains currently protected", func() {
 		db, s, r, job, object := cancellationRuntime(ginkgo.GinkgoT(), "printf legacy-gap", func(*managed.JobSpec) {})

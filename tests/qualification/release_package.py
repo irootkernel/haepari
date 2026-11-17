@@ -23,6 +23,7 @@ host toolchain is touched; no whole-host write tracing is claimed.
 """
 
 import argparse
+import fcntl
 from datetime import datetime
 import hashlib
 import importlib.util
@@ -44,6 +45,35 @@ DEV_PLIST = "io.rootkernel.haepari.dev.epic004-task016.plist"
 REAL_SENTINEL_TOPS = [".aquarium-dev"]
 REAL_PLIST_GLOB = "io.rootkernel.haepari*.plist"
 ALLOWED_NEW_DIRS = {"Library", "Library/LaunchAgents"}
+COMMAND_ROOT: Path | None = None
+COMMAND_SEQUENCE = 0
+
+
+def _command(argv, **kwargs):
+    """Retain original native command results, including unsuccessful returns."""
+    global COMMAND_SEQUENCE
+    kwargs.setdefault("capture_output", True)
+    kwargs.setdefault("text", True)
+    started = time.time()
+    try:
+        result = subprocess.run(argv, **kwargs)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        if COMMAND_ROOT is not None:
+            COMMAND_SEQUENCE += 1
+            (COMMAND_ROOT / f"{COMMAND_SEQUENCE:05d}.json").write_text(json.dumps({
+                "argv": [str(v) for v in argv], "started": started, "returned": time.time(),
+                "exception": type(error).__name__, "stdout": str(error.stdout),
+                "stderr": str(error.stderr), "returncode": getattr(error, "returncode", None)}))
+        raise
+    if COMMAND_ROOT is not None:
+        COMMAND_SEQUENCE += 1
+        env = kwargs.get("env", os.environ)
+        (COMMAND_ROOT / f"{COMMAND_SEQUENCE:05d}.json").write_text(json.dumps({
+            "argv": [str(v) for v in argv], "cwd": str(kwargs.get("cwd", Path.cwd())),
+            "selection": {k: env.get(k) for k in ("HOME", "HAEPARI_HOME")},
+            "started": started, "returned": time.time(), "returncode": result.returncode,
+            "stdout": result.stdout, "stderr": result.stderr}))
+    return result
 
 
 def _digest_bytes(data: bytes) -> str:
@@ -97,7 +127,7 @@ def _diff_trees(before: dict[str, dict], after: dict[str, dict]) -> list[str]:
 
 def _verify_with_packaged_helper(package: Path) -> None:
     """Run the packaged complete-tree helper; it must pass on the pristine tree."""
-    completed = subprocess.run([sys.executable, str(package / "verify_tree.py"), str(package)],
+    completed = _command([sys.executable, str(package / "verify_tree.py"), str(package)],
                                text=True, capture_output=True, timeout=60, check=False)
     assert completed.returncode == 0, (completed.stdout, completed.stderr)
 
@@ -161,11 +191,19 @@ def _inventory_mismatches(root: Path) -> list[str]:
 
 
 def main() -> None:
+    os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--scenario", default="release-package", help="unique owned observation name")
     parser.add_argument("--version", default="0.1.1")
+    parser.add_argument("--evidence-root", type=Path,
+                        help="new private directory retaining raw command records and final evidence")
     args = parser.parse_args()
+    global COMMAND_ROOT
+    if args.evidence_root is not None:
+        args.evidence_root.mkdir(mode=0o700)
+        COMMAND_ROOT = args.evidence_root.resolve()
+
     assert re.fullmatch(r"[a-z][a-z0-9-]{0,31}", args.scenario), "scenario must be a short lowercase slug"
     instance = f"h7-t25-rel-{args.scenario}"
     assert re.fullmatch(r"[a-z0-9][a-z0-9-]{0,47}", instance)
@@ -174,16 +212,12 @@ def main() -> None:
     if not args.archive.is_file():
         sys.exit(f"missing archive: {args.archive}")
 
-    spec = importlib.util.spec_from_file_location(
-        "haepari_local_fixture", Path(__file__).resolve().parents[1] / "e2e" / "test_local_cli.py")
-    fixture = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(fixture)
-
     parent = Path(tempfile.mkdtemp(prefix=f"hp-relpkg-{args.scenario}-", dir="/tmp")).resolve()
     evidence: dict[str, object] = {"scenario": args.scenario, "instance": instance, "scratch": str(parent)}
     print(json.dumps({"qualification_scratch": str(parent), "instance": instance}), file=sys.stderr, flush=True)
     completed = False
     service_installed = False
+    uninstall_attempted = False
     scoped: dict[str, str] = {}
     binary: Path | None = None
     plan_path: Path | None = None
@@ -202,9 +236,12 @@ def main() -> None:
         package = tree_dir / names[0]
         binary = package / "haepari"
         def run(env: dict, *cmd: str, timeout: int = 60) -> subprocess.CompletedProcess:
-            return subprocess.run([str(binary), *cmd], env=env, cwd=package,
+            return _command([str(binary), *cmd], env=env, cwd=package,
                                   text=True, capture_output=True, timeout=timeout, check=False)
-        respond = lambda env, *cmd, expected=0, timeout=60: fixture._response(run(env, *cmd, timeout=timeout), expected)
+        def respond(env, *cmd, expected=0, timeout=60):
+            result = run(env, *cmd, timeout=timeout)
+            assert result.returncode == expected, (result.returncode, result.stdout[:4096], result.stderr[:4096])
+            return json.loads(result.stdout)
 
         _verify_with_packaged_helper(package)
         assert not _inventory_mismatches(package), _inventory_mismatches(package)
@@ -222,7 +259,7 @@ def main() -> None:
                 (target / victim).write_text("foreign addition\n")
             else:
                 (target / victim).write_bytes((target / victim).read_bytes() + b"x")
-            helper = subprocess.run([sys.executable, str(target / "verify_tree.py"), str(target)],
+            helper = _command([sys.executable, str(target / "verify_tree.py"), str(target)],
                                     text=True, capture_output=True, timeout=60, check=False)
             assert helper.returncode == 1 and any(
                 line.startswith(f"{mutation}: ") for line in helper.stderr.splitlines()), (mutation, helper.stderr)
@@ -236,7 +273,7 @@ def main() -> None:
         link_added.mkdir()
         shutil.copytree(package, link_added / names[0])
         os.symlink("dangling-missing-target", link_added / names[0] / "link-dangling")
-        helper = subprocess.run([sys.executable, str(link_added / names[0] / "verify_tree.py"),
+        helper = _command([sys.executable, str(link_added / names[0] / "verify_tree.py"),
                                  str(link_added / names[0])], text=True, capture_output=True, timeout=60, check=False)
         assert helper.returncode == 1 and any(
             line.startswith("added: link-dangling (symlink") for line in helper.stderr.splitlines()), helper.stderr
@@ -250,7 +287,7 @@ def main() -> None:
         shutil.copyfile(link_replaced / names[0] / "LICENSE", identical)
         (link_replaced / names[0] / "LICENSE").unlink()
         os.symlink("../license-target.bin", link_replaced / names[0] / "LICENSE")
-        helper = subprocess.run([sys.executable, str(link_replaced / names[0] / "verify_tree.py"),
+        helper = _command([sys.executable, str(link_replaced / names[0] / "verify_tree.py"),
                                  str(link_replaced / names[0])], text=True, capture_output=True, timeout=60, check=False)
         assert helper.returncode == 1 and any(
             line.startswith("tampered: LICENSE (symlink") for line in helper.stderr.splitlines()), helper.stderr
@@ -271,7 +308,8 @@ def main() -> None:
         assert caps["compiled_backends"] == ["local"] and caps["qualified_backends"] == []
         assert caps["protocol_versions"] == ["managed-execution/v1"]
         assert set(caps["capabilities"]) == {"managed-execution/v1", "durable-observation/v1", "advisory-lock/v1",
-                                             "managed-recovery/v1", "artifact-delivery/v1", "evidence-retention/v1"}
+                                             "managed-recovery/v1", "artifact-delivery/v1", "evidence-retention/v1",
+                                             "job-evidence-recovery/v1", "persistent-guest-identity/v1"}
         machine_help = respond(minimal, "help", "--json")["data"]
         evidence["frozen_outputs"] = {"version": version, "capabilities": caps, "help": machine_help}
         usages = {entry["name"] + " " + entry["usage"] for entry in machine_help["commands"]}
@@ -336,7 +374,7 @@ def main() -> None:
         target = f"gui/{os.geteuid()}/{plan_data['label']}"
 
         def service_pid() -> int:
-            output = subprocess.run(["/bin/launchctl", "print", target], text=True,
+            output = _command(["/bin/launchctl", "print", target], text=True,
                                     capture_output=True, timeout=15, check=False)
             if output.returncode != 0:
                 return 0
@@ -391,6 +429,8 @@ def main() -> None:
 
         # 5a. Auto PASS from the localized shipped example.
         auto_path = localize("job-local-auto.json")
+        saved_auto = parent / "original-auto.json"
+        saved_auto.write_bytes(auto_path.read_bytes())
         receipt = respond(service_env, "submit", "--spec", str(auto_path),
                           "--request-key", f"{args.scenario}-auto", "--json")["data"]
         job_id = receipt["job_id"]
@@ -505,6 +545,27 @@ def main() -> None:
         settled = json.loads(terminal.stdout)["data"]
         assert settled["final_verdict"] == "CANCELLED" and settled["cleanup_outcome"] == "not_needed"
         evidence["scenarios"]["queued_cancel"] = settled
+
+        # Native terminal negative histories; v2 positive absence permits cleanup.
+        for suffix, shell, expected, verdict in (
+                ("failure", "mkdir -p ../results; printf failure > ../results/out.txt; printf diagnostic; exit 7", 1, "FAIL"),
+                ("missing", "printf positively-absent-output", 3, "INCOMPLETE")):
+            document = json.loads(saved_auto.read_text())
+            document["schema"] = "haepari.job/v2"
+            document["suite"] = "install-check-" + suffix
+            document["workload"]["argv"] = ["/bin/sh", "-c", shell]
+            negative_path = parent / ("negative-" + suffix + ".json")
+            negative_path.write_text(json.dumps(document))
+            admission = respond(service_env, "submit", "--spec", str(negative_path),
+                                "--request-key", f"{args.scenario}-{suffix}", "--json")["data"]
+            negative = respond(service_env, "wait", admission["job_id"], "--timeout", "30s",
+                               "--json", expected=expected, timeout=35)["data"]
+            assert negative["final_verdict"] == verdict and negative["cleanup_outcome"] == "verified"
+            if suffix == "failure":
+                assert negative["native_exit_code"] == 7
+            else:
+                assert any(gap["reason"] == "required_output_absent" for gap in negative["evidence_gaps"])
+            evidence["scenarios"][suffix] = negative
 
         # 5f. Package lock example lifecycle plus read-only borrower validation.
         respond(service_env, "resource", "register", "--file", str(package / "examples/resource-lock.json"), "--json")
@@ -678,13 +739,13 @@ def main() -> None:
         mismatch_path.write_text(json.dumps(mismatch))
         mismatch_path.chmod(0o600)
         refused_uninstall = run(scoped, "service", "uninstall", "--plan-file", str(mismatch_path), "--json")
-        assert refused_uninstall.returncode == 2 and json.loads(refused_uninstall.stdout)["error"]["code"] == "CONFLICT"
+        assert refused_uninstall.returncode == 2 and json.loads(refused_uninstall.stdout)["error"]["code"] == "INVALID_REQUEST"
         assert plist_path.exists() and service_pid() > 0
 
         for signal_name in ("SIGTERM", "SIGKILL"):
             prior = service_pid()
             assert prior > 0 and supervisor["pid"] != prior
-            subprocess.run(["/bin/launchctl", "kill", signal_name, target], check=True, timeout=15)
+            _command(["/bin/launchctl", "kill", signal_name, target], check=True, timeout=15)
             end = time.monotonic() + 15
             while time.monotonic() < end:
                 current = service_pid()
@@ -716,7 +777,29 @@ def main() -> None:
         assert skill_file.is_file()
         evidence["skill_tree"] = {"files": 1, "sha256": _digest_bytes(skill_file.read_bytes())}
 
+        # Bind public history before stopping the service; no SQL rewrite.
+        relocation_spec = importlib.util.spec_from_file_location(
+            "relocation_package", Path(__file__).with_name("relocation_package.py"))
+        relocation_fixture = importlib.util.module_from_spec(relocation_spec)
+        relocation_spec.loader.exec_module(relocation_fixture)
+        baseline = {}
+        listed = respond(service_env, "jobs", "list", "--limit", "100", "--json")["data"]
+        assert not listed["more"]
+        for item in listed["jobs"]:
+            identifier = item["receipt"]["job_id"]
+            row = {operation: respond(service_env, operation, identifier, "--json")["data"]
+                   for operation in ("inspect", "logs", "events")}
+            destination = parent / ("export-before-" + identifier)
+            respond(service_env, "export", identifier, "--to", str(destination), "--json")
+            row["export"] = {name: entry["sha256"]
+                             for name, entry in relocation_fixture._inventory(destination).items()
+                             if name != "manifest.json"}
+            baseline[identifier] = row
+        evidence["relocation_baseline"] = baseline
+
         # ---- 8. Uninstall and final audit (AFTER removal) ------------------
+        original_controller = service_pid()
+        uninstall_attempted = True
         respond(scoped, "service", "uninstall", "--plan-file", str(plan_path), "--json")
         service_installed = False
         assert not plist_path.exists(), "uninstall left the plist behind"
@@ -725,6 +808,20 @@ def main() -> None:
         while service_pid() and time.monotonic() < end:
             time.sleep(0.05)
         assert service_pid() == 0
+        end = time.monotonic() + 15
+        while time.monotonic() < end:
+            observed = _command(["/bin/ps", "-p", str(original_controller), "-o", "pid=,stat=,command="],
+                                timeout=15)
+            if observed.returncode == 1 and not observed.stdout.strip():
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("original controller cessation unproven; preserve state")
+        with (service_root / "controller.lock").open("r+b") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        relocation_fixture.qualify(parent, binary, scoped, service_root, plan_data,
+                                   plan_path, run, respond, saved_auto,
+                                   f"{args.scenario}-auto", evidence)
         changes = _diff_trees(baseline_scoped, _snapshot_tree(scoped_home))
         allowlisted, unexpected = [], []
         for change in changes:
@@ -757,10 +854,12 @@ def main() -> None:
         assert not protected_changes, f"protected real-host sentinel changed; inconclusive/failing pending investigation: {protected_changes}"
         evidence["package"] = {"archive": str(args.archive), "archive_sha256": expected_archive,
                                "binary_sha256": _digest_bytes(binary.read_bytes())}
+        if COMMAND_ROOT is not None:
+            (COMMAND_ROOT / "evidence.json").write_text(json.dumps(evidence, indent=2))
         print(json.dumps({"ok": True, "evidence": evidence}, indent=2))
         completed = True
     finally:
-        if service_installed:
+        if service_installed and not uninstall_attempted:
             emergency = {"PATH": "/usr/bin:/bin", "HOME": str(parent / "scoped-home"), "LANG": "C"}
             if binary is not None and plan_path is not None and plan_path.exists():
                 try:

@@ -344,13 +344,13 @@
     },
     {
       "path": "operations.md",
-      "bytes": 67048,
-      "sha256": "08e579fb699050d9e67e707da751c3337d481f99d609b23c332e71d284834799"
+      "bytes": 67335,
+      "sha256": "ff0f8bcae4ec0f2a929c50ee990786271cf0db62f48cdad1de9211dfefb7a3a1"
     },
     {
       "path": "package-validation.md",
-      "bytes": 9540,
-      "sha256": "fafb251985824c42e298b455f12958731fc7cbfa2c3ed75d66635ed4a794cd1f"
+      "bytes": 9532,
+      "sha256": "c380e6bc979ff0138502e95ed297763f12fe126da26d9996e6e2931fba38f72b"
     },
     {
       "path": "records/TASK-004-macos-supervision.md",
@@ -449,8 +449,8 @@
     },
     {
       "path": "roadmap.md",
-      "bytes": 18642,
-      "sha256": "f23d573c5f3276d94479dfd7f615a27ee169b66735fa6bf840d37b74ca42bd24"
+      "bytes": 18643,
+      "sha256": "5527f6d5b554f0acb5659d2793b9f1954ce0df8ad6f62e05b760d22a5a698433"
     },
     {
       "path": "roadmap/EPIC-001.md",
@@ -500,7 +500,7 @@
     {
       "path": "roadmap/EPIC-010.md",
       "bytes": 7543,
-      "sha256": "ca9d714cab1cf3bb3d3e4d58fc84726fc12e5c0f931a2d49923b1b5d57d92970"
+      "sha256": "f29b7ed265be4431034142237166fcb2f187b499d63cef7e3c5712fb5b73d360"
     },
     {
       "path": "rollout-requests/01-podway.md",

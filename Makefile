@@ -34,7 +34,7 @@ test-prepare:
 	+$(MAKE) docs-update
 
 test-unit:
-	$(TC) go run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --fail-on-pending --label-filter=unit ./cmd/haepari ./internal/client ./internal/managed ./internal/platform ./internal/runner ./internal/snapshot ./internal/state ./internal/utm ./internal/config
+	$(TC) go run github.com/onsi/ginkgo/v2/ginkgo --race --fail-on-empty --fail-on-pending --label-filter=unit ./cmd/haepari ./internal/client ./internal/managed ./internal/platform ./internal/runner ./internal/snapshot ./internal/state ./internal/utm ./internal/config ./internal/relocation
 	+$(MAKE) test-qualification
 	+$(MAKE) test-toolchain
 

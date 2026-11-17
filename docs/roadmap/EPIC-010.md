@@ -104,17 +104,17 @@ Requirement coverage: HP-REQ-086.
 
 #### Implement
 
-- [ ] Integrate the selected preservation, crash-boundary and refusal fixtures into the existing test layers and exercise the packaged binary outside its checkout.
-- [ ] Finish affected operator, installation and paired-skill documentation before candidate review.
+- [x] Integrate the selected preservation, crash-boundary and refusal fixtures into the existing test layers and exercise the packaged binary outside its checkout.
+- [x] Finish affected operator, installation and paired-skill documentation before candidate review.
 
 #### Verify
 
-- [ ] Compare immutable history and evidence before/after relocation, including deliberate FAIL/INCOMPLETE and missing-evidence cases; run the focused and required common gates.
-- [ ] Qualify the exact package's small already-running single-VM release loop under its own execution envelope. Do not repeat the historical full campaign or introduce VM power experiments.
+- [x] Compare immutable history and evidence before/after relocation, including deliberate FAIL/INCOMPLETE and missing-evidence cases; run the focused and required common gates.
+- [x] Qualify the exact package's small already-running single-VM release loop under its own execution envelope. Do not repeat the historical full campaign or introduce VM power experiments.
 
 #### Done when
 
-- [ ] Package, relocation/recovery, compatibility and required local/VM observations are bound to the exact candidate, with remaining limits explicit.
+- [x] Package, relocation/recovery, compatibility and required local/VM observations are bound to the exact candidate, with remaining limits explicit.
 
 ## TASK-045
 

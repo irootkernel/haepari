@@ -22,7 +22,7 @@ Haepari runs one durable per-user controller behind a private Unix socket. The `
 
 3. Work only inside the established authorization scope for this installation (repository, resource, offline effects, budgets). Having the CLI, a job ID, or an inbox item is not authorization to install tools, run providers, reset foreign state, or publish.
 
-Keep the installation selected explicitly across upgrades. Offline `service relocate` is a separate operator workflow with its own drain, saved-plan and service authority; normal Job/lock use does not grant it. After an authorized relocation, query retained Jobs through the verified current root and original IDs/keys. Historical absolute runner requests never authorize rerun or automatic root migration.
+Keep the installation selected explicitly across upgrades. Offline `service relocate` is a separate operator workflow with its own drain, saved-plan and service authority; normal Job/lock use does not grant it. After an authorized relocation, query retained Jobs through the verified current root and original IDs/keys. Historical absolute runner requests never authorize rerun or automatic root migration. Retained manual records and automated synthetic completions establish history/interface behavior only. A new candidate's required human qualification needs an actual observer's new response for its exact Job, profile, workspace, revision and original deadline; readiness never supplies that observation.
 
 The operator prepares and powers the VM. Haepari uses an already-running registered VM and issues no start/stop command. A queued `vm_not_started` blocker waits under the original deadline; do not generate another Job key or power the VM through Haepari.
 
