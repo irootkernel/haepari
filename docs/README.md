@@ -52,7 +52,7 @@ Current storage is private schema 13 (`evidence-recovery-budget-v13`), preservin
 
 ## Document authority
 
-Requirements own product obligations. The architecture and active managed contracts own implementation semantics. ADRs own rationale. The roadmap alone owns Haepari task identity, sequence, and lifecycle status. Task checkboxes are implementation acceptance evidence, not independent lifecycle records.
+Requirements own product obligations. The architecture and active managed contracts own implementation semantics. ADRs own rationale. The roadmap alone owns Haepari task identity, sequence, and lifecycle status. `Completed` is the sole successful lifecycle status for both Tasks and Epics. Task checkboxes and acceptance decisions are evidence, not independent lifecycle records.
 
 The Aquarium repository's `docs/roadmap/README.md` owns Aquarium IDs and status. The adoption copy in this package is a handoff aid, not a second roadmap authority. The planned Aquarium epic is Aquarium:EPIC-019, with Aquarium:TASK-086 through Aquarium:TASK-102. Inside this package an unqualified EPIC or TASK ID is a Haepari ID; an ID from another repository is always qualified, as in Aquarium:TASK-092. [External requests](to-external.md) lists requested changes to other repositories; it is not their authority.
 

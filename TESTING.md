@@ -303,7 +303,7 @@ including saved original admission after profile and resource changes.
 They do not observe a human product pass or qualify a live or installed VM.
 TASK-027 retains that packaged running-VM release check; TASK-038 is not repeated.
 The [F3 decision](docs/records/TASK-020-consumer-freeze.md) binds the surface
-only when TASK-020 becomes Accepted in the canonical roadmap.
+only when TASK-020 becomes `Completed` in the canonical roadmap.
 
 TASK-027 resource-bound recovery fixtures cover new v3 recollect/dispose budgets, unchanged resource-v1 behavior, saved intent/receipt replay and layout-12-to-13 compatibility. The sample caller tests exercise new 90/90-second collection/cleanup, immutable saved 5/5-second replay, lower-resource-ceiling refusal before key consumption, and one Job across PENDING reconnect. A scripted native guest fixture delays authenticated health/cleanup beyond five seconds under the finite 90-second cleanup budget; it is separate from live macOS2 qualification.
 

@@ -4,7 +4,7 @@ Delivery targets: the historical v0.1.0 baseline and planned v0.1.1 EPIC-010, De
 
 ## Execution policy
 
-The task table gives the recommended epic-handler order and, separately, each task's actual implementation prerequisites. Within an epic, use task order. A task may start earlier than its epic when its actual prerequisites are met; TASK-034 ran this way, before TASK-001. A task is done only with its focused implementation, failure evidence, documentation and review. Missing evidence required by that task blocks its acceptance; accepted historical evidence is not reopened by a temporarily unavailable VM. When an epic waits only on a hardware gate, the handler may continue with later tasks whose actual prerequisites are met; the waiting epic is accepted after its gated task is. Commit and release authority are separate.
+The task table gives the recommended epic-handler order and, separately, each task's actual implementation prerequisites. Within an epic, use task order. A task may start earlier than its epic when its actual prerequisites are met; TASK-034 ran this way, before TASK-001. A task is done only with its focused implementation, failure evidence, documentation and review. Missing evidence required by that task blocks its acceptance; accepted historical evidence is not reopened by a temporarily unavailable VM. When an epic waits only on a hardware gate, the handler may continue with later tasks whose actual prerequisites are met; the waiting epic can move to `Completed` only after its gated task is complete and the Epic's acceptance requirements are met. Commit and release authority are separate.
 
 Lifecycle status vocabulary:
 
@@ -14,33 +14,36 @@ Lifecycle status vocabulary:
 | In progress | Implementation has started. |
 | Blocked | Waiting on a recorded external or real-environment prerequisite. |
 | In review | Implementation and evidence are submitted for review. |
-| Accepted | Reviewed acceptance evidence is recorded; only this file records it. |
-| Completed | Master has explicitly approved final Epic closeout; recorded candidate-specific qualification limits remain unchanged. |
+| Completed | The Task or Epic has met its implementation, verification, review and applicable acceptance requirements; only this file records it. Recorded candidate-specific qualification limits remain unchanged. |
 | Deferred | Outside the current release; re-entry needs a recorded decision. |
 | Cancelled | Withdrawn; history is retained. |
+
+`Completed` is the sole successful lifecycle status for both Tasks and Epics. Acceptance decisions remain required evidence, not a separate terminal state. Final Epic closeout still requires Master's overall acceptance under its delivery workflow; commit, release and installation remain separate effects.
+
+Master selected this vocabulary normalization. Existing `Accepted` table entries are renamed to `Completed` with their original acceptance scope and candidate-specific limits preserved. This records no new implementation, verification or historical Epic approval; dated acceptance and ADR decision records retain their original wording.
 
 `Scope` separately marks selected delivery work (`Active`) or deferred work (`Deferred`). EPIC-001 through EPIC-009 retain their v0.1.0 scope; EPIC-010 targets v0.1.1. Adding active v0.1.1 work does not reopen historical acceptance or make it a v0.1.0 prerequisite.
 
 ## Local development scope (Design Revision 3.5)
 
-[ADR-0020](architecture-decision-records/0020-local-development-scope.md) narrows v0.1.0 to one machine, one user and one already-running registered VM. TASK-017–020 keep their IDs/prerequisites with generic project/manual responsibilities. Product-specific skill and migration requirements are consumer-owned optional scenarios. Existing F1/F2 contracts, runtime recovery and Accepted status are preserved; F3 is narrowed before its acceptance. The mandatory release matrix uses bounded local failure fixtures plus a small exact-candidate real-VM Job loop, not another full TASK-038 campaign. VM power/reboot/logout/DHCP-expiry/multi-day/two-VM experiments and performance benchmarks do not block release. Ordinary same-scope authorized development checks do not require a new approval per Job or binary digest.
+[ADR-0020](architecture-decision-records/0020-local-development-scope.md) narrows v0.1.0 to one machine, one user and one already-running registered VM. TASK-017–020 keep their IDs/prerequisites with generic project/manual responsibilities. Product-specific skill and migration requirements are consumer-owned optional scenarios. Existing F1/F2 contracts, runtime recovery and accepted evidence are preserved; F3 is narrowed before its acceptance. The mandatory release matrix uses bounded local failure fixtures plus a small exact-candidate real-VM Job loop, not another full TASK-038 campaign. VM power/reboot/logout/DHCP-expiry/multi-day/two-VM experiments and performance benchmarks do not block release. Ordinary same-scope authorized development checks do not require a new approval per Job or binary digest.
 
 ## Epic sequence
 
 | Epic | Goal | Tasks | Scope | Status |
 | --- | --- | --- | --- | --- |
-| [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | Accepted |
-| [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | Accepted |
-| [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Accepted |
-| [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Accepted |
-| [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Accepted |
-| [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Accepted |
-| [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Accepted |
+| [EPIC-001](roadmap/EPIC-001.md) | Contract, first local slice and OS decisions | TASK-001 through TASK-004 plus TASK-033 | Active | Completed |
+| [EPIC-002](roadmap/EPIC-002.md) | Durable queue, ownership and advisory locks | TASK-005 through TASK-008 plus TASK-035 | Active | Completed |
+| [EPIC-003](roadmap/EPIC-003.md) | Local execution, recovery and managed core freeze | TASK-009 through TASK-012 | Active | Completed |
+| [EPIC-004](roadmap/EPIC-004.md) | UTM macOS and SSH | TASK-034 plus TASK-013 through TASK-016 | Active | Completed |
+| [EPIC-009](roadmap/EPIC-009.md) | VM operational readiness before consumer integration | TASK-036 through TASK-039 | Active | Completed |
+| [EPIC-005](roadmap/EPIC-005.md) | Generic project and manual test integration; consumer integration freeze | TASK-017 through TASK-020 | Active | Completed |
+| [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Completed |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Completed |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
 | [EPIC-010](roadmap/EPIC-010.md) | Separate development home and preserve one installation through relocation (v0.1.1) | TASK-040 through TASK-045 | Active | Completed |
 
-Master approved EPIC-007 final closeout on 2026-10-20 after the common-test corrections. TASK-025 through TASK-028 retain their Accepted status. Historical package and running-VM evidence remains bound to its recorded artifacts; the corrected package still requires its own qualification before release. This closeout neither records a new live observation nor authorizes installation or publication.
+Master approved EPIC-007 final closeout on 2026-10-20 after the common-test corrections. TASK-025 through TASK-028 retain their `Completed` status. Historical package and running-VM evidence remains bound to its recorded artifacts; the corrected package still requires its own qualification before release. This closeout neither records a new live observation nor authorizes installation or publication.
 
 EPIC-003 Canonical Outcomes: [managed core freeze](records/TASK-012-managed-core-freeze.md), [managed transitions](contracts/managed-transitions.md), [artifact delivery and retention](contracts/artifact-and-profile.md), and [operations](operations.md).
 
@@ -50,51 +53,51 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 
 | Task | Title | Actual prerequisites | Scope | Status |
 | --- | --- | --- | --- | --- |
-| [TASK-001](roadmap/EPIC-001.md#task-001) | Bootstrap the independent Go product | None | Active | Accepted |
-| [TASK-002](roadmap/EPIC-001.md#task-002) | Define provisional managed schemas and state invariants | TASK-001 | Active | Accepted |
-| [TASK-003](roadmap/EPIC-001.md#task-003) | Implement contained snapshots and identity | TASK-002 | Active | Accepted |
-| [TASK-033](roadmap/EPIC-001.md#task-033) | Deliver the first production-path local walking skeleton | TASK-001, TASK-002, TASK-003 | Active | Accepted |
-| [TASK-004](roadmap/EPIC-001.md#task-004) | Qualify general macOS OS supervision | TASK-001 | Active | Accepted |
-| [TASK-034](roadmap/EPIC-004.md#task-034) | Probe UTM host automation non-destructively | None | Active | Accepted |
-| [TASK-005](roadmap/EPIC-002.md#task-005) | Implement durable storage and controller ownership | TASK-033, TASK-004 | Active | Accepted |
-| [TASK-006](roadmap/EPIC-002.md#task-006) | Implement admission and durable deduplication | TASK-005, TASK-003 | Active | Accepted |
-| [TASK-007](roadmap/EPIC-002.md#task-007) | Implement resource scheduling and fenced leases | TASK-006 | Active | Accepted |
-| [TASK-008](roadmap/EPIC-002.md#task-008) | Implement client waits, events and cancellation admission | TASK-007 | Active | Accepted |
-| [TASK-035](roadmap/EPIC-002.md#task-035) | Implement advisory named locks | TASK-008 | Active | Accepted |
-| [TASK-009](roadmap/EPIC-003.md#task-009) | Implement the local per-job supervisor | TASK-033, TASK-007, TASK-004 | Active | Accepted |
-| [TASK-010](roadmap/EPIC-003.md#task-010) | Implement phase settlement and safe resource return | TASK-009 | Active | Accepted |
-| [TASK-011](roadmap/EPIC-003.md#task-011) | Implement crash reconciliation, explicit recovery and the development service | TASK-010, TASK-004 | Active | Accepted |
-| [TASK-012](roadmap/EPIC-003.md#task-012) | Implement artifact delivery and retention; freeze the managed core contract | TASK-010, TASK-011, TASK-035 | Active | Accepted |
-| [TASK-013](roadmap/EPIC-004.md#task-013) | Implement persistent VM registration and UTM control | TASK-007, TASK-003 | Active | Accepted |
-| [TASK-014](roadmap/EPIC-004.md#task-014) | Implement authenticated SSH and guest runner continuity | TASK-013, TASK-009 | Active | Accepted |
-| [TASK-015](roadmap/EPIC-004.md#task-015) | Integrate VM collection, job cleanup and recovery | TASK-014, TASK-010, TASK-011, TASK-012 | Active | Accepted |
-| [TASK-016](roadmap/EPIC-004.md#task-016) | Qualify the real macOS VM backend; freeze VM contract fields | TASK-015, TASK-034 | Active | Accepted |
-| [TASK-036](roadmap/EPIC-009.md#task-036) | Restore recoverable VM failure handling | TASK-012, TASK-015 | Active | Accepted |
-| [TASK-037](roadmap/EPIC-009.md#task-037) | Bound VM startup, transport, and retained runner storage | TASK-036 | Active | Accepted |
-| [TASK-038](roadmap/EPIC-009.md#task-038) | Publish and execute repeatable real-VM qualification | TASK-016, TASK-037 | Active | Accepted |
-| [TASK-039](roadmap/EPIC-009.md#task-039) | Demonstrate a small isolated e2e caller cycle | TASK-038 | Active | Accepted |
-| [TASK-017](roadmap/EPIC-005.md#task-017) | Publish the project Make and guest integration contract | TASK-008, TASK-012, TASK-015, TASK-039 | Active | Accepted |
-| [TASK-018](roadmap/EPIC-005.md#task-018) | Implement generic candidate and environment input helpers | TASK-017 | Active | Accepted |
-| [TASK-019](roadmap/EPIC-005.md#task-019) | Implement general manual jobs and recorded observations | TASK-018, TASK-010 | Active | Accepted |
-| [TASK-020](roadmap/EPIC-005.md#task-020) | Validate the generic consumer loop; freeze the integration contract | TASK-018, TASK-019 | Active | Accepted |
-| [TASK-021](roadmap/EPIC-006.md#task-021) | Complete concurrency and crash qualification | TASK-011, TASK-019, TASK-035 | Active | Accepted |
-| [TASK-022](roadmap/EPIC-006.md#task-022) | Harden trust, privacy and external-effect boundaries | TASK-021 | Active | Accepted |
-| [TASK-023](roadmap/EPIC-006.md#task-023) | Measure bounds and qualify supported platforms | TASK-021 | Active | Accepted |
-| [TASK-024](roadmap/EPIC-006.md#task-024) | Qualify storage compatibility and self-test isolation | TASK-005, TASK-021 | Active | Accepted |
-| [TASK-025](roadmap/EPIC-007.md#task-025) | Package the release, user services and paired skill | TASK-020, TASK-022, TASK-023, TASK-024 | Active | Accepted |
-| [TASK-026](roadmap/EPIC-007.md#task-026) | Finalize operator and developer documentation | TASK-025 | Active | Accepted |
-| [TASK-027](roadmap/EPIC-007.md#task-027) | Run exact release acceptance | TASK-016, TASK-019, TASK-020, TASK-025, TASK-026 | Active | Accepted |
-| [TASK-028](roadmap/EPIC-007.md#task-028) | Deliver the Aquarium consumer handoff | TASK-027 | Active | Accepted |
+| [TASK-001](roadmap/EPIC-001.md#task-001) | Bootstrap the independent Go product | None | Active | Completed |
+| [TASK-002](roadmap/EPIC-001.md#task-002) | Define provisional managed schemas and state invariants | TASK-001 | Active | Completed |
+| [TASK-003](roadmap/EPIC-001.md#task-003) | Implement contained snapshots and identity | TASK-002 | Active | Completed |
+| [TASK-033](roadmap/EPIC-001.md#task-033) | Deliver the first production-path local walking skeleton | TASK-001, TASK-002, TASK-003 | Active | Completed |
+| [TASK-004](roadmap/EPIC-001.md#task-004) | Qualify general macOS OS supervision | TASK-001 | Active | Completed |
+| [TASK-034](roadmap/EPIC-004.md#task-034) | Probe UTM host automation non-destructively | None | Active | Completed |
+| [TASK-005](roadmap/EPIC-002.md#task-005) | Implement durable storage and controller ownership | TASK-033, TASK-004 | Active | Completed |
+| [TASK-006](roadmap/EPIC-002.md#task-006) | Implement admission and durable deduplication | TASK-005, TASK-003 | Active | Completed |
+| [TASK-007](roadmap/EPIC-002.md#task-007) | Implement resource scheduling and fenced leases | TASK-006 | Active | Completed |
+| [TASK-008](roadmap/EPIC-002.md#task-008) | Implement client waits, events and cancellation admission | TASK-007 | Active | Completed |
+| [TASK-035](roadmap/EPIC-002.md#task-035) | Implement advisory named locks | TASK-008 | Active | Completed |
+| [TASK-009](roadmap/EPIC-003.md#task-009) | Implement the local per-job supervisor | TASK-033, TASK-007, TASK-004 | Active | Completed |
+| [TASK-010](roadmap/EPIC-003.md#task-010) | Implement phase settlement and safe resource return | TASK-009 | Active | Completed |
+| [TASK-011](roadmap/EPIC-003.md#task-011) | Implement crash reconciliation, explicit recovery and the development service | TASK-010, TASK-004 | Active | Completed |
+| [TASK-012](roadmap/EPIC-003.md#task-012) | Implement artifact delivery and retention; freeze the managed core contract | TASK-010, TASK-011, TASK-035 | Active | Completed |
+| [TASK-013](roadmap/EPIC-004.md#task-013) | Implement persistent VM registration and UTM control | TASK-007, TASK-003 | Active | Completed |
+| [TASK-014](roadmap/EPIC-004.md#task-014) | Implement authenticated SSH and guest runner continuity | TASK-013, TASK-009 | Active | Completed |
+| [TASK-015](roadmap/EPIC-004.md#task-015) | Integrate VM collection, job cleanup and recovery | TASK-014, TASK-010, TASK-011, TASK-012 | Active | Completed |
+| [TASK-016](roadmap/EPIC-004.md#task-016) | Qualify the real macOS VM backend; freeze VM contract fields | TASK-015, TASK-034 | Active | Completed |
+| [TASK-036](roadmap/EPIC-009.md#task-036) | Restore recoverable VM failure handling | TASK-012, TASK-015 | Active | Completed |
+| [TASK-037](roadmap/EPIC-009.md#task-037) | Bound VM startup, transport, and retained runner storage | TASK-036 | Active | Completed |
+| [TASK-038](roadmap/EPIC-009.md#task-038) | Publish and execute repeatable real-VM qualification | TASK-016, TASK-037 | Active | Completed |
+| [TASK-039](roadmap/EPIC-009.md#task-039) | Demonstrate a small isolated e2e caller cycle | TASK-038 | Active | Completed |
+| [TASK-017](roadmap/EPIC-005.md#task-017) | Publish the project Make and guest integration contract | TASK-008, TASK-012, TASK-015, TASK-039 | Active | Completed |
+| [TASK-018](roadmap/EPIC-005.md#task-018) | Implement generic candidate and environment input helpers | TASK-017 | Active | Completed |
+| [TASK-019](roadmap/EPIC-005.md#task-019) | Implement general manual jobs and recorded observations | TASK-018, TASK-010 | Active | Completed |
+| [TASK-020](roadmap/EPIC-005.md#task-020) | Validate the generic consumer loop; freeze the integration contract | TASK-018, TASK-019 | Active | Completed |
+| [TASK-021](roadmap/EPIC-006.md#task-021) | Complete concurrency and crash qualification | TASK-011, TASK-019, TASK-035 | Active | Completed |
+| [TASK-022](roadmap/EPIC-006.md#task-022) | Harden trust, privacy and external-effect boundaries | TASK-021 | Active | Completed |
+| [TASK-023](roadmap/EPIC-006.md#task-023) | Measure bounds and qualify supported platforms | TASK-021 | Active | Completed |
+| [TASK-024](roadmap/EPIC-006.md#task-024) | Qualify storage compatibility and self-test isolation | TASK-005, TASK-021 | Active | Completed |
+| [TASK-025](roadmap/EPIC-007.md#task-025) | Package the release, user services and paired skill | TASK-020, TASK-022, TASK-023, TASK-024 | Active | Completed |
+| [TASK-026](roadmap/EPIC-007.md#task-026) | Finalize operator and developer documentation | TASK-025 | Active | Completed |
+| [TASK-027](roadmap/EPIC-007.md#task-027) | Run exact release acceptance | TASK-016, TASK-019, TASK-020, TASK-025, TASK-026 | Active | Completed |
+| [TASK-028](roadmap/EPIC-007.md#task-028) | Deliver the Aquarium consumer handoff | TASK-027 | Active | Completed |
 | [TASK-029](roadmap/EPIC-008.md#task-029) | Implement external admission, activation and dispatch claims | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-030](roadmap/EPIC-008.md#task-030) | Implement native execution binding, release and reconciliation | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-031](roadmap/EPIC-008.md#task-031) | Implement linked segments and single-owner continuation | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
 | [TASK-032](roadmap/EPIC-008.md#task-032) | Qualify external-client recovery and consumer contracts | Post-v0.1.0 re-entry; not an active predecessor | Deferred | Deferred |
-| [TASK-040](roadmap/EPIC-010.md#task-040) | Define home roles and the relocation contract | TASK-025 | Active | Accepted |
-| [TASK-041](roadmap/EPIC-010.md#task-041) | Establish the isolated development home | TASK-040 | Active | Accepted |
-| [TASK-042](roadmap/EPIC-010.md#task-042) | Support the default home in release services | TASK-040 | Active | Accepted |
-| [TASK-043](roadmap/EPIC-010.md#task-043) | Implement installation-preserving relocation and rollback | TASK-042 | Active | Accepted |
-| [TASK-044](roadmap/EPIC-010.md#task-044) | Qualify preservation, recovery and release packaging | TASK-041, TASK-043 | Active | Accepted |
-| [TASK-045](roadmap/EPIC-010.md#task-045) | Prepare Aquarium adoption evidence and the cutover handoff | TASK-044 | Active | Accepted |
+| [TASK-040](roadmap/EPIC-010.md#task-040) | Define home roles and the relocation contract | TASK-025 | Active | Completed |
+| [TASK-041](roadmap/EPIC-010.md#task-041) | Establish the isolated development home | TASK-040 | Active | Completed |
+| [TASK-042](roadmap/EPIC-010.md#task-042) | Support the default home in release services | TASK-040 | Active | Completed |
+| [TASK-043](roadmap/EPIC-010.md#task-043) | Implement installation-preserving relocation and rollback | TASK-042 | Active | Completed |
+| [TASK-044](roadmap/EPIC-010.md#task-044) | Qualify preservation, recovery and release packaging | TASK-041, TASK-043 | Active | Completed |
+| [TASK-045](roadmap/EPIC-010.md#task-045) | Prepare Aquarium adoption evidence and the cutover handoff | TASK-044 | Active | Completed |
 
 Release endpoint v0.1.0: TASK-028.
 Release endpoint v0.1.1: TASK-045.
@@ -119,7 +122,7 @@ After a gate, a change needs a recorded contract decision and a schema version c
 
 ## Hardware and environment gates
 
-Historical real-UTM qualification tasks: TASK-016, TASK-038. These Accepted records retain their candidate-bound backend and operating observations. TASK-034's Accepted host probe and TASK-039's Accepted native local caller cycle also remain historical; TASK-039 is not real-VM evidence.
+Historical real-UTM qualification tasks: TASK-016, TASK-038. These qualification records retain their candidate-bound backend and operating observations. TASK-034's accepted host probe and TASK-039's accepted native local caller cycle also remain historical; TASK-039 is not real-VM evidence.
 
 Current real-VM acceptance tasks: TASK-027, TASK-044. TASK-027 retains the v0.1.0 exact-package gate; TASK-044 owns the planned v0.1.1 exact-package small already-running single-VM loop. This declaration records required future evidence, not execution or renewed acceptance of historical results. Current real-VM prerequisite closure: TASK-027, TASK-028, TASK-044, TASK-045. Missing a due new observation blocks the corresponding target's acceptance and final handoff, not independent local development. TASK-028 may prepare its handoff locally but cannot deliver an accepted release before TASK-027.
 

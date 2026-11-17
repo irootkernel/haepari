@@ -167,7 +167,7 @@ Current real-VM acceptance tasks: TASK-027.
 Current real-VM prerequisite closure: TASK-027, TASK-028.
 """
     return {
-        "TASK-016": {"active": True, "status": "Accepted", "prereqs": set()},
+        "TASK-016": {"active": True, "status": "Completed", "prereqs": set()},
         "TASK-017": {"active": True, "status": "Planned", "prereqs": {"TASK-016"}},
         "TASK-027": {"active": True, "status": "Planned", "prereqs": {"TASK-017"}},
         "TASK-028": {"active": True, "status": "Planned", "prereqs": {"TASK-027"}},
@@ -208,6 +208,7 @@ def test_unknown_or_deferred_current_gate_is_rejected(documents, qualification_g
     assert f"real-VM qualification names non-active {task}" in DOCS.check_dag(qualification_graph)[0]
 
 
-def test_unaccepted_evidence_cannot_be_called_historical(qualification_graph):
-    qualification_graph["TASK-016"]["status"] = "In review"
-    assert "historical qualification TASK-016 is not Accepted" in DOCS.check_dag(qualification_graph)[0]
+@pytest.mark.parametrize("status", ["Planned", "In review", "Accepted"])
+def test_noncompleted_status_cannot_be_called_historical(qualification_graph, status):
+    qualification_graph["TASK-016"]["status"] = status
+    assert "historical qualification TASK-016 is not Completed" in DOCS.check_dag(qualification_graph)[0]

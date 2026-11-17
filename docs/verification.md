@@ -6,7 +6,7 @@ The accepted [TASK-027 release record](records/TASK-027-release-acceptance.md) h
 
 ## Operational readiness before consumer integration
 
-EPIC-009 is Accepted. Its TASK-016/TASK-038 real-VM and TASK-039 native local caller records retain their exact candidates and limits. The historical TASK-038 campaign included 50 MiB logs, thirty Jobs, SSH interruption and installed controller restart; those observations are not recurring development or release obligations. The full campaign remains an explicit optional tool.
+EPIC-009 is `Completed`. Its TASK-016/TASK-038 real-VM and TASK-039 native local caller records retain their exact candidates and limits. The historical TASK-038 campaign included 50 MiB logs, thirty Jobs, SSH interruption and installed controller restart; those observations are not recurring development or release obligations. The full campaign remains an explicit optional tool.
 
 Design Revision 3.5 uses the scope and approval rules in [ADR-0020](architecture-decision-records/0020-local-development-scope.md). Reuse one already-running registered VM. Real VM power/reboot, host logout, actual DHCP expiry, multi-day operation, identity-refusal experiments and two-VM campaigns are optional hardening; DF-001–004 do not block TASK-027. Existing runtime guards and local regression fixtures remain mandatory. Removed scenarios are unobserved limits, not passes.
 

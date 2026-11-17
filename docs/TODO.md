@@ -6,7 +6,7 @@ Design Revision 3.5: entries below are conditional engineering feedback, not ext
 
 ## Adopted execution dossiers
 
-- [VM operational feedback](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition): shared later-owner feedback retained for active EPIC-006/007. [EPIC-009](roadmap/EPIC-009.md), TASK-036–039 are Accepted under their reduced core scope; the roadmap links their canonical outcomes. Retaining this dossier does not reopen excluded experiments or create another Epic acceptance gate.
+- [VM operational feedback](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition): shared later-owner feedback retained for active EPIC-006/007. [EPIC-009](roadmap/EPIC-009.md), TASK-036–039 are `Completed` under their reduced core scope; the roadmap links their canonical outcomes. Retaining this dossier does not reopen excluded experiments or create another Epic acceptance gate.
 
 ## Structural TODO candidates
 

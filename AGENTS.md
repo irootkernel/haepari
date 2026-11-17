@@ -69,7 +69,7 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 
 - `docs/README.md` indexes the Haepari v0.1.0 design package and current implementation boundaries. Discover implemented build and test commands from `Makefile` and the common test contract in `TESTING.md`; the roadmap alone owns acceptance.
 - `docs/requirements.md` owns product obligations; `docs/architecture.md` and active `docs/contracts/` documents own implementation semantics; `docs/architecture-decision-records/` records rationale.
-- `docs/roadmap.md` alone owns Haepari task identity, sequence, prerequisites, and lifecycle status. Task checkboxes are acceptance evidence, not separate status authority.
+- `docs/roadmap.md` alone owns Haepari task identity, sequence, prerequisites, and lifecycle status. `Completed` is the sole successful lifecycle status for both Tasks and Epics; acceptance decisions remain required evidence. Task checkboxes are acceptance evidence, not separate status authority.
 - `docs/verification.md`, `docs/traceability.md`, and `docs/operations.md` define planned checks and operating procedures. `docs/handoffs/implementation-prompt.md` guides implementation; `docs/handoffs/haepari-to-aquarium.md` defines the producer handoff.
 - Run `make docs-check` to verify the documentation package and derived toolchain snapshots. `make docs-update` regenerates snapshots, `docs/checks.json` and `docs/MANIFEST.json`, then checks them; use it only when those generated files should change. Discover product build and test commands from the implemented tree before running them.
 
@@ -91,7 +91,7 @@ Haepari is an independent Go CLI and local daemon project; this file is its loca
 - Haepari has no runtime dependency on Aquarium or its tools. General automatic/manual local and already-running single-VM UTM macOS tests on one machine and one user are the active v0.1.0 scope; public external leases and linked segments remain deferred.
 - Follow [ADR-0020](docs/architecture-decision-records/0020-local-development-scope.md) and the operating development scope. Reuse authorization for normal offline Jobs, wait/reconnect, cancellation and owned cleanup across candidate changes; record exact identities automatically instead of asking for per-Job approval or creating approval files. Registration alone does not authorize arbitrary workloads.
 - Product-specific skill/migration scenarios and VM power/reboot/logout/DHCP-expiry/multi-day/multi-VM experiments are optional; DF-001–004 do not block first release. Preserve runtime identity, deduplication, ownership and safe-cleanup guards. Use isolated local/fake-native fault tests and the small running-VM core release loop; the full `make test-utm` campaign is optional.
-- Follow the roadmap's actual task prerequisites and freeze gates. Do not mark a task accepted from compilation, mocks, a command exit code, or an unobserved manual check.
+- Follow the roadmap's actual task prerequisites and freeze gates. Do not mark a task `Completed` from compilation, mocks, a command exit code, or an unobserved manual check.
 - For TASK-001, confirm the module path, license, AGENTS.md, and Make targets with Master before the first implementation commit, as required by `docs/handoffs/implementation-prompt.md`.
 - `docs/examples/` contains illustrative design fixtures, not ready-to-run production configuration.
 - `.gaori/tester.yaml` maps `docs-validation` to `make docs-check` with the `generic` parser. The repository's own documentation decides when that check is required.

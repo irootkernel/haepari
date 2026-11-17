@@ -1,6 +1,6 @@
 # VM operational readiness execution dossier
 
-Status: EPIC-009 core delivery is Accepted in the canonical roadmap. This shared
+Status: EPIC-009 core delivery is `Completed` in the canonical roadmap. This shared
 dossier is retained because active EPIC-006/007 still reference its feedback
 disposition. Canonical operating outcomes and the small caller handoff are linked
 from the roadmap; excluded experiments do not become later closeout obligations.
@@ -8,7 +8,7 @@ from the roadmap; excluded experiments do not become later closeout obligations.
 
 Consumer Epic: [EPIC-009](roadmap/EPIC-009.md). This is its consolidated execution SOT for epic-handler, not a second lifecycle authority. The [roadmap](roadmap.md) owns identity, status, order and prerequisites; the Epic file owns task acceptance checklists.
 
-Design Revision 3.5 supersession: EPIC-009 is Accepted and its campaign instructions/evidence below retain historical scope. Ordinary development and TASK-027 follow [ADR-0020](architecture-decision-records/0020-local-development-scope.md), not another full campaign. DF-001–004 and product-specific skill/migration qualification are optional; their uncertainty is preserved.
+Design Revision 3.5 supersession: EPIC-009 is `Completed` and its campaign instructions/evidence below retain historical scope. Ordinary development and TASK-027 follow [ADR-0020](architecture-decision-records/0020-local-development-scope.md), not another full campaign. DF-001–004 and product-specific skill/migration qualification are optional; their uncertainty is preserved.
 
 ## Goal and reason for the work
 

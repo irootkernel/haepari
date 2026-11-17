@@ -215,7 +215,7 @@ Unix routes `GET /v1/jobs/<id>/artifacts` and `POST /v1/jobs/<id>/purge` expose 
 
 After purge, `submit` returns the same unavailable admission, `run` emits that admission and exits 2, and `wait`, `events`, `logs` and artifact reads report `RESULT_UNAVAILABLE`. Saved cancellation mutation replay remains exact. Event cursor ownership is checked before result availability: a cursor recorded for another Job is `INVALID_REQUEST`, even after purge. Purged payloads retain their permanent cursor owner and floor.
 
-F1's decision, initial delivery change inventory and field/compatibility decisions are recorded in the [managed core freeze record](../records/TASK-012-managed-core-freeze.md). It takes effect when TASK-012 is Accepted in the canonical roadmap; F2 VM fields and F3 manual/consumer formats remain separate gates.
+F1's decision, initial delivery change inventory and field/compatibility decisions are recorded in the [managed core freeze record](../records/TASK-012-managed-core-freeze.md). It takes effect when TASK-012 is `Completed` in the canonical roadmap; F2 VM fields and F3 manual/consumer formats remain separate gates.
 
 `resource recover <id> --plan --action attest-power-stopped --json` plans cessation of one unresolved power transition involving that resource. Apply requires the saved token/key and a scoped operator evidence file; it never issues power or synthesizes command return. The plan identifies both resources and the original generation/claim. No unresolved transition is a power-specific refusal; multiple matches violate the supported ledger invariant and remain protected for investigation. Guest cessation uses the separate `attest-guest-stopped` action. See the EPIC-009 recovery runbook for each evidence chain.
 

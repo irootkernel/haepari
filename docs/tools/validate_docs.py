@@ -237,8 +237,8 @@ def check_dag(tasks):
     for t in historical | evidence:
         if t not in active:
             errors.append(f"real-VM qualification names non-active {t}")
-        elif t in historical and tasks[t]["status"] != "Accepted":
-            errors.append(f"historical qualification {t} is not Accepted")
+        elif t in historical and tasks[t]["status"] != "Completed":
+            errors.append(f"historical qualification {t} is not Completed")
     blocked = set(evidence)
     for t in evidence:
         if t in children:
