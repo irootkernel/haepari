@@ -10,7 +10,7 @@ import (
 	"runtime/debug"
 )
 
-var Version = "0.1.1-dev"
+var Version = "0.1.1"
 
 type Info struct {
 	Version          string `json:"version"`
