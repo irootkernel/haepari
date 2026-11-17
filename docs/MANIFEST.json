@@ -189,8 +189,8 @@
     },
     {
       "path": "architecture.md",
-      "bytes": 42305,
-      "sha256": "623a2b2fd48f74c1371d4ef82e91539c90e60172ccf677776cff499090ba0252"
+      "bytes": 42344,
+      "sha256": "e7d75778d8a7cb3d093d1c63db88a4730fa7098b7779d16d79552f8b8d99e3d2"
     },
     {
       "path": "checks.json",
@@ -199,8 +199,8 @@
     },
     {
       "path": "contracts/artifact-and-profile.md",
-      "bytes": 28801,
-      "sha256": "39c542fddbc990c9b7301853fe3da933b2cf596620bfa7b46257cb2d9d6f3227"
+      "bytes": 28878,
+      "sha256": "a0a7e5fa399639924d116f5a145c13f0e6680db3dcc8c83e595eedd8fb8e2153"
     },
     {
       "path": "contracts/cli-and-jobs.md",
