@@ -124,17 +124,17 @@ Requirement coverage: HP-REQ-087.
 
 #### Implement
 
-- [ ] Verify the candidate against the current Aquarium consumer contract and rehearse the preserved-installation upgrade/relocation with disposable state.
-- [ ] Prepare the producer packet, immutable identities, combination-verification requirements, external-reference inventory and release-time cutover/rollback runbook for Aquarium v0.1.24 adoption.
-- [ ] Separate candidate evidence from the official artifact/combination checks still due after publication. Identify any consumer change as Aquarium-owned work.
+- [x] Verify the candidate against the current Aquarium consumer contract and rehearse the preserved-installation upgrade/relocation with disposable state.
+- [x] Prepare the producer packet, immutable identities, combination-verification requirements, external-reference inventory and release-time cutover/rollback runbook for Aquarium v0.1.24 adoption.
+- [x] Separate candidate evidence from the official artifact/combination checks still due after publication. Identify any consumer change as Aquarium-owned work.
 
 #### Do not
 
-- [ ] Do not relocate the shared host, change global MCP or consumer settings, send a message without instruction, or claim Aquarium acceptance/publication from producer evidence.
+- [x] Do not relocate the shared host, change global MCP or consumer settings, send a message without instruction, or claim Aquarium acceptance/publication from producer evidence.
 
 #### Done when
 
-- [ ] Compatibility, rehearsal and a complete cutover handoff are ready before Haepari v0.1.1 publication. Actual host cutover is not a Task or Epic completion criterion.
+- [x] Compatibility, rehearsal and a complete cutover handoff are ready before Haepari v0.1.1 publication. Actual host cutover is not a Task or Epic completion criterion.
 
 ## Epic acceptance
 

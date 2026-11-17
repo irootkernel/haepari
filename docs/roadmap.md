@@ -94,7 +94,7 @@ EPIC-009 Canonical Outcomes: [owned runner and collection contract](architecture
 | [TASK-042](roadmap/EPIC-010.md#task-042) | Support the default home in release services | TASK-040 | Active | Accepted |
 | [TASK-043](roadmap/EPIC-010.md#task-043) | Implement installation-preserving relocation and rollback | TASK-042 | Active | Accepted |
 | [TASK-044](roadmap/EPIC-010.md#task-044) | Qualify preservation, recovery and release packaging | TASK-041, TASK-043 | Active | Accepted |
-| [TASK-045](roadmap/EPIC-010.md#task-045) | Prepare Aquarium adoption evidence and the cutover handoff | TASK-044 | Active | Planned |
+| [TASK-045](roadmap/EPIC-010.md#task-045) | Prepare Aquarium adoption evidence and the cutover handoff | TASK-044 | Active | Accepted |
 
 Release endpoint v0.1.0: TASK-028.
 Release endpoint v0.1.1: TASK-045.
