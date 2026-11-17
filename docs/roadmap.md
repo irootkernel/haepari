@@ -38,7 +38,7 @@ Lifecycle status vocabulary:
 | [EPIC-006](roadmap/EPIC-006.md) | Failure and platform hardening | TASK-021 through TASK-024 | Active | Accepted |
 | [EPIC-007](roadmap/EPIC-007.md) | Release and Aquarium handoff | TASK-025 through TASK-028 | Active | Completed |
 | [EPIC-008](roadmap/EPIC-008.md) | Public external leases and linked segments | TASK-029 through TASK-032 | Deferred | Deferred |
-| [EPIC-010](roadmap/EPIC-010.md) | Separate development home and preserve one installation through relocation (v0.1.1) | TASK-040 through TASK-045 | Active | In progress |
+| [EPIC-010](roadmap/EPIC-010.md) | Separate development home and preserve one installation through relocation (v0.1.1) | TASK-040 through TASK-045 | Active | Completed |
 
 Master approved EPIC-007 final closeout on 2026-10-20 after the common-test corrections. TASK-025 through TASK-028 retain their Accepted status. Historical package and running-VM evidence remains bound to its recorded artifacts; the corrected package still requires its own qualification before release. This closeout neither records a new live observation nor authorizes installation or publication.
 
@@ -103,7 +103,7 @@ Every other active task is an actual prerequisite of a later active task. Endpoi
 
 ## v0.1.1 home separation and Aquarium adoption
 
-EPIC-010 is active work with [Detailed SOT](TODO-HOME-SEPARATION-AND-RELOCATION.md). TASK-041 makes the isolated development home usable during this Epic; it does not migrate the shared installation. TASK-045 ends at compatibility evidence, rehearsal and cutover readiness before Haepari v0.1.1 publication. Actual shared-home relocation belongs to the later Aquarium v0.1.24 official adoption operation, after the released combination is verified. Neither Epic completion nor Haepari publication alone triggers that operation. No second Epic or actual host cutover Task is created here.
+EPIC-010 Canonical Outcomes: [home and relocation contract](contracts/home-and-relocation.md), [ADR-0023](architecture-decision-records/0023-home-separation-and-relocation.md), [development-home procedure](operations.md#independent-haepari-development-home), [relocation procedure](operations.md#v011-home-separation-and-relocation), [Aquarium adoption handoff](handoffs/v0.1.1-aquarium-adoption.md), and [verification criteria](verification.md). TASK-041 makes the isolated development home usable during this Epic; it does not migrate the shared installation. TASK-045 ends at compatibility evidence, rehearsal and cutover readiness before Haepari v0.1.1 publication. Actual shared-home relocation belongs to the later Aquarium v0.1.24 official adoption operation, after the released combination is verified. Neither Epic completion nor Haepari publication alone triggers that operation. No second Epic or actual host cutover Task is created here.
 
 ## Contract freeze gates
 

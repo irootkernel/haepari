@@ -2,7 +2,7 @@
 
 Prepare Haepari v0.1.1 to separate its own development controller from the shared installation and relocate that shared installation without losing identity or history.
 
-Identity, lifecycle status, order and actual prerequisites belong to the [canonical roadmap](../roadmap.md). Detailed SOT: [Home separation and installation-preserving relocation](../TODO-HOME-SEPARATION-AND-RELOCATION.md). Unchecked boxes remain acceptance obligations, not execution claims. TASK-040 defines the selected [home and relocation contract](../contracts/home-and-relocation.md), HP-REQ-082–087 and V66–V72 without changing historical traceability or accepted evidence.
+Identity, lifecycle status, order and actual prerequisites belong to the [canonical roadmap](../roadmap.md). Canonical Outcomes: [home and relocation contract](../contracts/home-and-relocation.md), [ADR-0023](../architecture-decision-records/0023-home-separation-and-relocation.md), [development-home procedure](../operations.md#independent-haepari-development-home), [relocation procedure](../operations.md#v011-home-separation-and-relocation), [Aquarium adoption handoff](../handoffs/v0.1.1-aquarium-adoption.md), and [verification criteria](../verification.md). Unchecked boxes remain acceptance obligations, not execution claims. TASK-040 defines the selected [home and relocation contract](../contracts/home-and-relocation.md), HP-REQ-082–087 and V66–V72 without changing historical traceability or accepted evidence.
 
 ## TASK-040
 
@@ -138,8 +138,8 @@ Requirement coverage: HP-REQ-087.
 
 ## Epic acceptance
 
-- [ ] All six Tasks meet their criteria with original, applicable evidence and affected documentation complete.
-- [ ] The development home is usable independently; the current shared installation is preserved.
-- [ ] The installation-preserving relocation capability is qualified and its unsupported cases refuse safely.
-- [ ] Aquarium v0.1.24 adoption has a complete handoff and an explicit later operational owner; no host migration is claimed.
-- [ ] Final Epic validation and Master's overall acceptance are recorded through the canonical roadmap. Commit, release and installation remain separate effects.
+- [x] All six Tasks meet their criteria with original, applicable evidence and affected documentation complete.
+- [x] The development home is usable independently; the current shared installation is preserved.
+- [x] The installation-preserving relocation capability is qualified and its unsupported cases refuse safely.
+- [x] Aquarium v0.1.24 adoption has a complete handoff and an explicit later operational owner; no host migration is claimed.
+- [x] Final Epic validation and Master's overall acceptance are recorded through the canonical roadmap. Commit, release and installation remain separate effects.

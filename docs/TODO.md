@@ -6,8 +6,6 @@ Design Revision 3.5: entries below are conditional engineering feedback, not ext
 
 ## Adopted execution dossiers
 
-- [Home separation and installation-preserving relocation](TODO-HOME-SEPARATION-AND-RELOCATION.md): Detailed SOT for EPIC-010 and TASK-040 through TASK-045, targeting Haepari v0.1.1 readiness and later Aquarium v0.1.24 official adoption. Identity and status remain on the canonical roadmap.
-
 - [VM operational feedback](TODO-VM-OPERATIONAL-READINESS.md#feedback-disposition): shared later-owner feedback retained for active EPIC-006/007. [EPIC-009](roadmap/EPIC-009.md), TASK-036–039 are Accepted under their reduced core scope; the roadmap links their canonical outcomes. Retaining this dossier does not reopen excluded experiments or create another Epic acceptance gate.
 
 ## Structural TODO candidates
